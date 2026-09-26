@@ -1,0 +1,119 @@
+import Foundation
+
+/// Replays unique sensor history in ascending index order and returns only accepted values
+/// in the newest-first order expected by CGMTransmitterDelegate.
+struct Sibionics2ReadingBatchProcessor {
+    private static let sessionStartTolerance: TimeInterval = 10 * 60
+
+    private let deviceIdentifier: String
+    private let stateStore: Sibionics2ReadingStateStore
+    private var processor: Sibionics2GlucoseProcessor
+    private var readingState: Sibionics2ReadingState?
+
+    var state: Sibionics2ReadingState? { readingState }
+
+    init(
+        deviceIdentifier: String,
+        stateStore: Sibionics2ReadingStateStore,
+        processor: Sibionics2GlucoseProcessor
+    ) {
+        self.deviceIdentifier = deviceIdentifier
+        self.stateStore = stateStore
+        let savedState = stateStore.load(for: deviceIdentifier)
+        var restoredProcessor = processor
+        if let snapshot = savedState?.processorSnapshot, !restoredProcessor.restore(from: snapshot) {
+            restoredProcessor.reset()
+        }
+        self.processor = restoredProcessor
+        self.readingState = savedState
+    }
+
+    mutating func process(_ batch: [Sibionics2RawReading], receivedAt: Date) -> [GlucoseData] {
+        guard receivedAt.timeIntervalSince1970.isFinite else { return [] }
+
+        let validReadings = batch
+            .filter(Self.isValid)
+            .sorted {
+                if $0.index == $1.index { return $0.eventTime < $1.eventTime }
+                return $0.index < $1.index
+            }
+
+        guard !validReadings.isEmpty else { return [] }
+
+        var uniqueByIndex: [Int: Sibionics2RawReading] = [:]
+        for reading in validReadings where uniqueByIndex[reading.index] == nil {
+            uniqueByIndex[reading.index] = reading
+        }
+        let uniqueReadings = uniqueByIndex.values.sorted { $0.index < $1.index }
+        guard let firstReading = uniqueReadings.first else { return [] }
+
+        let inferredStartDate = Self.sensorStartDate(for: firstReading)
+        if shouldResetSession(firstIndex: firstReading.index, inferredStartDate: inferredStartDate) {
+            processor.reset()
+            readingState = nil
+        }
+
+        let sensorStartDate = readingState?.sensorStartDate ?? inferredStartDate
+        let lastIndex = readingState?.lastDeliveredIndex.map { Int($0) } ?? 0
+        let newReadings = uniqueReadings.filter { $0.index > lastIndex }
+        guard !newReadings.isEmpty else { return [] }
+
+        var processed: [Sibionics2ProcessedGlucose] = []
+        for (position, reading) in newReadings.enumerated() {
+            let mode: Sibionics2ProcessingMode = position == newReadings.count - 1 ? .live : .replay
+            if let result = processor.process(reading, mode: mode),
+               result.glucoseMgDl.isFinite, result.glucoseMgDl > 0, result.glucoseMgDl <= 900 {
+                processed.append(result)
+            }
+        }
+
+        let latestProcessedIndex = newReadings.last?.index ?? lastIndex
+        let state = Sibionics2ReadingState(
+            lastDeliveredIndex: UInt16(exactly: latestProcessedIndex),
+            processorSnapshot: processor.snapshot(),
+            sensorStartDate: sensorStartDate
+        )
+        readingState = state
+        stateStore.save(state, for: deviceIdentifier)
+
+        guard let newest = processed.max(by: {
+            if $0.eventTime == $1.eventTime { return $0.index < $1.index }
+            return $0.eventTime < $1.eventTime
+        }) else { return [] }
+
+        return processed
+            .map { result in
+                GlucoseData(
+                    timeStamp: result.eventTime,
+                    glucoseLevelRaw: result.glucoseMgDl,
+                    backfilledAt: result.index == newest.index ? nil : receivedAt
+                )
+            }
+            .sorted {
+                if $0.timeStamp == $1.timeStamp {
+                    return $0.glucoseLevelRaw > $1.glucoseLevelRaw
+                }
+                return $0.timeStamp > $1.timeStamp
+            }
+    }
+
+    private func shouldResetSession(firstIndex: Int, inferredStartDate: Date) -> Bool {
+        guard let savedIndex = readingState?.lastDeliveredIndex,
+              firstIndex < Int(savedIndex),
+              let savedStartDate = readingState?.sensorStartDate else { return false }
+        let difference = inferredStartDate.timeIntervalSince(savedStartDate)
+        return difference.isFinite && abs(difference) > Self.sessionStartTolerance
+    }
+
+    private static func sensorStartDate(for reading: Sibionics2RawReading) -> Date {
+        reading.eventTime.addingTimeInterval(-TimeInterval(reading.index) * 60)
+    }
+
+    private static func isValid(_ reading: Sibionics2RawReading) -> Bool {
+        reading.index > 0 && reading.index <= Int(UInt16.max) &&
+            reading.eventTime.timeIntervalSince1970.isFinite &&
+            reading.temperatureC.isFinite && reading.temperatureC > 0 && reading.temperatureC <= 80 &&
+            reading.impedance >= 0 && reading.impedance <= Int(UInt16.max) &&
+            reading.rawMmol.isFinite && reading.rawMmol > 0 && reading.rawMmol <= 6553.5
+    }
+}

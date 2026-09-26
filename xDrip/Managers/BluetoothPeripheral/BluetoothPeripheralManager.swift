@@ -174,7 +174,7 @@ class BluetoothPeripheralManager: NSObject {
                         _ = m5StackBluetoothTransmitter.writeBgReadingInfo(bgReading: bgReadingToSend[0])
                     }
                     
-                case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .DexcomG7Type, .MedtrumTouchCareNanoType:
+                case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics2Type:
                     // cgm's don't receive reading, they send it
                     break
                     
@@ -404,6 +404,12 @@ class BluetoothPeripheralManager: NSObject {
                         }
                     }
 
+                case .Sibionics2Type:
+
+                    if bluetoothPeripheral is Sibionics2, let cgmTransmitterDelegate = cgmTransmitterDelegate {
+                        newTransmitter = CGMSibionics2Transmitter(address: bluetoothPeripheral.blePeripheral.address, name: bluetoothPeripheral.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+                    }
+
                 }
                 
                 
@@ -484,6 +490,11 @@ class BluetoothPeripheralManager: NSObject {
             case .MedtrumTouchCareNanoType:
                 if bluetoothTransmitter is CGMMedtrumTouchCareNanoTransmitter {
                     return .MedtrumTouchCareNanoType
+                }
+
+            case .Sibionics2Type:
+                if bluetoothTransmitter is CGMSibionics2Transmitter {
+                    return .Sibionics2Type
                 }
                 
             }
@@ -574,6 +585,14 @@ class BluetoothPeripheralManager: NSObject {
             }
 
             return CGMMedtrumTouchCareNanoTransmitter(address: nil, name: nil, bluetoothTransmitterDelegate: bluetoothTransmitterDelegate ?? self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+
+        case .Sibionics2Type:
+
+            guard let cgmTransmitterDelegate = cgmTransmitterDelegate else {
+                fatalError("in createNewTransmitter, Sibionics2Type, cgmTransmitterDelegate is nil")
+            }
+
+            return CGMSibionics2Transmitter(address: nil, name: nil, bluetoothTransmitterDelegate: bluetoothTransmitterDelegate ?? self, cGMTransmitterDelegate: cgmTransmitterDelegate)
             
         }
         
@@ -1035,6 +1054,24 @@ class BluetoothPeripheralManager: NSObject {
 
                     }
 
+                case .Sibionics2Type:
+
+                    if let sibionics2 = blePeripheral.sibionics2 {
+
+                        blePeripheralFound = true
+
+                        let index = insertInBluetoothPeripherals(bluetoothPeripheral: sibionics2)
+
+                        if sibionics2.blePeripheral.shouldconnect {
+                            bluetoothTransmitters.insert(CGMSibionics2Transmitter(address: sibionics2.blePeripheral.address, name: sibionics2.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate), at: index)
+                            if bluetoothPeripheralType.category() == .CGM {
+                                currentCgmTransmitterAddress = blePeripheral.address
+                            }
+                        } else {
+                            bluetoothTransmitters.insert(nil, at: index)
+                        }
+                    }
+
                 }
 
             }
@@ -1154,7 +1191,7 @@ class BluetoothPeripheralManager: NSObject {
                     bluetoothPeripheral.blePeripheral.parameterUpdateNeededAtNextConnect = true
                 }
              
-            case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3HeartBeatType, .DexcomG7HeartBeatType, .OmniPodHeartBeatType, .DexcomG7Type, .MedtrumTouchCareNanoType:
+            case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3HeartBeatType, .DexcomG7HeartBeatType, .OmniPodHeartBeatType, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics2Type:
 
                 // nothing to check
                 break
@@ -1324,6 +1361,10 @@ extension BluetoothPeripheralManager: BluetoothPeripheralManaging {
         // Remove the per-device subscription choice so re-adding this address starts with defaults.
         if bluetoothPeripheral.bluetoothPeripheralType() == .Libre3HeartBeatType {
             GenericHeartbeatSettings.remove(bluetoothPeripheral.blePeripheral.address)
+        }
+
+        if bluetoothPeripheral.bluetoothPeripheralType() == .Sibionics2Type {
+            Sibionics2ReadingStateStore().clear(for: bluetoothPeripheral.blePeripheral.address)
         }
 
         if let dexcomG7 = bluetoothPeripheral as? DexcomG7 {
