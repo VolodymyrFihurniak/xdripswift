@@ -53,40 +53,56 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         return rows
     }
 
+    // Expected values come from the licensed fixture's exact corrections plus
+    // the reference wrapper rule. They are never taken from the processor.
+    private func expectedDisplayMmol(_ rows: [Row]) -> [Double?] {
+        var stockDelta: Float?
+        return rows.map { row in
+            if row.exactMmol > 0 {
+                stockDelta = Float(row.exactMmol) - Float(row.rawMmol)
+                return row.exactMmol
+            }
+            guard let delta = stockDelta else { return nil }
+            let scaled = (Float(row.rawMmol) + delta) * 10
+            return Double(Int(scaled + 0.5)) / 10
+        }
+    }
+
     func testV116AStockPathMatchesSibionics2StartupFixture() throws {
         let rows = try startupRows()
+        let expected = expectedDisplayMmol(rows)
+        XCTAssertEqual(expected.compactMap { $0 }.count, 126)
+        XCTAssertEqual(try XCTUnwrap(expected[5]), 10.5)
+        XCTAssertEqual(try XCTUnwrap(expected[80]), 3.9)
         for mode in [Sibionics2ProcessingMode.live, .replay] {
             var processor = Sibionics2GlucoseProcessor(sensitivity: 1.44)
-            var final: Sibionics2ProcessedReading?
-            for row in rows {
+            for (row, mmol) in zip(rows, expected) {
                 let result = processor.process(row.reading(), mode: mode)
-                // Zero in the upstream CSV means no exact core correction at this
-                // minute. It does not mean a zero glucose reading. The wrapper's
-                // supported between-stage behavior must be specified separately.
-                if row.exactMmol > 0 {
-                    let value = try XCTUnwrap(result, "Missing correction at \(row.index)")
-                    XCTAssertEqual(value.glucoseMgDl, row.exactMmol * 18.0, accuracy: 0.0001)
-                    XCTAssertEqual(value.index, row.index)
-                    XCTAssertEqual(value.eventTime, row.reading().eventTime)
-                    XCTAssertEqual(value.trend, .stable)
+                guard let mmol else {
+                    XCTAssertNil(result, "No stock correction at \(row.index)")
+                    continue
                 }
-                if row.index == 130 { final = result }
+                let value = try XCTUnwrap(result, "Missing display at \(row.index)")
+                XCTAssertEqual(value.glucoseMgDl, mmol * 18.0, accuracy: 0.0001,
+                               "Stock display at \(row.index)")
+                XCTAssertEqual(value.index, row.index)
+                XCTAssertEqual(value.eventTime, row.reading().eventTime)
+                XCTAssertEqual(value.trend, .stable)
+                // All corrected rows in this fixture differ from raw values.
+                XCTAssertNotEqual(value.glucoseMgDl, row.rawMmol * 18.0)
+                if row.index == 130 {
+                    XCTAssertEqual(value.glucoseMgDl, 64.8, accuracy: 0.0001)
+                }
             }
-            let value = try XCTUnwrap(final)
-            XCTAssertEqual(value.glucoseMgDl, 64.8, accuracy: 0.0001)
-            XCTAssertEqual(value.glucoseMgDl / 18.0, 3.6, accuracy: 0.0001)
-            XCTAssertNotEqual(value.glucoseMgDl, 1.3 * 18.0)
         }
     }
 
     func testWarmupDoesNotPublishRawGlucose() throws {
         let rows = try startupRows()
-        // The upstream exact core has no output in its initial four samples.
-        // This checks initial core warm-up, not a guessed clinical warm-up time.
         for mode in [Sibionics2ProcessingMode.live, .replay] {
             var processor = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+            // Initial exact-core state, not an assumed clinical warm-up period.
             for row in rows.prefix(4) {
-                XCTAssertEqual(row.exactMmol, 0)
                 XCTAssertNil(processor.process(row.reading(), mode: mode))
             }
         }
@@ -94,40 +110,114 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
 
     func testRejectsInvalidOrOutOfRangeRawValues() throws {
         let rows = try startupRows()
-        for invalid in [Double.nan, Double.infinity, -Double.infinity,
-                        0, -1, Double.greatestFiniteMagnitude] {
-            var subject = Sibionics2GlucoseProcessor(sensitivity: 1.44)
-            var control = Sibionics2GlucoseProcessor(sensitivity: 1.44)
-            for row in rows.prefix(129) {
-                _ = subject.process(row.reading(), mode: .replay)
-                _ = control.process(row.reading(), mode: .replay)
+        let expected = expectedDisplayMmol(rows)
+        for nextIndex in [6, 81, 130] {
+            for invalid in [Double.nan, Double.infinity, -Double.infinity,
+                            0, -1, 6553.6, Double.greatestFiniteMagnitude] {
+                var subject = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+                var control = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+                for row in rows.prefix(nextIndex - 1) {
+                    _ = subject.process(row.reading(), mode: .replay)
+                    _ = control.process(row.reading(), mode: .replay)
+                }
+                let next = rows[nextIndex - 1]
+                // 6553.6 is outside the protocol's UInt16 / 10 raw domain.
+                XCTAssertNil(subject.process(next.reading(rawOverride: invalid), mode: .live))
+                // Rejection must not poison state, consume this index, lose the
+                // held stock offset, or force a raw-value fallback.
+                let recovered = try XCTUnwrap(subject.process(next.reading(), mode: .live))
+                let uninterrupted = try XCTUnwrap(control.process(next.reading(), mode: .live))
+                XCTAssertEqual(recovered.glucoseMgDl, uninterrupted.glucoseMgDl)
+                XCTAssertEqual(recovered.glucoseMgDl,
+                               try XCTUnwrap(expected[nextIndex - 1]) * 18, accuracy: 0.0001)
             }
-            let last = try XCTUnwrap(rows.last)
-            XCTAssertNil(subject.process(last.reading(rawOverride: invalid), mode: .live))
-            // A rejected sample must not poison or advance the valid state.
-            let afterRejected = try XCTUnwrap(subject.process(last.reading(), mode: .live))
-            let expected = try XCTUnwrap(control.process(last.reading(), mode: .live))
-            XCTAssertEqual(afterRejected.glucoseMgDl, expected.glucoseMgDl)
-            XCTAssertEqual(afterRejected.index, expected.index)
         }
     }
 
     func testSnapshotRestoresTheSameNextReading() throws {
         let rows = try startupRows()
-        var uninterrupted = Sibionics2GlucoseProcessor(sensitivity: 1.44)
-        for row in rows.prefix(129) {
-            _ = uninterrupted.process(row.reading(), mode: .replay)
+        let expected = expectedDisplayMmol(rows)
+        // Both intermediate-minute continuation and exact correction state.
+        for checkpoint in [5, 70, 129] {
+            var uninterrupted = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+            for row in rows.prefix(checkpoint) {
+                _ = uninterrupted.process(row.reading(), mode: .replay)
+            }
+            var restored = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+            XCTAssertTrue(restored.restore(from: uninterrupted.snapshot()))
+            for row in rows.dropFirst(checkpoint) {
+                let control = try XCTUnwrap(uninterrupted.process(row.reading(), mode: .live))
+                let actual = try XCTUnwrap(restored.process(row.reading(), mode: .live))
+                XCTAssertEqual(actual.glucoseMgDl, control.glucoseMgDl)
+                XCTAssertEqual(actual.glucoseMgDl,
+                               try XCTUnwrap(expected[row.index - 1]) * 18, accuracy: 0.0001)
+                XCTAssertEqual(actual.index, control.index)
+                XCTAssertEqual(actual.eventTime, control.eventTime)
+                XCTAssertEqual(actual.trend, control.trend)
+            }
         }
-        var restored = Sibionics2GlucoseProcessor(sensitivity: 1.44)
-        XCTAssertTrue(restored.restore(from: uninterrupted.snapshot()))
-        let next = try XCTUnwrap(rows.last)
-        // Both paths must produce a real correction, not two nil results.
-        let expected = try XCTUnwrap(uninterrupted.process(next.reading(), mode: .live))
-        let actual = try XCTUnwrap(restored.process(next.reading(), mode: .live))
-        XCTAssertEqual(actual.glucoseMgDl, expected.glucoseMgDl)
-        XCTAssertEqual(actual.glucoseMgDl, 64.8, accuracy: 0.0001)
-        XCTAssertEqual(actual.index, expected.index)
-        XCTAssertEqual(actual.eventTime, expected.eventTime)
-        XCTAssertEqual(actual.trend, expected.trend)
+    }
+
+    func testRejectsUnsupportedExplicitSensitivityWithoutFallback() throws {
+        let rows = try startupRows()
+        // Validate the caller's Double before narrowing to Float or adjusting
+        // factory sensitivity. Resolving absent factory codes is a separate API.
+        for sensitivity in [Double.nan, Double.infinity, -Double.infinity, 0, -1,
+                            Double(0.8).nextDown, Double(2.5).nextUp] {
+            var processor = Sibionics2GlucoseProcessor(sensitivity: sensitivity)
+            for row in rows {
+                XCTAssertNil(processor.process(row.reading(), mode: .replay))
+            }
+        }
+        XCTAssertTrue(Sibionics2FactorySensitivity.isSupported(0.8))
+        XCTAssertTrue(Sibionics2FactorySensitivity.isSupported(2.5))
+        XCTAssertFalse(Sibionics2FactorySensitivity.isSupported(Double(0.8).nextDown))
+        XCTAssertFalse(Sibionics2FactorySensitivity.isSupported(Double(2.5).nextUp))
+    }
+
+    func testFactoryProbeSensitivityMatchesLicensedNativeVectors() throws {
+        // JugglucoNG probe-sensitivity-native.tsv and ProbeSensitivityTest.
+        for (code, expected) in [
+            ("EU2VCZUQPSHD5Q", 1.73), ("145TUMXYK4S46V", 1.75),
+            ("XPT1EEX2NRU16U", 1.26), ("EU2VMGLQPSHD57", 0.8),
+            ("EU2VWR4QPSHD6A", 2.5)
+        ] {
+            XCTAssertEqual(try XCTUnwrap(Sibionics2FactorySensitivity.decodeProbe(code)),
+                           expected, accuracy: 0.00001)
+        }
+    }
+
+    func testFactoryProbeRejectsMalformedAndSingleCharacterCorruptions() {
+        for code: String? in [
+            nil, "", "EU2VCZUQPSHD5", "EU2VCZUQPSHD5QQ", "eu2vczuqpshd5q",
+            "EU2VCZUQPSHD50", "EU2VCZUQPSHD5I", "J45TUMXYK4S46V",
+            "EU2VYYTQPSHD69", "145TGCFYK4S46Q"
+        ] {
+            XCTAssertNil(Sibionics2FactorySensitivity.decodeProbe(code))
+        }
+        let alphabet = Array("123456789ACDEFGHJKLMNPQRSTUVWXYZ")
+        for code in ["EU2VCZUQPSHD5Q", "145TUMXYK4S46V"] {
+            let characters = Array(code)
+            for index in characters.indices {
+                for replacement in alphabet where replacement != characters[index] {
+                    var corrupted = characters
+                    corrupted[index] = replacement
+                    XCTAssertNil(Sibionics2FactorySensitivity.decodeProbe(String(corrupted)))
+                }
+            }
+        }
+    }
+
+    func testFactorySensitivityUsesProbeThenShortCodeThenDocumentedFallback() throws {
+        XCTAssertEqual(Sibionics2FactorySensitivity.resolve(
+            probeCode: "EU2VCZUQPSHD5Q", shortCode: "0316015A"), 1.73, accuracy: 0.00001)
+        XCTAssertEqual(Sibionics2FactorySensitivity.resolve(
+            probeCode: "invalid", shortCode: "1440"), 1.44, accuracy: 0.00001)
+        XCTAssertEqual(try XCTUnwrap(Sibionics2FactorySensitivity.decodeShortCode("0316015A")),
+                       1.44, accuracy: 0.00001)
+        XCTAssertEqual(Sibionics2FactorySensitivity.resolve(
+            probeCode: nil, shortCode: nil), 1.44, accuracy: 0.00001)
+        XCTAssertEqual(Sibionics2FactorySensitivity.resolve(
+            probeCode: "invalid", shortCode: "9999"), 1.44, accuracy: 0.00001)
     }
 }
