@@ -1862,6 +1862,10 @@ import AppIntents
             // calibration factor decoded from each packet, so xDrip should not run its own calibrator.
             calibrator = NoCalibrator()
 
+        case .sibionics2:
+            // Sibionics2GlucoseProcessor applies the sensor's stock correction and returns mg/dL.
+            calibrator = NoCalibrator()
+
         }
         
         trace("in getCalibrator, calibrator = %{public}@", log: log, category: ConstantsLog.categoryRootView, type: .info, calibrator.description())
