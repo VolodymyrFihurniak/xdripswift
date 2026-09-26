@@ -829,6 +829,7 @@
 		51B200043102000100000001 /* Sibionics2Handshake.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B200033102000100000001 /* Sibionics2Handshake.swift */; };
 		51B200063102000100000001 /* Sibionics2ProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B200053102000100000001 /* Sibionics2ProtocolTests.swift */; };
 		51B210023102000100000001 /* Sibionics2GlucoseProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B210013102000100000001 /* Sibionics2GlucoseProcessorTests.swift */; };
+		D3E200013102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E200023102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift */; };
 		51B210043102000100000001 /* sibionics2_v116a_startup.csv in Resources */ = {isa = PBXBuildFile; fileRef = 51B210033102000100000001 /* sibionics2_v116a_startup.csv */; };
 		A1B200023102000100000001 /* Sibionics2GlucoseProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B200013102000100000001 /* Sibionics2GlucoseProcessor.swift */; };
 		A1B200043102000100000001 /* Sibionics2FactorySensitivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B200033102000100000001 /* Sibionics2FactorySensitivity.swift */; };
@@ -2041,6 +2042,7 @@
 		51B200033102000100000001 /* Sibionics2Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Handshake.swift; sourceTree = "<group>"; };
 		51B200053102000100000001 /* Sibionics2ProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2ProtocolTests.swift; sourceTree = "<group>"; };
 		51B210013102000100000001 /* Sibionics2GlucoseProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2GlucoseProcessorTests.swift; sourceTree = "<group>"; };
+		D3E200023102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2RegistrationAndDeliveryTests.swift; sourceTree = "<group>"; };
 		51B210033102000100000001 /* sibionics2_v116a_startup.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = sibionics2_v116a_startup.csv; sourceTree = "<group>"; };
 		A1B200013102000100000001 /* Sibionics2GlucoseProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2GlucoseProcessor.swift; sourceTree = "<group>"; };
 		A1B200033102000100000001 /* Sibionics2FactorySensitivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2FactorySensitivity.swift; sourceTree = "<group>"; };
@@ -2673,6 +2675,7 @@
 				4D800003301F000100000001 /* Libre2FrameAssemblerTests.swift */,
 				51B200053102000100000001 /* Sibionics2ProtocolTests.swift */,
 				51B210013102000100000001 /* Sibionics2GlucoseProcessorTests.swift */,
+				D3E200023102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift */,
 				51B210053102000100000001 /* Fixtures */,
 				AB1900023014000200000001 /* LiveActivityWarmupTests.swift */,
 				BA0000020000000000000012 /* NightscoutFollowerGapFillTests.swift */,
@@ -4466,6 +4469,7 @@
 			files = (
 				51B200063102000100000001 /* Sibionics2ProtocolTests.swift in Sources */,
 				51B210023102000100000001 /* Sibionics2GlucoseProcessorTests.swift in Sources */,
+				D3E200013102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift in Sources */,
 				4F3200013008000100000001 /* BgReadingTrendTests.swift in Sources */,
 				5A0100043015000100000001 /* GlucoseRangeDistributionTests.swift in Sources */,
 				5A0921023015000100000001 /* GMIStatisticsTests.swift in Sources */,
