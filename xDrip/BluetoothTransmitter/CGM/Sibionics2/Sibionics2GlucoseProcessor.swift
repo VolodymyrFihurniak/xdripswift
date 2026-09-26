@@ -22,7 +22,7 @@ struct Sibionics2ProcessedGlucose {
 /// first exact correction there is deliberately no glucose result.
 struct Sibionics2GlucoseProcessor {
     private static let snapshotMagic: [UInt8] = [0x53, 0x32, 0x47, 0x50] // S2GP
-    private static let snapshotVersion: UInt16 = 1
+    private static let snapshotVersion: UInt16 = 2
     private static let maximumCoreHexLength = 16_384
 
     private final class CoreBox {
@@ -126,12 +126,15 @@ struct Sibionics2GlucoseProcessor {
         data.appendUInt32BE((replayDeltaMmol ?? 0).bitPattern)
         data.appendUInt32BE(UInt32(bytes.count))
         data.append(contentsOf: bytes)
+        let checksum = Self.checksum(data)
+        data.appendUInt32BE(checksum)
         return data
     }
 
     mutating func restore(from data: Data) -> Bool {
         let headerSize = 28
-        guard validSensitivity, data.count >= headerSize,
+        let checksumSize = 4
+        guard validSensitivity, data.count >= headerSize + checksumSize,
               Array(data.prefix(4)) == Self.snapshotMagic,
               data.uint16BE(at: 4) == Self.snapshotVersion,
               let flags = data.byte(at: 6), (flags & ~UInt8(7)) == 0,
@@ -142,8 +145,13 @@ struct Sibionics2GlucoseProcessor {
               let replayBits = data.uint32BE(at: 20),
               let coreLength = data.uint32BE(at: 24),
               coreLength > 0, coreLength <= Self.maximumCoreHexLength,
-              data.count == headerSize + Int(coreLength),
-              let hex = String(data: data[headerSize...], encoding: .utf8)
+              data.count == headerSize + Int(coreLength) + checksumSize
+        else { return false }
+
+        let checksumOffset = data.count - checksumSize
+        guard let storedChecksum = data.uint32BE(at: checksumOffset),
+              Self.checksum(Data(data.prefix(checksumOffset))) == storedChecksum,
+              let hex = String(data: data[headerSize..<checksumOffset], encoding: .utf8)
         else { return false }
 
         let restoredIndex: Int?
@@ -181,6 +189,15 @@ struct Sibionics2GlucoseProcessor {
         if copy.restoreHex(coreBox.value.snapshotHex()) {
             coreBox = CoreBox(copy)
         }
+    }
+
+    /// FNV-1a detects accidental snapshot corruption; it is not authentication.
+    private static func checksum(_ data: Data) -> UInt32 {
+        var hash: UInt32 = 0x811c9dc5
+        for byte in data {
+            hash = (hash ^ UInt32(byte)) &* 0x01000193
+        }
+        return hash
     }
 
     private static func isUsableDelta(_ value: Float) -> Bool {

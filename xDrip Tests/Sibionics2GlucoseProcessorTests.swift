@@ -158,6 +158,44 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         }
     }
 
+    func testSnapshotChecksumRejectsHeaderAndPayloadCorruptionWithoutChangingState() throws {
+        let rows = try startupRows()
+        var checkpoint = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        for row in rows.prefix(70) {
+            _ = checkpoint.process(row.reading(), mode: .replay)
+        }
+        let snapshot = checkpoint.snapshot()
+
+        // Keep the core snapshot's own magic/version/sensitivity intact while
+        // changing a context nibble. It remains well-formed hex and is rejected
+        // by the wrapper integrity checksum.
+        var payloadMutation = snapshot
+        let contextHexOffset = 28 + (12 * 2)
+        payloadMutation[contextHexOffset] = payloadMutation[contextHexOffset] == 0x30 ? 0x31 : 0x30
+
+        // Flip one low bit of the serialized live correction delta.
+        var headerMutation = snapshot
+        headerMutation[16] ^= 0x01
+
+        for corrupted in [payloadMutation, headerMutation] {
+            var subject = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+            var control = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+            for row in rows.prefix(70) {
+                _ = subject.process(row.reading(), mode: .replay)
+                _ = control.process(row.reading(), mode: .replay)
+            }
+            let stateBeforeRestore = subject.snapshot()
+            XCTAssertFalse(subject.restore(from: corrupted))
+            XCTAssertEqual(subject.snapshot(), stateBeforeRestore,
+                           "A rejected snapshot must leave the processor unchanged")
+            let next = rows[70].reading()
+            let actual = try XCTUnwrap(subject.process(next, mode: .live))
+            let expected = try XCTUnwrap(control.process(next, mode: .live))
+            XCTAssertEqual(actual.glucoseMgDl, expected.glucoseMgDl)
+            XCTAssertEqual(actual.index, expected.index)
+        }
+    }
+
     func testSnapshotRejectsCorruptionVersionAndDifferentSensitivity() throws {
         let rows = try startupRows()
         var source = Sibionics2GlucoseProcessor(sensitivity: 1.44)
@@ -170,7 +208,7 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         XCTAssertFalse(wrongSensitivity.restore(from: snapshot))
 
         var badVersion = snapshot
-        badVersion[5] = 2
+        badVersion[5] = 3
         var versionTarget = Sibionics2GlucoseProcessor(sensitivity: 1.44)
         XCTAssertFalse(versionTarget.restore(from: badVersion))
 
