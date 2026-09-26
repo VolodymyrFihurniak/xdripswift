@@ -40,9 +40,12 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         private(set) var receivedGlucoseData = [[GlucoseData]]()
         private(set) var receivedSensorAges = [TimeInterval?]()
         private(set) var newSensorStartDates = [Date?]()
+        var glucoseExpectation: XCTestExpectation?
+        var newSensorExpectation: XCTestExpectation?
 
         func newSensorDetected(sensorStartDate: Date?) {
             newSensorStartDates.append(sensorStartDate)
+            newSensorExpectation?.fulfill()
         }
 
         func sensorStopDetected() {}
@@ -55,6 +58,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         ) {
             receivedGlucoseData.append(glucoseData)
             receivedSensorAges.append(sensorAge)
+            glucoseExpectation?.fulfill()
         }
 
         func errorOccurred(xDripError: XdripError) {}
@@ -530,15 +534,30 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         let receivedAt = sensorStartDate.addingTimeInterval(3_600)
         let processed = batchProcessor.process([reading], receivedAt: receivedAt)
         let spy = CGMTransmitterDelegateSpy()
+        let glucoseReceived = expectation(description: "delegate receives processed glucose")
+        let newSensorDetected = expectation(description: "delegate receives new sensor start")
+        spy.glucoseExpectation = glucoseReceived
+        spy.newSensorExpectation = newSensorDetected
 
         XCTAssertEqual(processed.count, 1)
-        Sibionics2DelegateDelivery.deliver(
-            processed,
-            detectedNewSensor: false,
-            sensorStartDate: nil,
-            sensorAge: receivedAt.timeIntervalSince(sensorStartDate),
-            to: spy
-        )
+        let newSessionStart = sensorStartDate.addingTimeInterval(30 * 24 * 60 * 60)
+        DispatchQueue.main.async {
+            Sibionics2DelegateDelivery.deliver(
+                processed,
+                detectedNewSensor: false,
+                sensorStartDate: nil,
+                sensorAge: receivedAt.timeIntervalSince(sensorStartDate),
+                to: spy
+            )
+            Sibionics2DelegateDelivery.deliver(
+                [],
+                detectedNewSensor: true,
+                sensorStartDate: newSessionStart,
+                sensorAge: nil,
+                to: spy
+            )
+        }
+        wait(for: [glucoseReceived, newSensorDetected], timeout: 2)
 
         XCTAssertEqual(spy.receivedGlucoseData.count, 1)
         XCTAssertEqual(spy.receivedGlucoseData[0].count, 1)
@@ -546,6 +565,8 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(spy.receivedGlucoseData[0][0].glucoseLevelRaw, 64.8, accuracy: 0.0001)
         XCTAssertEqual(spy.receivedSensorAges.count, 1)
         XCTAssertEqual(spy.receivedSensorAges[0], 3_600)
+        XCTAssertEqual(spy.newSensorStartDates.count, 1)
+        XCTAssertEqual(spy.newSensorStartDates[0], newSessionStart)
 
         let invalidReading = rows[129].reading(
             index: 131,
@@ -554,33 +575,36 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         )
         let invalidProcessed = batchProcessor.process([invalidReading], receivedAt: receivedAt)
         XCTAssertTrue(invalidProcessed.isEmpty)
-        Sibionics2DelegateDelivery.deliver(
-            invalidProcessed,
-            detectedNewSensor: false,
-            sensorStartDate: nil,
-            sensorAge: nil,
-            to: spy
-        )
-        Sibionics2DelegateDelivery.deliver(
-            [GlucoseData(timeStamp: reading.eventTime, glucoseLevelRaw: .nan)],
-            detectedNewSensor: false,
-            sensorStartDate: nil,
-            sensorAge: nil,
-            to: spy
-        )
-        let newSessionStart = sensorStartDate.addingTimeInterval(30 * 24 * 60 * 60)
-        Sibionics2DelegateDelivery.deliver(
-            [],
-            detectedNewSensor: true,
-            sensorStartDate: newSessionStart,
-            sensorAge: nil,
-            to: spy
-        )
+        let invalidAndEmptyDeliveriesCompleted = expectation(description: "invalid and empty outputs are ignored")
+        DispatchQueue.main.async {
+            Sibionics2DelegateDelivery.deliver(
+                invalidProcessed,
+                detectedNewSensor: false,
+                sensorStartDate: nil,
+                sensorAge: nil,
+                to: spy
+            )
+            Sibionics2DelegateDelivery.deliver(
+                [GlucoseData(timeStamp: reading.eventTime, glucoseLevelRaw: .nan)],
+                detectedNewSensor: false,
+                sensorStartDate: nil,
+                sensorAge: nil,
+                to: spy
+            )
+            Sibionics2DelegateDelivery.deliver(
+                [],
+                detectedNewSensor: false,
+                sensorStartDate: nil,
+                sensorAge: nil,
+                to: spy
+            )
+            invalidAndEmptyDeliveriesCompleted.fulfill()
+        }
+        wait(for: [invalidAndEmptyDeliveriesCompleted], timeout: 2)
 
         XCTAssertEqual(spy.receivedGlucoseData.count, 1)
         XCTAssertEqual(spy.receivedSensorAges.count, 1)
         XCTAssertEqual(spy.newSensorStartDates.count, 1)
-        XCTAssertEqual(spy.newSensorStartDates[0], newSessionStart)
     }
 
 }
