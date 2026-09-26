@@ -10,6 +10,8 @@ struct Sibionics2ReadingBatchProcessor {
     private var processor: Sibionics2GlucoseProcessor
     private var readingState: Sibionics2ReadingState?
 
+    private(set) var requiresHistoryReplay = false
+
     var state: Sibionics2ReadingState? { readingState }
 
     init(
@@ -21,14 +23,23 @@ struct Sibionics2ReadingBatchProcessor {
         self.stateStore = stateStore
         let savedState = stateStore.load(for: deviceIdentifier)
         var restoredProcessor = processor
-        if let snapshot = savedState?.processorSnapshot, !restoredProcessor.restore(from: snapshot) {
-            restoredProcessor.reset()
+        var restoredState = savedState
+        if let savedState {
+            if let snapshot = savedState.processorSnapshot,
+               restoredProcessor.restore(from: snapshot) {
+                restoredState = savedState
+            } else {
+                stateStore.clear(for: deviceIdentifier)
+                restoredProcessor.reset()
+                restoredState = nil
+            }
         }
         self.processor = restoredProcessor
-        self.readingState = savedState
+        self.readingState = restoredState
     }
 
     mutating func process(_ batch: [Sibionics2RawReading], receivedAt: Date) -> [GlucoseData] {
+        requiresHistoryReplay = false
         guard receivedAt.timeIntervalSince1970.isFinite else { return [] }
 
         let validReadings = batch
@@ -48,9 +59,27 @@ struct Sibionics2ReadingBatchProcessor {
         guard let firstReading = uniqueReadings.first else { return [] }
 
         let inferredStartDate = Self.sensorStartDate(for: firstReading)
-        if shouldResetSession(firstIndex: firstReading.index, inferredStartDate: inferredStartDate) {
+        let didResetSession = shouldResetSession(inferredStartDate: inferredStartDate)
+        if didResetSession {
             processor.reset()
             readingState = nil
+        }
+
+        let waitingForHistoryReplay = readingState?.lastDeliveredIndex == nil &&
+            readingState?.processorSnapshot != nil &&
+            readingState?.sensorStartDate != nil
+        if (didResetSession || waitingForHistoryReplay), firstReading.index > 1 {
+            requiresHistoryReplay = true
+            if didResetSession {
+                let pendingState = Sibionics2ReadingState(
+                    lastDeliveredIndex: nil,
+                    processorSnapshot: processor.snapshot(),
+                    sensorStartDate: inferredStartDate
+                )
+                readingState = pendingState
+                stateStore.save(pendingState, for: deviceIdentifier)
+            }
+            return []
         }
 
         let sensorStartDate = readingState?.sensorStartDate ?? inferredStartDate
@@ -97,10 +126,8 @@ struct Sibionics2ReadingBatchProcessor {
             }
     }
 
-    private func shouldResetSession(firstIndex: Int, inferredStartDate: Date) -> Bool {
-        guard let savedIndex = readingState?.lastDeliveredIndex,
-              firstIndex < Int(savedIndex),
-              let savedStartDate = readingState?.sensorStartDate else { return false }
+    private func shouldResetSession(inferredStartDate: Date) -> Bool {
+        guard let savedStartDate = readingState?.sensorStartDate else { return false }
         let difference = inferredStartDate.timeIntervalSince(savedStartDate)
         return difference.isFinite && abs(difference) > Self.sessionStartTolerance
     }

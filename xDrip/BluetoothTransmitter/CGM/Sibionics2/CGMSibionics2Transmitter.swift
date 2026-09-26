@@ -100,10 +100,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     override func prepareForRelease() {
-        handshake = nil
-        batchProcessor = nil
-        streamingReady = false
-        handshakeResponseCount = 0
+        runOnCentralQueue {
+            self.handshake = nil
+            self.batchProcessor = nil
+            self.streamingReady = false
+            self.handshakeResponseCount = 0
+        }
         super.prepareForRelease()
     }
 
@@ -116,13 +118,16 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     func isAnubisG6() -> Bool { false }
     func cgmTransmitterType() -> CGMTransmitterType { .sibionics2 }
     func requestNewReading() {
-        guard streamingReady,
-              let address = deviceAddress,
-              let lastIndex = stateStore.load(for: address)?.lastDeliveredIndex else { return }
-        _ = writeDataToPeripheral(
-            data: codec.buildDataRequestPacket(lastIndex: lastIndex),
-            type: .withResponse
-        )
+        runOnCentralQueue { [weak self] in
+            guard let self,
+                  self.streamingReady,
+                  let address = self.deviceAddress else { return }
+            let lastIndex = self.stateStore.load(for: address)?.lastDeliveredIndex ?? 0
+            _ = self.writeDataToPeripheral(
+                data: self.codec.buildDataRequestPacket(lastIndex: lastIndex),
+                type: .withResponse
+            )
+        }
     }
     func maxSensorAgeInDays() -> Double? { nil }
     func startSensor(sensorCode: String?, startDate: Date) {}
@@ -200,8 +205,13 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
         let previousStartDate = batchProcessor.state?.sensorStartDate
         let glucoseData = batchProcessor.process(readings, receivedAt: receivedAt)
+        let requiresHistoryReplay = batchProcessor.requiresHistoryReplay
         let currentState = batchProcessor.state
         self.batchProcessor = batchProcessor
+
+        if requiresHistoryReplay {
+            requestNewReading()
+        }
 
         guard let sensorStartDate = currentState?.sensorStartDate else { return }
         let detectedNewSensor = previousStartDate.map {
