@@ -222,16 +222,42 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
         DispatchQueue.main.async { [weak self] in
             guard let self, let delegate = self.cgmTransmitterDelegate else { return }
-            if detectedNewSensor {
-                delegate.newSensorDetected(sensorStartDate: sensorStartDate)
-            }
-            guard !glucoseData.isEmpty else { return }
-            var mutableGlucoseData = glucoseData
-            delegate.cgmTransmitterInfoReceived(
-                glucoseData: &mutableGlucoseData,
-                transmitterBatteryInfo: nil,
-                sensorAge: sensorAge
+            Sibionics2DelegateDelivery.deliver(
+                glucoseData,
+                detectedNewSensor: detectedNewSensor,
+                sensorStartDate: sensorStartDate,
+                sensorAge: sensorAge,
+                to: delegate
             )
         }
+    }
+}
+
+
+enum Sibionics2DelegateDelivery {
+    static func deliver(
+        _ glucoseData: [GlucoseData],
+        detectedNewSensor: Bool,
+        sensorStartDate: Date?,
+        sensorAge: TimeInterval?,
+        to delegate: CGMTransmitterDelegate
+    ) {
+        if detectedNewSensor {
+            delegate.newSensorDetected(sensorStartDate: sensorStartDate)
+        }
+
+        let validGlucoseData = glucoseData.filter { reading in
+            reading.timeStamp.timeIntervalSince1970.isFinite &&
+                reading.glucoseLevelRaw.isFinite &&
+                reading.glucoseLevelRaw > 0 && reading.glucoseLevelRaw <= 900
+        }
+        guard !validGlucoseData.isEmpty else { return }
+
+        var mutableGlucoseData = validGlucoseData
+        delegate.cgmTransmitterInfoReceived(
+            glucoseData: &mutableGlucoseData,
+            transmitterBatteryInfo: nil,
+            sensorAge: sensorAge
+        )
     }
 }
