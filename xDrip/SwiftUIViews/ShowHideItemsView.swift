@@ -7,102 +7,74 @@
 //
 
 import SwiftUI
-import OSLog
 
 struct ShowHideItemsView: View {
-    // MARK: - environment objects
-    
-    @Environment(\.presentationMode) var presentationMode: Binding<PresentationMode>
-    
-    // MARK: - private @State properties
-    
-    @State private var showMiniChart = UserDefaults.standard.showMiniChart
-    @State private var showStatistics = UserDefaults.standard.showStatistics
-    @State private var showTreatmentsOnChart = UserDefaults.standard.showTreatmentsOnChart
-    @State private var speakReadings = UserDefaults.standard.speakReadings
-    @State private var allowStandByHighContrast = UserDefaults.standard.allowStandByHighContrast
-    @State private var forceStandByBigNumbers = UserDefaults.standard.forceStandByBigNumbers
-    
-    // MARK: - private properties
-    
-    /// for trace
-    private let log = OSLog(subsystem: ConstantsLog.subSystem, category: ConstantsLog.categoryRootView)
-    
-    // MARK: - SwiftUI views
-    
+    @Environment(\.presentationMode) private var presentationMode
+
+    // These legacy keys store the inverse of the visible switch. Observe them directly
+    // so changes from Settings or Home remain synchronized while this sheet is open.
+    @AppStorage(UserDefaults.Key.showTreatmentsOnChart.rawValue) private var hidesTherapy = false
+    @AppStorage(UserDefaults.Key.allowScreenRotation.rawValue) private var preventsChartRotation = false
+    @AppStorage(UserDefaults.Key.showSensorNoise.rawValue) private var hidesSensorNoise = false
+    @AppStorage(UserDefaults.Key.speakReadings.rawValue) private var speakReadings = false
+    @AppStorage(UserDefaults.Key.preferLargeSnoozeScreen.rawValue) private var preferLargeSnoozeScreen = true
+    @AppStorage(UserDefaults.KeysCharts.chartWidthInHours.rawValue) private var chartWidthInHours = ConstantsGlucoseChart.defaultChartWidthInHours
+
     var body: some View {
         NavigationView {
-            VStack {
-                List {
-                    Section(header: Text("Home Screen"), footer: Text("Show or hide main home screen elements, useful when using smaller iPhone screen sizes")) {
-                        Toggle(Texts_SettingsView.showMiniChart, isOn: $showMiniChart)
-                            .onChange(of: showMiniChart) { newValue in
-                                UserDefaults.standard.showMiniChart = newValue
-                            }
-                        
-                        Toggle(Texts_SettingsView.labelShowStatistics, isOn: $showStatistics)
-                            .onChange(of: showStatistics) { newValue in
-                                UserDefaults.standard.showStatistics = newValue
-                            }
+            List {
+                Section(header: Text(Texts_HomeView.showHideGlucoseChartTitle)) {
+                    Picker(Texts_SettingsView.mainChartHours, selection: chartHoursSelection) {
+                        ForEach(RootHomeChartRange.allCases, id: \.rawValue) { range in
+                            Text(range.settingsTitle).tag(range.rawValue)
+                        }
                     }
-                    
-                    Section(header: Text("Glucose Chart")) {
-                        Toggle(Texts_SettingsView.settingsviews_showTreatments, isOn: $showTreatmentsOnChart)
-                            .onChange(of: showTreatmentsOnChart) { newValue in
-                                UserDefaults.standard.showTreatmentsOnChart = newValue
-                            }
-                    }
-                    
-                    Section(header: Text("StandBy Mode"), footer: Text("Changes how the StandBy mode will be displayed if activated in the iPhone settings")) {
-                        Toggle(Texts_SettingsView.allowStandByHighContrast, isOn: $allowStandByHighContrast)
-                            .onChange(of: allowStandByHighContrast) { newValue in
-                                UserDefaults.standard.allowStandByHighContrast = newValue
-                            }
-                        
-                        Toggle(Texts_SettingsView.forceStandByBigNumbers, isOn: $forceStandByBigNumbers)
-                            .onChange(of: forceStandByBigNumbers) { newValue in
-                                UserDefaults.standard.forceStandByBigNumbers = newValue
-                            }
-                    }
-                    
-                    Section(header: Text("Additional Items")) {
-                        Toggle(Texts_SettingsView.labelSpeakBgReadings, isOn: $speakReadings)
-                            .onChange(of: speakReadings) { newValue in
-                                UserDefaults.standard.speakReadings = newValue
-                            }
-                    }
+                    .pickerStyle(.menu)
+                    .tint(ConstantsAppColors.rowDetailText)
+
+                    Toggle(Texts_SettingsView.allowScreenRotation, isOn: Binding(
+                        get: { !preventsChartRotation },
+                        set: { preventsChartRotation = !$0 }
+                    ))
+                    Toggle(Texts_SettingsView.settingsviews_showTreatments, isOn: Binding(
+                        get: { !hidesTherapy },
+                        set: { hidesTherapy = !$0 }
+                    ))
+                    Toggle(Texts_SettingsView.showSensorNoise, isOn: Binding(
+                        get: { !hidesSensorNoise },
+                        set: { hidesSensorNoise = !$0 }
+                    ))
+                }
+
+                Section(header: Text(Texts_HomeView.showHideAdditionalItemsTitle)) {
+                    Toggle(Texts_SettingsView.labelSpeakBgReadings, isOn: $speakReadings)
+                    Toggle(Texts_SettingsView.preferLargeSnoozeScreen, isOn: $preferLargeSnoozeScreen)
                 }
             }
+            .toggleStyle(SwitchToggleStyle(tint: ConstantsAppColors.normal))
+            .ipadReadableContentWidth(760)
             .navigationTitle(Texts_HomeView.showHideItemsTitle)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(Texts_Common.Cancel, action: {
-                        self.presentationMode.wrappedValue.dismiss()
-                    })
+                    Button(Texts_Common.Cancel) {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                    .foregroundStyle(ConstantsAppColors.toolbarNeutralAction)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    OnlineHelpButton(topic: .quickShowHide)
                 }
             }
         }
         .colorScheme(.dark)
     }
-    
-    // MARK: - private functions
-    
-    /// returns a row view so that all rows are the same
-    /// - parameters:
-    ///   - title: the title text
-    ///   - data: the value text
-    /// - returns:
-    ///   - a view with the formatted row inside it
-    private func row(title: String, data: String) -> AnyView {
-        // wrap the HStack in an AnyView so that it can be returned back to the caller
-        let rowView = AnyView(HStack {
-            Text(title)
-            Spacer()
-            Text(data)
-                .foregroundStyle(Color(.colorSecondary))
-        })
-        
-        return rowView
+
+    /// Normalizes older stored widths and uses the same preference as Home pinch zoom.
+    private var chartHoursSelection: Binding<Double> {
+        Binding(
+            get: { RootHomeChartRange.closest(to: chartWidthInHours).rawValue },
+            set: { chartWidthInHours = $0 }
+        )
     }
 }
 
@@ -111,15 +83,3 @@ struct ShowHideItemsView_Previews: PreviewProvider {
         ShowHideItemsView()
     }
 }
-
-    //                    Section(header: Text(Texts_SettingsView.showMiniChart)) {
-    //                        HStack(alignment: .center, spacing: 20) {
-    //                            Image("showHide_showMiniChart")
-    //                                .resizable()
-    //                                .scaledToFill()
-    //                            Toggle("", isOn: $showMiniChart)
-    //                                .onChange(of: showStatistics) { newValue in
-    //                                    UserDefaults.standard.showMiniChart = newValue
-    //                                }
-    //                        }
-    //                    }
