@@ -429,6 +429,20 @@ final class TroubleshootingLogTests: XCTestCase {
             TroubleshootingLogSource(bluetoothPeripheralType: .Libre2Type),
             .libre2
         )
+        XCTAssertEqual(
+            TroubleshootingLogSource(directTransmitterType: .sibionics2),
+            .sibionics2
+        )
+        XCTAssertEqual(
+            TroubleshootingLogSource(bluetoothPeripheralType: .Sibionics2Type),
+            .sibionics2
+        )
+        let sibionicsSource = try XCTUnwrap(
+            TroubleshootingLogSource(bluetoothPeripheralType: .Sibionics2Type)
+        )
+        XCTAssertEqual(sibionicsSource.name, "Sibionics 2")
+        XCTAssertFalse(sibionicsSource.isFollowerSource)
+
         let json = String(
             decoding: try JSONEncoder.troubleshooting.encode(XCTUnwrap(entries.last)),
             as: UTF8.self
