@@ -29,6 +29,8 @@ kotlin {
         jvmTest.dependencies {
             implementation(kotlin("test-junit"))
         }
-        jvmTest.resources.srcDir(rootProject.file("../xDrip Tests/Fixtures"))
+
+        // Resolve the source set explicitly so Gradle uses KotlinSourceSet.resources.
+        getByName("jvmTest").resources.srcDir(rootProject.file("../xDrip Tests/Fixtures"))
     }
 }
