@@ -825,6 +825,9 @@
 		F8FDFEAD260DE1B90047597D /* ConstantsUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8FDFEAC260DE1B90047597D /* ConstantsUI.swift */; };
 		FBA100020000000000000001 /* FollowerBackgroundKeepAliveManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBA100010000000000000001 /* FollowerBackgroundKeepAliveManager.swift */; };
 		FBA100040000000000000001 /* FollowerBackgroundKeepAliveManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBA100030000000000000001 /* FollowerBackgroundKeepAliveManagerTests.swift */; };
+		51B200023102000100000001 /* Sibionics2Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B200013102000100000001 /* Sibionics2Protocol.swift */; };
+		51B200043102000100000001 /* Sibionics2Handshake.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B200033102000100000001 /* Sibionics2Handshake.swift */; };
+		51B200063102000100000001 /* Sibionics2ProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B200053102000100000001 /* Sibionics2ProtocolTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -2029,6 +2032,9 @@
 		F8FDFEAC260DE1B90047597D /* ConstantsUI.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ConstantsUI.swift; sourceTree = "<group>"; };
 		FBA100010000000000000001 /* FollowerBackgroundKeepAliveManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerBackgroundKeepAliveManager.swift; sourceTree = "<group>"; };
 		FBA100030000000000000001 /* FollowerBackgroundKeepAliveManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowerBackgroundKeepAliveManagerTests.swift; sourceTree = "<group>"; };
+		51B200013102000100000001 /* Sibionics2Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Protocol.swift; sourceTree = "<group>"; };
+		51B200033102000100000001 /* Sibionics2Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Handshake.swift; sourceTree = "<group>"; };
+		51B200053102000100000001 /* Sibionics2ProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2ProtocolTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2622,6 +2628,15 @@
 			path = SensorHealth;
 			sourceTree = "<group>";
 		};
+		51B200073102000100000001 /* Sibionics2 */ = {
+			isa = PBXGroup;
+			children = (
+				51B200013102000100000001 /* Sibionics2Protocol.swift */,
+				51B200033102000100000001 /* Sibionics2Handshake.swift */,
+			);
+			path = Sibionics2;
+			sourceTree = "<group>";
+		};
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
@@ -2642,6 +2657,7 @@
 				5A0100033015000100000001 /* GlucoseRangeDistributionTests.swift */,
 				5A0921013015000100000001 /* GMIStatisticsTests.swift */,
 				4D800003301F000100000001 /* Libre2FrameAssemblerTests.swift */,
+				51B200053102000100000001 /* Sibionics2ProtocolTests.swift */,
 				AB1900023014000200000001 /* LiveActivityWarmupTests.swift */,
 				BA0000020000000000000012 /* NightscoutFollowerGapFillTests.swift */,
 				A50000040000000000000001 /* OnlineHelpTests.swift */,
@@ -3716,6 +3732,7 @@
 				F8F971F023A5915900C3F17D /* Generic */,
 				F8F971D623A5915900C3F17D /* Libre */,
 				4D7180122FE8000100000001 /* Medtrum */,
+				51B200073102000100000001 /* Sibionics2 */,
 			);
 			path = CGM;
 			sourceTree = "<group>";
@@ -4422,6 +4439,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				51B200063102000100000001 /* Sibionics2ProtocolTests.swift in Sources */,
 				4F3200013008000100000001 /* BgReadingTrendTests.swift in Sources */,
 				5A0100043015000100000001 /* GlucoseRangeDistributionTests.swift in Sources */,
 				5A0921023015000100000001 /* GMIStatisticsTests.swift in Sources */,
@@ -4454,6 +4472,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				51B200023102000100000001 /* Sibionics2Protocol.swift in Sources */,
+				51B200043102000100000001 /* Sibionics2Handshake.swift in Sources */,
 				5A0100023015000100000001 /* GlucoseRangeDistribution.swift in Sources */,
 				4D7A00023014000100000001 /* TroubleshootingLog.swift in Sources */,
 				4D7A00043014000100000001 /* TroubleshootingLogView.swift in Sources */,
