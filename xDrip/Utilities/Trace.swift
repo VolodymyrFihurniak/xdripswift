@@ -745,6 +745,12 @@ class Trace {
                             )
                         }
 
+                    case .Sibionics2Type:
+                        if blePeripheral.sibionics2 != nil {
+                            traceInfo.appendStringAndNewLine("        Type: " + bluetoothPeripheralType.rawValue)
+                            traceInfo.appendStringAndNewLine("        Sensor serial: " + (blePeripheral.sensorSerialNumber ?? "nil"))
+                        }
+
                     case .MedtrumTouchCareNanoType:
                         if let medtrumNano = blePeripheral.medtrumTouchCareNano {
 
