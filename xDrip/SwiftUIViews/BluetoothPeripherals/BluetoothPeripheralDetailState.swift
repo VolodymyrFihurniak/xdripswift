@@ -543,6 +543,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             return makeBubbleSections(bluetoothPeripheral: bluetoothPeripheral)
         case .MedtrumTouchCareNanoType:
             return makeMedtrumTouchCareNanoSections(bluetoothPeripheral: bluetoothPeripheral)
+        case .Sibionics2Type:
+            return []
         case .M5StackType:
             return makeM5StackSections(bluetoothPeripheral: bluetoothPeripheral, includesSpecificM5StackSection: true)
         case .M5StickCType:
