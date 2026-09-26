@@ -158,6 +158,33 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         }
     }
 
+    func testSnapshotRejectsCorruptionVersionAndDifferentSensitivity() throws {
+        let rows = try startupRows()
+        var source = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        for row in rows.prefix(70) {
+            _ = source.process(row.reading(), mode: .replay)
+        }
+        let snapshot = source.snapshot()
+
+        var wrongSensitivity = Sibionics2GlucoseProcessor(sensitivity: 1.43)
+        XCTAssertFalse(wrongSensitivity.restore(from: snapshot))
+
+        var badVersion = snapshot
+        badVersion[5] = 2
+        var versionTarget = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        XCTAssertFalse(versionTarget.restore(from: badVersion))
+
+        var truncated = snapshot
+        truncated.removeLast()
+        var truncatedTarget = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        XCTAssertFalse(truncatedTarget.restore(from: truncated))
+
+        var trailing = snapshot
+        trailing.append(0)
+        var trailingTarget = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        XCTAssertFalse(trailingTarget.restore(from: trailing))
+    }
+
     func testRejectsUnsupportedExplicitSensitivityWithoutFallback() throws {
         let rows = try startupRows()
         // Validate the caller's Double before narrowing to Float or adjusting

@@ -84,3 +84,10 @@ The local execution environment is Linux and has no `xcodebuild`; therefore an A
 - iGlucco stock algorithm reference: https://github.com/ctqvva/iglucco/blob/main/iGlucco/Services/Bluetooth/SiBionics/SiBionicsAlgorithmContext.swift
 - iGlucco protocol tests: https://github.com/ctqvva/iglucco/blob/main/Tests/SiBionicsProtocolTests.swift
 - JugglucoNG Sibionics driver: https://github.com/ctqvva/JugglucoNG/tree/main/Common/src/main/java/tk/glucodata/drivers/sibionics
+
+
+## Task 2 architecture addendum (2026-09-26)
+
+The pinned stock V116A implementation is a 907 KB generated state machine with over 27,000 lines. A hand-written Swift recreation or the unrelated iGlucco approximation would not preserve the required behavior. Task 2 therefore uses a minimal standalone Kotlin Multiplatform module solely to compile the complete JugglucoNG GPL-3.0 V116A core into a static Kotlin/Native XCFramework. The module contains minimal DTOs, four narrowly scoped portability substitutions, a primitive-only process/reset/snapshot bridge, and a JVM target for fixture differential tests. BLE, sensitivity resolution, xDrip validation, live/replay correction, persistence, unit conversion, and delivery stay in Swift.
+
+Task 4 must run `gradle -p Sibionics2Core assembleSibionics2CoreReleaseXCFramework` with JDK 17 on macOS before Xcode/Fastlane. Expected output: `Sibionics2Core/build/XCFrameworks/release/Sibionics2Core.xcframework`.
