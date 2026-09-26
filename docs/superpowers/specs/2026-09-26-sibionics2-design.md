@@ -25,7 +25,7 @@ The new implementation should reuse those lifecycles rather than add a second ce
 
 ### 1. Sibionics 2 protocol layer
 
-Add a focused protocol implementation for the Sibionics 2 variant. Keep packet construction, encryption/checksum handling, parsing, and reading conversion testable independently from CoreBluetooth callbacks.
+Add a focused protocol implementation for the Sibionics 2 variant and a pure `Sibionics2GlucoseProcessor`. Keep packet construction, encryption/checksum handling, parsing, and stock-path glucose processing testable independently from CoreBluetooth callbacks.
 
 Use iGlucco's Sibionics 2 / V120 path as the behavioral reference. The observed BLE surface is service `FF30`, notify characteristic `FF31`, and write characteristic `FF32`. Implement only the commands and responses required to authenticate/activate the sensor, synchronize time, request data, and receive the stream. Do not add reset or maintenance commands.
 
@@ -41,7 +41,7 @@ Register Sibionics 2 in the existing peripheral selection and persistence path. 
 
 Decode sensor index, event time, temperature, trend, and glucose fields, then produce `GlucoseData` for the standard delegate. Preserve event timestamps and indexes so reconnects can avoid duplicates and request missing readings when the sensor protocol provides history.
 
-Use the Sibionics sensor algorithm needed to turn protocol values into displayed glucose. Do not treat a packet's raw glucose field as a verified final value. Keep the first version limited to the stock Sibionics 2 path; exclude experimental alternative algorithms and sensor maintenance actions.
+Use iGlucco's stock Sibionics processing path as a behavioral reference and implement it in xDripSwift style; cross-check the output against Juggluco's stock-path fixtures or independently captured sensor traces. Do not treat a packet's raw glucose field as a verified final value. Keep the first version limited to the stock Sibionics 2 path; exclude experimental alternative algorithms and sensor maintenance actions.
 
 ### 4. Build workflow
 
@@ -51,10 +51,10 @@ The temporary direct build workflow currently checks out `master` explicitly. Up
 
 Included:
 
-- Sibionics 2 discovery, pairing/connection, required protocol handshake, and data notifications.
+- Sibionics 2 discovery, add-peripheral setup, BLE connection, required protocol handshake, and data notifications.
 - Live reading delivery and protocol-supported history/backfill.
 - Registration in peripheral setup, persistence, CGM type mapping, and ordinary reading display.
-- Unit tests for protocol vectors, invalid/checksum-failed packets, reading conversion, and type/data-pipeline mapping.
+- Unit tests for protocol vectors, invalid/checksum-failed packets, stock-path reading conversion, and type/data-pipeline mapping.
 - Branch-selectable manual build workflow for the feature branch.
 
 Excluded:
@@ -81,5 +81,6 @@ The local execution environment is Linux and has no `xcodebuild`; therefore an A
 
 - xDripSwift: https://github.com/VolodymyrFihurniak/xdripswift
 - iGlucco BLE protocol: https://github.com/ctqvva/iglucco/tree/main/iGlucco/Services/Bluetooth/SiBionics
+- iGlucco stock algorithm reference: https://github.com/ctqvva/iglucco/blob/main/iGlucco/Services/Bluetooth/SiBionics/SiBionicsAlgorithmContext.swift
 - iGlucco protocol tests: https://github.com/ctqvva/iglucco/blob/main/Tests/SiBionicsProtocolTests.swift
 - JugglucoNG Sibionics driver: https://github.com/ctqvva/JugglucoNG/tree/main/Common/src/main/java/tk/glucodata/drivers/sibionics
