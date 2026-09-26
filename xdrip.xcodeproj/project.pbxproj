@@ -828,6 +828,8 @@
 		51B200023102000100000001 /* Sibionics2Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B200013102000100000001 /* Sibionics2Protocol.swift */; };
 		51B200043102000100000001 /* Sibionics2Handshake.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B200033102000100000001 /* Sibionics2Handshake.swift */; };
 		51B200063102000100000001 /* Sibionics2ProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B200053102000100000001 /* Sibionics2ProtocolTests.swift */; };
+		51B210023102000100000001 /* Sibionics2GlucoseProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B210013102000100000001 /* Sibionics2GlucoseProcessorTests.swift */; };
+		51B210043102000100000001 /* sibionics2_v116a_startup.csv in Resources */ = {isa = PBXBuildFile; fileRef = 51B210033102000100000001 /* sibionics2_v116a_startup.csv */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -2035,6 +2037,8 @@
 		51B200013102000100000001 /* Sibionics2Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Protocol.swift; sourceTree = "<group>"; };
 		51B200033102000100000001 /* Sibionics2Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Handshake.swift; sourceTree = "<group>"; };
 		51B200053102000100000001 /* Sibionics2ProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2ProtocolTests.swift; sourceTree = "<group>"; };
+		51B210013102000100000001 /* Sibionics2GlucoseProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2GlucoseProcessorTests.swift; sourceTree = "<group>"; };
+		51B210033102000100000001 /* sibionics2_v116a_startup.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = sibionics2_v116a_startup.csv; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2658,6 +2662,8 @@
 				5A0921013015000100000001 /* GMIStatisticsTests.swift */,
 				4D800003301F000100000001 /* Libre2FrameAssemblerTests.swift */,
 				51B200053102000100000001 /* Sibionics2ProtocolTests.swift */,
+				51B210013102000100000001 /* Sibionics2GlucoseProcessorTests.swift */,
+				51B210053102000100000001 /* Fixtures */,
 				AB1900023014000200000001 /* LiveActivityWarmupTests.swift */,
 				BA0000020000000000000012 /* NightscoutFollowerGapFillTests.swift */,
 				A50000040000000000000001 /* OnlineHelpTests.swift */,
@@ -3870,6 +3876,14 @@
 			path = CustomColoredDisclosureIndicator;
 			sourceTree = "<group>";
 		};
+		51B210053102000100000001 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				51B210033102000100000001 /* sibionics2_v116a_startup.csv */,
+			);
+			path = Fixtures;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -4118,6 +4132,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				51B210043102000100000001 /* sibionics2_v116a_startup.csv in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4440,6 +4455,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				51B200063102000100000001 /* Sibionics2ProtocolTests.swift in Sources */,
+				51B210023102000100000001 /* Sibionics2GlucoseProcessorTests.swift in Sources */,
 				4F3200013008000100000001 /* BgReadingTrendTests.swift in Sources */,
 				5A0100043015000100000001 /* GlucoseRangeDistributionTests.swift in Sources */,
 				5A0921023015000100000001 /* GMIStatisticsTests.swift in Sources */,
