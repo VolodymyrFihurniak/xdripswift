@@ -26,14 +26,14 @@ class SibionicsExactV116ACoreConformanceTest {
         rows.forEach { row ->
             val actual = core.process(row.rawMmol, row.temperatureC, row.index)
             if (row.exactMmol == 0f) {
-                assertNull("unexpected stock correction at index ${row.index}", actual)
+                assertNull(actual, "unexpected stock correction at index ${row.index}")
             } else {
-                assertNotNull("missing stock correction at index ${row.index}", actual)
-                val exact = actual ?: error("missing correction at index ${row.index}")
-                assertEquals("stock correction at index ${row.index}", row.exactMmol, exact, 0.0001f)
+                val exact = assertNotNull(actual, "missing stock correction at index ${row.index}")
+                assertEquals(row.exactMmol, exact, 0.0001f,
+                    "stock correction at index ${row.index}")
             }
             stateHashes[row.index]?.let { expected ->
-                assertEquals("V116A state at index ${row.index}", expected, core.stateHash())
+                assertEquals(expected, core.stateHash(), "V116A state at index ${row.index}")
             }
         }
     }
