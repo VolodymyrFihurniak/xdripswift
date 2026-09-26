@@ -79,6 +79,41 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         return (suiteName, defaults, Sibionics2ReadingStateStore(userDefaults: defaults))
     }
 
+    private func assertIncompleteSnapshotCanReplayEarlyHistory(
+        snapshot: Data?,
+        address: String
+    ) throws {
+        let rows = try fixtureRows()
+        let (suiteName, defaults, stateStore) = try isolatedStateStore()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        stateStore.save(
+            Sibionics2ReadingState(
+                lastDeliveredIndex: 127,
+                processorSnapshot: snapshot,
+                sensorStartDate: sensorStartDate
+            ),
+            for: address
+        )
+
+        var batchProcessor = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: address,
+            stateStore: stateStore,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        )
+
+        XCTAssertNil(batchProcessor.state)
+        XCTAssertNil(stateStore.load(for: address))
+
+        _ = batchProcessor.process(
+            rows.prefix(3).map { $0.reading(sensorStartDate: sensorStartDate) },
+            receivedAt: sensorStartDate.addingTimeInterval(20_000)
+        )
+
+        XCTAssertEqual(batchProcessor.state?.lastDeliveredIndex, 3)
+        XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 3)
+        XCTAssertEqual(batchProcessor.state?.sensorStartDate, sensorStartDate)
+    }
+
     private func managedObjectModel() throws -> NSManagedObjectModel {
         let bundle = Bundle(for: BLEPeripheral.self)
         let modelURL = try XCTUnwrap(
@@ -268,6 +303,58 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         ])
         XCTAssertNil(afterReconnect.first?.backfilledAt)
         XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 131)
+    }
+
+    func testMissingProcessorSnapshotClearsProgressAndReplaysEarlyHistory() throws {
+        try assertIncompleteSnapshotCanReplayEarlyHistory(snapshot: nil, address: "sensor-missing-snapshot")
+    }
+
+    func testRejectedProcessorSnapshotClearsProgressAndReplaysEarlyHistory() throws {
+        try assertIncompleteSnapshotCanReplayEarlyHistory(snapshot: Data([0xFF, 0x00]), address: "sensor-rejected-snapshot")
+    }
+
+    func testHigherIndexFromNewSessionRequestsHistoryReplayFromZero() throws {
+        let rows = try fixtureRows()
+        let (suiteName, defaults, stateStore) = try isolatedStateStore()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let address = "sensor-reset-above-saved-index"
+        let savedProcessor = processor(through: 5, rows: rows)
+        stateStore.save(
+            Sibionics2ReadingState(
+                lastDeliveredIndex: 5,
+                processorSnapshot: savedProcessor.snapshot(),
+                sensorStartDate: sensorStartDate
+            ),
+            for: address
+        )
+
+        var batchProcessor = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: address,
+            stateStore: stateStore,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        )
+        let newSessionStart = sensorStartDate.addingTimeInterval(30 * 24 * 60 * 60)
+        let laterReading = rows[19].reading(
+            eventTime: newSessionStart.addingTimeInterval(20 * 60),
+            sensorStartDate: newSessionStart
+        )
+
+        XCTAssertTrue(batchProcessor.process([laterReading], receivedAt: newSessionStart).isEmpty)
+        XCTAssertTrue(batchProcessor.requiresHistoryReplay)
+        let pendingState = try XCTUnwrap(batchProcessor.state)
+        XCTAssertNil(pendingState.lastDeliveredIndex)
+        XCTAssertEqual(pendingState.sensorStartDate, newSessionStart)
+        XCTAssertEqual(
+            pendingState.processorSnapshot,
+            Sibionics2GlucoseProcessor(sensitivity: 1.44).snapshot()
+        )
+        XCTAssertNil(stateStore.load(for: address)?.lastDeliveredIndex)
+
+        let earlyHistory = rows.prefix(20).map { $0.reading(sensorStartDate: newSessionStart) }
+        _ = batchProcessor.process(earlyHistory, receivedAt: newSessionStart.addingTimeInterval(30 * 60))
+        XCTAssertFalse(batchProcessor.requiresHistoryReplay)
+        XCTAssertEqual(batchProcessor.state?.lastDeliveredIndex, 20)
+        XCTAssertEqual(batchProcessor.state?.sensorStartDate, newSessionStart)
     }
 
     func testIndexResetStartsANewSensorSessionAndClearsProcessorState() throws {
