@@ -35,6 +35,31 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         }
     }
 
+
+    private final class CGMTransmitterDelegateSpy: CGMTransmitterDelegate {
+        private(set) var receivedGlucoseData = [[GlucoseData]]()
+        private(set) var receivedSensorAges = [TimeInterval?]()
+        private(set) var newSensorStartDates = [Date?]()
+
+        func newSensorDetected(sensorStartDate: Date?) {
+            newSensorStartDates.append(sensorStartDate)
+        }
+
+        func sensorStopDetected() {}
+        func sensorNotDetected() {}
+
+        func cgmTransmitterInfoReceived(
+            glucoseData: inout [GlucoseData],
+            transmitterBatteryInfo: TransmitterBatteryInfo?,
+            sensorAge: TimeInterval?
+        ) {
+            receivedGlucoseData.append(glucoseData)
+            receivedSensorAges.append(sensorAge)
+        }
+
+        func errorOccurred(xDripError: XdripError) {}
+    }
+
     private func fixtureRows() throws -> [FixtureRow] {
         let url = try XCTUnwrap(Bundle(for: Self.self).url(
             forResource: "sibionics2_v116a_startup",
@@ -481,4 +506,81 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         })
         XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 130)
     }
+    func testDelegateDeliverySeamForwardsOnlyProcessedGlucoseAndSensorAge() throws {
+        let rows = try fixtureRows()
+        let (suiteName, defaults, stateStore) = try isolatedStateStore()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let address = "sensor-delegate-delivery"
+        let preparedProcessor = processor(through: 129, rows: rows)
+        stateStore.save(
+            Sibionics2ReadingState(
+                lastDeliveredIndex: 129,
+                processorSnapshot: preparedProcessor.snapshot(),
+                sensorStartDate: sensorStartDate
+            ),
+            for: address
+        )
+
+        var batchProcessor = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: address,
+            stateStore: stateStore,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        )
+        let reading = rows[129].reading(sensorStartDate: sensorStartDate)
+        let receivedAt = sensorStartDate.addingTimeInterval(3_600)
+        let processed = batchProcessor.process([reading], receivedAt: receivedAt)
+        let spy = CGMTransmitterDelegateSpy()
+
+        XCTAssertEqual(processed.count, 1)
+        Sibionics2DelegateDelivery.deliver(
+            processed,
+            detectedNewSensor: false,
+            sensorStartDate: nil,
+            sensorAge: receivedAt.timeIntervalSince(sensorStartDate),
+            to: spy
+        )
+
+        XCTAssertEqual(spy.receivedGlucoseData.count, 1)
+        XCTAssertEqual(spy.receivedGlucoseData[0].count, 1)
+        XCTAssertEqual(spy.receivedGlucoseData[0][0].timeStamp, reading.eventTime)
+        XCTAssertEqual(spy.receivedGlucoseData[0][0].glucoseLevelRaw, 64.8, accuracy: 0.0001)
+        XCTAssertEqual(spy.receivedSensorAges.count, 1)
+        XCTAssertEqual(spy.receivedSensorAges[0], 3_600)
+
+        let invalidReading = rows[129].reading(
+            index: 131,
+            rawMmol: .nan,
+            sensorStartDate: sensorStartDate
+        )
+        let invalidProcessed = batchProcessor.process([invalidReading], receivedAt: receivedAt)
+        XCTAssertTrue(invalidProcessed.isEmpty)
+        Sibionics2DelegateDelivery.deliver(
+            invalidProcessed,
+            detectedNewSensor: false,
+            sensorStartDate: nil,
+            sensorAge: nil,
+            to: spy
+        )
+        Sibionics2DelegateDelivery.deliver(
+            [GlucoseData(timeStamp: reading.eventTime, glucoseLevelRaw: .nan)],
+            detectedNewSensor: false,
+            sensorStartDate: nil,
+            sensorAge: nil,
+            to: spy
+        )
+        let newSessionStart = sensorStartDate.addingTimeInterval(30 * 24 * 60 * 60)
+        Sibionics2DelegateDelivery.deliver(
+            [],
+            detectedNewSensor: true,
+            sensorStartDate: newSessionStart,
+            sensorAge: nil,
+            to: spy
+        )
+
+        XCTAssertEqual(spy.receivedGlucoseData.count, 1)
+        XCTAssertEqual(spy.receivedSensorAges.count, 1)
+        XCTAssertEqual(spy.newSensorStartDates.count, 1)
+        XCTAssertEqual(spy.newSensorStartDates[0], newSessionStart)
+    }
+
 }
