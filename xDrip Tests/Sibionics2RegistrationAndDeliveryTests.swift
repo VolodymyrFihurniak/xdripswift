@@ -532,6 +532,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         )
         let reading = rows[129].reading(sensorStartDate: sensorStartDate)
         let receivedAt = sensorStartDate.addingTimeInterval(3_600)
+        let sensorAge = receivedAt.timeIntervalSince(sensorStartDate)
         let processed = batchProcessor.process([reading], receivedAt: receivedAt)
         let spy = CGMTransmitterDelegateSpy()
         let glucoseReceived = expectation(description: "delegate receives processed glucose")
@@ -546,7 +547,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
                 processed,
                 detectedNewSensor: false,
                 sensorStartDate: nil,
-                sensorAge: receivedAt.timeIntervalSince(sensorStartDate),
+                sensorAge: sensorAge,
                 to: spy
             )
             Sibionics2DelegateDelivery.deliver(
