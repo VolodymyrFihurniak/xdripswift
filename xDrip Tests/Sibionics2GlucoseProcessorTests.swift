@@ -308,4 +308,51 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         XCTAssertEqual(Sibionics2FactorySensitivity.resolve(
             probeCode: "invalid", shortCode: "9999"), 1.44, accuracy: 0.00001)
     }
+
+    func testFactorySensitivityOverrideIsPerSensorAndCanReturnToAutomaticValue() throws {
+        let suiteName = "Sibionics2SensitivityTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertTrue(Sibionics2FactorySensitivity.setOverride(1.37, for: "sensor-A", userDefaults: defaults))
+        XCTAssertEqual(
+            Sibionics2FactorySensitivity.effectiveSensitivity(
+                for: " SENSOR-A ", advertisedName: "P225044UHA", userDefaults: defaults
+            ),
+            1.37,
+            accuracy: 0.00001
+        )
+        XCTAssertEqual(
+            Sibionics2FactorySensitivity.effectiveSensitivity(
+                for: "sensor-B", advertisedName: "P225044UHA", userDefaults: defaults
+            ),
+            1.44,
+            accuracy: 0.00001
+        )
+
+        XCTAssertTrue(Sibionics2FactorySensitivity.setOverride(nil, for: "sensor-A", userDefaults: defaults))
+        XCTAssertEqual(
+            Sibionics2FactorySensitivity.effectiveSensitivity(
+                for: "sensor-A", advertisedName: "P225044UHA", userDefaults: defaults
+            ),
+            1.44,
+            accuracy: 0.00001
+        )
+    }
+
+    func testFactorySensitivityOverrideRejectsInvalidValuesWithoutLosingValidValue() throws {
+        let suiteName = "Sibionics2SensitivityValidationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertTrue(Sibionics2FactorySensitivity.setOverride(1.37, for: "sensor-A", userDefaults: defaults))
+        for invalid in [Double.nan, Double.infinity, 0.79, 2.51] {
+            XCTAssertFalse(Sibionics2FactorySensitivity.setOverride(invalid, for: "sensor-A", userDefaults: defaults))
+            XCTAssertEqual(
+                Sibionics2FactorySensitivity.override(for: "sensor-A", userDefaults: defaults),
+                1.37,
+                accuracy: 0.00001
+            )
+        }
+    }
 }
