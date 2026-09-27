@@ -214,7 +214,7 @@ struct Sibionics2GlucoseProcessor {
         for offset in stride(from: 0, to: hexBytes.count, by: chunkCharacterCount) {
             let end = min(offset + chunkCharacterCount, hexBytes.count)
             let chunk = String(decoding: hexBytes[offset..<end], as: UTF8.self)
-            guard core.appendRestoreHexChunk(chunk) else { return false }
+            guard core.appendRestoreHexChunk(chunk: chunk) else { return false }
         }
         return core.finishRestoreHex()
     }
