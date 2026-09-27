@@ -425,7 +425,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
             processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
         )
         XCTAssertTrue(resumedProcessor.requiresHistoryReplay)
-        let secondPage = Array(rows.dropFirst(50).prefix(50))
+        let secondPage = rows.dropFirst(50).prefix(50).map { $0.reading(sensorStartDate: sensorStartDate) }
         _ = resumedProcessor.process(secondPage, receivedAt: lateReading.eventTime)
         XCTAssertTrue(resumedProcessor.requiresHistoryReplay)
         XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 100)
