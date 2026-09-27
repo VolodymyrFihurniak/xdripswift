@@ -223,6 +223,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                     == address.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             else { return }
 
+            self.stateStore.clear(for: address)
             self.batchProcessor = nil
             self.historyRequest.reset()
             self.historyRecoveryToken += 1
@@ -311,9 +312,11 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
            batchProcessor.state != nil || stateStore.load(for: address) == nil {
             return batchProcessor
         }
-        let automaticSensitivity = Sibionics2FactorySensitivity.resolve(advertisedName: advertisedName)
         let override = Sibionics2FactorySensitivity.override(for: address)
-        let sensitivity = override ?? automaticSensitivity
+        let sensitivity = Sibionics2FactorySensitivity.effectiveSensitivity(
+            for: address,
+            advertisedName: advertisedName
+        )
         trace("Sibionics 2 sensitivity=%{public}@ source=%{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
               type: .info, sensitivity.description, override == nil ? "automatic" : "peripheral override")
