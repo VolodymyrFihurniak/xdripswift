@@ -157,7 +157,9 @@ final class DexcomG6SensorLabelTests: XCTestCase {
         sensor.sensorSessionOrigin = .startedByApp
         sensor.sensorCalibrationMode = .factoryCoded
 
-        coreDataManager.saveChanges()
+        try context.obtainPermanentIDs(for: [sensor])
+        XCTAssertFalse(sensor.objectID.isTemporaryID)
+        XCTAssertTrue(coreDataManager.saveChangesSynchronously())
         let objectID = sensor.objectID
         context.reset()
 
@@ -274,7 +276,9 @@ final class DexcomG6SensorLabelTests: XCTestCase {
         dexcomG7.batteryTemperature = 25
         dexcomG7.batteryLastReadDate = Date(timeIntervalSince1970: 2_000_000_000)
         dexcomG7.apply(sensorLabel: label)
-        coreDataManager.saveChanges()
+        try context.obtainPermanentIDs(for: [dexcomG7])
+        XCTAssertFalse(dexcomG7.objectID.isTemporaryID)
+        XCTAssertTrue(coreDataManager.saveChangesSynchronously())
         let objectID = dexcomG7.objectID
         context.reset()
 
