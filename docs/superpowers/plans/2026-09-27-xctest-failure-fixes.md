@@ -4,7 +4,7 @@
 
 **Goal:** Resolve the failing assertions reported by workflow run 36314220395 on `f/sibionics2`.
 
-**Architecture:** Keep the Sibionics V1.1.6A correction algorithm and CGM delivery policy unchanged while fixing snapshot continuation at the Swift/Kotlin boundary. Correct the troubleshooting log's replayable reduction, the Dexcom test vectors, and Core Data test persistence boundaries where the run identifies mismatches.
+**Architecture:** Keep the Sibionics V1.1.6A correction algorithm and CGM delivery policy unchanged. Transfer core snapshots in bounded hex chunks across Kotlin/Native and Swift, and preserve the troubleshooting log, Dexcom parser, and Core Data production behavior while correcting the test/reducer mismatches identified by CI.
 
 **Tech Stack:** Swift, XCTest, Core Data, Kotlin Multiplatform, GitHub Actions.
 
@@ -31,18 +31,21 @@
 ### Task 1: Sibionics snapshot restoration
 
 **Files:**
-- Modify: `xDrip/BluetoothTransmitter/CGM/Sibionics2/Sibionics2GlucoseProcessor.swift` and/or `Sibionics2Core/src/commonMain/kotlin/tk/glucodata/drivers/sibionics/Sibionics2V116AFacade.kt` only if the new direct round-trip assertion isolates the bridge.
+- Modify: `xDrip/BluetoothTransmitter/CGM/Sibionics2/Sibionics2GlucoseProcessor.swift`
+- Modify: `Sibionics2Core/src/commonMain/kotlin/tk/glucodata/drivers/sibionics/Sibionics2V116AFacade.kt`
 - Test: `xDrip Tests/Sibionics2GlucoseProcessorTests.swift`
+- Test: `Sibionics2Core/src/jvmTest/kotlin/tk/glucodata/drivers/sibionics/v116a/SibionicsExactV116ACoreConformanceTest.kt`
 - Test: `xDrip Tests/Sibionics2RegistrationAndDeliveryTests.swift`
 
 **Interfaces:**
 - Consumes: `Sibionics2GlucoseProcessor.snapshot()`, `restore(from:)`, and `Sibionics2V116AFacade.snapshotHex()/restoreHex(snapshot:)`.
 - Produces: continuation that accepts the same snapshot and emits the same next processed reading.
 
-- [ ] Add a direct core-facade round-trip assertion at the failing early checkpoint and a failure message identifying the checkpoint.
-- [ ] Use the current CI failure as the RED evidence: `testSnapshotRestoresTheSameNextReading` failed at `XCTAssertTrue`; delivery and reconnect tests emitted uncorrected 115.2/118.8 mg/dL instead of 64.8 mg/dL.
-- [ ] Isolate whether Swift envelope validation or Kotlin/Native facade restoration rejects the checkpoint, then make the smallest fix at that boundary.
-- [ ] Verify the processor snapshot, state-store, reconnect, session-reset, and delegate-delivery tests.
+- [x] Use the CI failure as RED evidence: `testSnapshotRestoresTheSameNextReading` failed at `XCTAssertTrue`; delivery and reconnect tests emitted uncorrected 115.2/118.8 mg/dL instead of 64.8 mg/dL.
+- [x] Trace the reported 5047-byte Swift snapshot to the long hex-string boundary; the current core snapshot format produces 2504 bytes, or 5008 hex characters, for a 5040-byte Swift envelope.
+- [x] Transfer snapshot hex in bounded chunks in both directions and validate every emitted chunk before storing a snapshot.
+- [x] Add a JVM facade chunk round-trip test and assert the iOS snapshot length and checkpoint-specific restore result.
+- [ ] Verify processor snapshot, state-store, reconnect, session-reset, and delegate-delivery tests in a fresh user-triggered workflow.
 
 ### Task 2: Troubleshooting log behavior
 
@@ -54,9 +57,9 @@
 - Consumes: `TroubleshootingLogReport.entries(matching:)` and the typed Bluetooth event reducer.
 - Produces: filtering over rendered report messages and an idempotent Bluetooth recovery reduction.
 
-- [ ] Change the query assertion to text present in the rendered reading message.
-- [ ] Make a previously reduced `.reconnectedToExisting` entry restore healthy Bluetooth state during replay so a later duplicate connection is suppressed.
-- [ ] Verify both failing troubleshooting log tests.
+- [x] Change the query assertion to text present in the rendered reading message.
+- [x] Make a previously reduced `.reconnectedToExisting` entry restore healthy Bluetooth state during replay so a later duplicate connection is suppressed.
+- [ ] Verify both troubleshooting log tests in a fresh user-triggered workflow.
 
 ### Task 3: Dexcom observed-label test vectors
 
@@ -67,8 +70,8 @@
 - Consumes: `DexcomG6SensorLabelParser.parse(_:)`.
 - Produces: observed-label payloads whose AI 21 serial value matches the asserted serial.
 
-- [ ] Correct the three payloads whose encoded AI 21 fields omit a leading serial digit; keep parser behavior unchanged.
-- [ ] Verify all observed G6/ONE label samples.
+- [x] Correct the three payloads whose encoded AI 21 fields omit a leading serial digit; keep parser behavior unchanged.
+- [ ] Verify all observed G6/ONE label samples in a fresh user-triggered workflow.
 
 ### Task 4: Core Data round-trip test persistence
 
@@ -76,10 +79,13 @@
 - Test: `xDrip Tests/DexcomG6SensorLabelTests.swift`
 - Uses: `CoreDataManager.saveChangesSynchronously()`
 
-- [ ] Wait for the child and parent context saves to finish before resetting the context and fetching.
-- [ ] Verify the Dexcom G7 and Sensor metadata round-trips.
+- [x] Obtain permanent object IDs and wait for the child and parent context saves to finish before resetting the context and fetching.
+- [ ] Verify the Dexcom G7 and Sensor metadata round-trips in a fresh user-triggered workflow.
 
 ### Final verification
 
-- [ ] Review the complete branch diff and verify all assertions from run 36314220395 are addressed.
-- [ ] Report that Xcode tests still need a fresh user-triggered workflow run; do not claim they pass without that run.
+- [x] Review the branch diff and implement fixes for every assertion group reported by run 36314220395.
+- [ ] Run the full Xcode test workflow on the updated branch head and confirm no failures; the user will dispatch this workflow.
+- [x] Do not claim the updated tests pass until the fresh workflow result is available.
+
+The reported run tested commit `6be7df00826384957124cd978fce29b43389090a`. The current branch head after these fixes is `b91c3ba4bbc6eff6719655766d6757bcdf155810`.
