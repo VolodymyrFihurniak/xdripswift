@@ -88,4 +88,4 @@
 - [ ] Run the full Xcode test workflow on the updated branch head and confirm no failures; the user will dispatch this workflow.
 - [x] Do not claim the updated tests pass until the fresh workflow result is available.
 
-The reported run tested commit `6be7df00826384957124cd978fce29b43389090a`. The implementation changes end at `b91c3ba4bbc6eff6719655766d6757bcdf155810`; the current branch tip is `745042acf59c258fc973c024d5dd3e5785b29e9f` after this plan-status update.
+The reported run tested commit `6be7df00826384957124cd978fce29b43389090a`. The implementation changes were committed at `b91c3ba4bbc6eff6719655766d6757bcdf155810`; subsequent commits update this plan only.
