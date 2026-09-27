@@ -248,7 +248,30 @@ jobs:
           fi
 
       - name: Run xDrip tests
-        run: xcodebuild test -project xdrip.xcodeproj -scheme xdrip -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
+        env:
+          XCODE_RESULT_BUNDLE: ${{ runner.temp }}/xdrip-tests.xcresult
+        run: |
+          set +e
+          xcodebuild test -project xdrip.xcodeproj -scheme xdrip -destination 'platform=iOS Simulator,name=iPhone 17' -parallel-testing-enabled NO -resultBundlePath "$XCODE_RESULT_BUNDLE" CODE_SIGNING_ALLOWED=NO
+          test_status=$?
+          if [ -d "$XCODE_RESULT_BUNDLE" ]; then
+            echo "##[group]XCTest result summary"
+            xcrun xcresulttool get test-results summary --path "$XCODE_RESULT_BUNDLE" --format json
+            summary_status=$?
+            echo "##[endgroup]"
+            if [ "$summary_status" -ne 0 ]; then
+              echo "::warning::Could not export the XCTest result summary."
+            fi
+          fi
+          exit "$test_status"
+
+      - name: Upload xDrip XCTest results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: xdrip-xctest-results
+          path: ${{ runner.temp }}/xdrip-tests.xcresult
+          if-no-files-found: ignore
 
       # Patch Fastlane Match to not print tables
       - name: Patch Match Tables
