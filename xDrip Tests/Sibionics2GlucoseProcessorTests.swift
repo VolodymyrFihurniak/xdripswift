@@ -97,6 +97,13 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         }
     }
 
+    func testFactoryShortCodeResolvesKnownV116AFallbackVector() throws {
+        let sensitivity = try XCTUnwrap(
+            Sibionics2FactorySensitivity.decodeShortCode("0316015A")
+        )
+        XCTAssertEqual(sensitivity, 1.44, accuracy: 0.0001)
+    }
+
     func testWarmupDoesNotPublishRawGlucose() throws {
         let rows = try startupRows()
         for mode in [Sibionics2ProcessingMode.live, .replay] {
