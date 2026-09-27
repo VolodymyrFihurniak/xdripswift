@@ -398,7 +398,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
             processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
         )
 
-        let lateReading = rows[49].reading(sensorStartDate: sensorStartDate)
+        let lateReading = rows[49].reading(index: 25_298, sensorStartDate: sensorStartDate)
         XCTAssertTrue(batchProcessor.process([lateReading], receivedAt: lateReading.eventTime).isEmpty)
         XCTAssertTrue(batchProcessor.requiresHistoryReplay)
         XCTAssertNil(batchProcessor.state?.lastDeliveredIndex)
@@ -408,7 +408,50 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         let delivered = batchProcessor.process(firstPage, receivedAt: lateReading.eventTime)
         XCTAssertFalse(batchProcessor.requiresHistoryReplay)
         XCTAssertEqual(batchProcessor.state?.lastDeliveredIndex, 50)
-        XCTAssertEqual(delivered.first?.timeStamp, lateReading.eventTime)
+        XCTAssertEqual(delivered.first?.timeStamp,
+                       rows[49].reading(sensorStartDate: sensorStartDate).eventTime)
+    }
+
+    func testMissingHistoryMinuteCannotAdvanceExactAlgorithmCursor() throws {
+        let rows = try fixtureRows()
+        let (suiteName, defaults, stateStore) = try isolatedStateStore()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let address = "missing-minute"
+        stateStore.save(
+            Sibionics2ReadingState(
+                lastDeliveredIndex: 5,
+                processorSnapshot: processor(through: 5, rows: rows).snapshot(),
+                sensorStartDate: sensorStartDate
+            ),
+            for: address
+        )
+        var batchProcessor = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: address,
+            stateStore: stateStore,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        )
+        let afterGap = rows[7].reading(sensorStartDate: sensorStartDate)
+        XCTAssertTrue(batchProcessor.process([afterGap], receivedAt: afterGap.eventTime).isEmpty)
+        XCTAssertTrue(batchProcessor.requiresHistoryReplay)
+        XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 5)
+
+        // An in-page gap publishes only its contiguous prefix, leaving the
+        // missing index available for the next history request.
+        let partial = batchProcessor.process(
+            [rows[5].reading(sensorStartDate: sensorStartDate), afterGap],
+            receivedAt: afterGap.eventTime
+        )
+        XCTAssertEqual(partial.count, 1)
+        XCTAssertTrue(batchProcessor.requiresHistoryReplay)
+        XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 6)
+
+        let recovered = batchProcessor.process(
+            [rows[6].reading(sensorStartDate: sensorStartDate), afterGap],
+            receivedAt: afterGap.eventTime
+        )
+        XCTAssertEqual(recovered.count, 2)
+        XCTAssertFalse(batchProcessor.requiresHistoryReplay)
+        XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 8)
     }
 
     func testGrowingIndexWithClockDriftDoesNotEraseAValidAlgorithmSnapshot() throws {

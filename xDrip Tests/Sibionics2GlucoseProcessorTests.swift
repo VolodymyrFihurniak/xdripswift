@@ -304,6 +304,10 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         XCTAssertTrue(settings.save("0316015A", for: address))
         XCTAssertEqual(settings.sensitivity(for: address, advertisedName: nil) ?? 0,
                        1.44, accuracy: 0.00001)
+        XCTAssertTrue(settings.save("0401671KCJ2", for: address))
+        XCTAssertEqual(settings.code(for: address), "0401671K")
+        XCTAssertEqual(settings.sensitivity(for: address, advertisedName: "P225044UHA") ?? 0,
+                       1.37, accuracy: 0.00001)
         settings.remove(for: address)
         XCTAssertNil(settings.code(for: address))
     }

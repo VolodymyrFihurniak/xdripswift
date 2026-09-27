@@ -68,7 +68,7 @@ struct Sibionics2Handshake {
         case (.awaitingTimeSync, .timeSyncNeeded):
             phase = .awaitingDataRequest
             return codec.buildTimeSyncPacket(at: date)
-        case (.awaitingDataRequest, .dataRequested):
+        case (.awaitingTimeSync, .dataRequested), (.awaitingDataRequest, .dataRequested):
             phase = .awaitingStreaming
             return codec.buildDataRequestPacket(lastIndex: lastDeliveredIndex ?? 0)
         case (.awaitingStreaming, .streamingReady):
@@ -77,5 +77,28 @@ struct Sibionics2Handshake {
         default:
             return nil
         }
+    }
+}
+
+ 
+/// A history request is complete only when Core Bluetooth accepted the write
+/// for queuing. Failed writes remain eligible for the retry on the same cursor.
+struct Sibionics2HistoryRequestTracker {
+    private var requestedStart: Date?
+    private var requestedCursor: UInt16?
+
+    func needsRequest(for start: Date, cursor: UInt16) -> Bool {
+        requestedStart != start || requestedCursor != cursor
+    }
+
+    mutating func record(for start: Date, cursor: UInt16, queued: Bool) {
+        guard queued else { return }
+        requestedStart = start
+        requestedCursor = cursor
+    }
+
+    mutating func reset() {
+        requestedStart = nil
+        requestedCursor = nil
     }
 }

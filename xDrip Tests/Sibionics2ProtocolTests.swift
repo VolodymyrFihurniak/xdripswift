@@ -151,6 +151,28 @@ final class Sibionics2ProtocolTests: XCTestCase {
         _ = earlyData.start(at: now)
         _ = earlyData.receive(.authenticationAccepted, at: now)
         XCTAssertTrue(earlyData.receiveReadings(), "Some sensors stream immediately after authentication")
+
+        var skippedTimeSync = Sibionics2Handshake(macAddress: [UInt8](repeating: 0, count: 6),
+                                                  sessionKey: Data("GKSHGDU0TYA456G4".utf8),
+                                                  lastDeliveredIndex: 0x1234)
+        _ = skippedTimeSync.start(at: now)
+        _ = skippedTimeSync.receive(.authenticationAccepted, at: now)
+        assertCommand(skippedTimeSync.receive(.dataRequested, at: now),
+                      equals: [0x06, 0x08, 0x34, 0x12, 0, 0])
+        XCTAssertTrue(skippedTimeSync.receiveReadings())
+    }
+
+    func testFailedHistoryWriteRemainsEligibleForRetryAndProgressRequestsNextPage() {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        var tracker = Sibionics2HistoryRequestTracker()
+        XCTAssertTrue(tracker.needsRequest(for: start, cursor: 0))
+        tracker.record(for: start, cursor: 0, queued: false)
+        XCTAssertTrue(tracker.needsRequest(for: start, cursor: 0))
+        tracker.record(for: start, cursor: 0, queued: true)
+        XCTAssertFalse(tracker.needsRequest(for: start, cursor: 0))
+        XCTAssertTrue(tracker.needsRequest(for: start, cursor: 1_000))
+        tracker.reset()
+        XCTAssertTrue(tracker.needsRequest(for: start, cursor: 0))
     }
 
     func testSibionicsWriteTypeMatchesFF32Properties() {

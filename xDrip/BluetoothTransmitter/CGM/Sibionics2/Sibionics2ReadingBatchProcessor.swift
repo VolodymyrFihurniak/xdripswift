@@ -88,7 +88,21 @@ struct Sibionics2ReadingBatchProcessor {
 
         let sensorStartDate = readingState?.sensorStartDate ?? inferredStartDate
         let lastIndex = readingState?.lastDeliveredIndex.map { Int($0) } ?? 0
-        let newReadings = uniqueReadings.filter { $0.index > lastIndex }
+        let pendingReadings = uniqueReadings.filter { $0.index > lastIndex }
+        guard !pendingReadings.isEmpty else { return [] }
+
+        // The stock algorithm carries state across every minute. A gap must
+        // keep the saved cursor intact so the missing page can be requested.
+        var newReadings = [Sibionics2RawReading]()
+        var expectedIndex = lastIndex + 1
+        for reading in pendingReadings {
+            guard reading.index == expectedIndex else {
+                requiresHistoryReplay = true
+                break
+            }
+            newReadings.append(reading)
+            expectedIndex += 1
+        }
         guard !newReadings.isEmpty else { return [] }
 
         var processed: [Sibionics2ProcessedGlucose] = []

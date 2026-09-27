@@ -15,7 +15,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var streamingReady = false
     private var notificationEnabled = false
     private var handshakeAttempt = 0
-    private var lastRequestedHistoryStart: Date?
+    private var handshakeReconnectCount = 0
+    private var historyRequest = Sibionics2HistoryRequestTracker()
+    private var historyRecoveryToken = 0
+    private var historyWriteFailures = 0
+    private var historyRetryScheduled = false
+    private var historyReconnectCount = 0
     private let transmitterLog = OSLog(subsystem: ConstantsLog.subSystem, category: ConstantsLog.categoryBluetoothPeripheralManager)
 
     init(
@@ -95,7 +100,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         streamingReady = false
         notificationEnabled = false
         characteristicWriteType = nil
-        lastRequestedHistoryStart = nil
+        historyRequest.reset()
+        historyRecoveryToken += 1
+        historyRetryScheduled = false
         super.centralManager(central, didDisconnectPeripheral: peripheral, error: error)
     }
 
@@ -143,6 +150,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             self.handshake = handshake
             if !streamingReady {
                 streamingReady = true
+                handshakeReconnectCount = 0
                 trace("Sibionics 2 streaming started with first data packet (ready ACK optional)",
                       log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
             }
@@ -160,7 +168,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             self.streamingReady = false
             self.notificationEnabled = false
             self.characteristicWriteType = nil
-            self.lastRequestedHistoryStart = nil
+            self.historyRequest.reset()
+            self.historyRecoveryToken += 1
             self.handshakeAttempt += 1
         }
         super.prepareForRelease()
@@ -179,9 +188,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             guard let self,
                   self.streamingReady,
                   let address = self.deviceAddress else { return }
-            let lastIndex = self.stateStore.load(for: address)?.lastDeliveredIndex ?? 0
-            _ = self.writeCommand(self.codec.buildDataRequestPacket(lastIndex: lastIndex),
-                                  label: "data-request index=\(lastIndex)")
+            _ = self.sendDataRequest(for: address)
         }
     }
     /// Called after the user enters the factory code for this iOS peripheral.
@@ -190,12 +197,18 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             guard let self, let address = self.deviceAddress else { return }
             self.stateStore.clear(for: address)
             self.batchProcessor = nil
-            self.lastRequestedHistoryStart = nil
+            self.historyRequest.reset()
+            self.historyRecoveryToken += 1
+            self.historyRetryScheduled = false
+            self.historyWriteFailures = 0
+            self.historyReconnectCount = 0
             self.batchProcessor = self.makeBatchProcessor(for: address)
             if self.streamingReady {
                 self.requestNewReading()
-            } else if self.notificationEnabled && self.handshake == nil {
-                self.startHandshake()
+            } else if self.notificationEnabled {
+                // A stale authentication cannot be restarted reliably mid-session.
+                // Reconnect so the sensor receives a fresh auth and history request.
+                self.disconnect()
             }
         }
     }
@@ -219,12 +232,15 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
         batchProcessor = makeBatchProcessor(for: address)
         if batchProcessor == nil {
-            trace("Sibionics 2 factory code missing or invalid; enter this sensor's QR code to calculate glucose",
+            trace("Sibionics 2 factory code missing or invalid; enter this sensor's factory code or serial to calculate glucose",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
         }
 
         streamingReady = false
-        lastRequestedHistoryStart = nil
+        historyRequest.reset()
+        historyRecoveryToken += 1
+        historyRetryScheduled = false
+        historyWriteFailures = 0
         handshakeAttempt += 1
         let attempt = handshakeAttempt
         var newHandshake = Sibionics2Handshake(
@@ -241,6 +257,10 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             trace("Sibionics 2 handshake stalled: FF31 has not begun streaming",
                   log: self.transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+            if self.notificationEnabled && self.handshakeReconnectCount < 2 {
+                self.handshakeReconnectCount += 1
+                self.disconnect()
+            }
         }
     }
 
@@ -260,6 +280,14 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             stateStore: stateStore,
             processor: Sibionics2GlucoseProcessor(sensitivity: sensitivity)
         )
+    }
+
+    @discardableResult
+    private func sendDataRequest(for address: String) -> Bool {
+        guard streamingReady else { return false }
+        let cursor = stateStore.load(for: address)?.lastDeliveredIndex ?? 0
+        return writeCommand(codec.buildDataRequestPacket(lastIndex: cursor),
+                            label: "data-request index=\(cursor)")
     }
 
     @discardableResult
@@ -301,7 +329,60 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             _ = writeCommand(nextCommand, label: label)
         } else if !wasStreaming && handshake.isStreaming {
             streamingReady = true
+            handshakeReconnectCount = 0
         }
+    }
+
+    /// A requested page may require another BLE session. Retry a failed write
+    /// briefly, then perform at most two connection resets if no missing page
+    /// arrives. The saved cursor always remains on the last contiguous minute.
+    private func requestMissingHistory(for sessionStart: Date, address: String) {
+        let cursor = stateStore.load(for: address)?.lastDeliveredIndex ?? 0
+        guard historyRequest.needsRequest(for: sessionStart, cursor: cursor) else { return }
+
+        if sendDataRequest(for: address) {
+            historyRequest.record(for: sessionStart, cursor: cursor, queued: true)
+            historyWriteFailures = 0
+            historyRetryScheduled = false
+            historyRecoveryToken += 1
+            let token = historyRecoveryToken
+            runOnCentralQueue(after: 90) { [weak self] in
+                guard let self, self.historyRecoveryToken == token,
+                      !self.historyRequest.needsRequest(for: sessionStart, cursor: cursor),
+                      self.batchProcessor?.requiresHistoryReplay == true else { return }
+                self.reconnectForMissingHistory()
+            }
+        } else {
+            historyWriteFailures += 1
+            if historyWriteFailures >= 3 {
+                reconnectForMissingHistory()
+            } else if !historyRetryScheduled {
+                historyRetryScheduled = true
+                let token = historyRecoveryToken
+                runOnCentralQueue(after: 3) { [weak self] in
+                    guard let self, self.historyRecoveryToken == token else { return }
+                    self.historyRetryScheduled = false
+                    guard self.batchProcessor?.requiresHistoryReplay == true,
+                          self.batchProcessor?.state?.sensorStartDate == sessionStart else { return }
+                    self.requestMissingHistory(for: sessionStart, address: address)
+                }
+            }
+        }
+    }
+
+    private func reconnectForMissingHistory() {
+        guard historyReconnectCount < 2, getConnectionStatus() == .connected else {
+            trace("Sibionics 2 history page still missing; saved cursor retained",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+                  type: .error)
+            return
+        }
+        historyReconnectCount += 1
+        historyRecoveryToken += 1
+        trace("Sibionics 2 reconnecting for missing history page",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+              type: .info)
+        disconnect()
     }
 
     private func receiveReadings(_ readings: [Sibionics2RawReading], at receivedAt: Date) {
@@ -322,12 +403,16 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let currentState = batchProcessor.state
         self.batchProcessor = batchProcessor
 
-        if requiresHistoryReplay, let sessionStart = currentState?.sensorStartDate,
-           lastRequestedHistoryStart != sessionStart {
-            lastRequestedHistoryStart = sessionStart
-            trace("Sibionics 2 needs first history page from index 0", log: transmitterLog,
-                  category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
-            requestNewReading()
+        if requiresHistoryReplay, let sessionStart = currentState?.sensorStartDate {
+            trace("Sibionics 2 waiting for missing history from saved cursor",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+                  type: .info)
+            requestMissingHistory(for: sessionStart, address: address)
+        } else if !requiresHistoryReplay {
+            historyRequest.reset()
+            historyRecoveryToken += 1
+            historyRetryScheduled = false
+            historyReconnectCount = 0
         }
 
         trace("Sibionics 2 processor input=%{public}@ delivered=%{public}@ cursor=%{public}@ replay=%{public}@",
@@ -335,7 +420,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
               readings.count.description, glucoseData.count.description,
               currentState?.lastDeliveredIndex.map { String($0) } ?? "waiting",
               requiresHistoryReplay.description)
-        guard !requiresHistoryReplay,
+        guard !(requiresHistoryReplay && currentState?.lastDeliveredIndex == nil),
               let sensorStartDate = currentState?.sensorStartDate else { return }
         let detectedNewSensor = previousStartDate.map {
             abs($0.timeIntervalSince(sensorStartDate)) > 10 * 60

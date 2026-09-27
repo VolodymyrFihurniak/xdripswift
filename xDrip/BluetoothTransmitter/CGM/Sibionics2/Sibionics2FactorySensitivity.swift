@@ -185,6 +185,12 @@ struct Sibionics2FactorySettings {
             return Sibionics2FactorySensitivity.decodeProbe(code) == nil ? nil : code
         case 8:
             return Sibionics2FactorySensitivity.decodeShortCode(code) == nil ? nil : code
+        case 11:
+            // The printed serial can contain an eight-character factory short
+            // code followed by a three-character suffix (e.g. 0401671KCJ2).
+            let shortCode = String(code.prefix(8))
+            return Sibionics2FactorySensitivity.decodeShortCode(shortCode) == nil
+                ? nil : shortCode
         default:
             return nil
         }
