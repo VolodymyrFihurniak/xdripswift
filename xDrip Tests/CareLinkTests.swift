@@ -921,6 +921,17 @@ final class CareLinkTests: XCTestCase {
         XCTAssertTrue(CareLinkTimestampRepair.plan(stored: retained, incoming: []).removed.isEmpty)
     }
 
+    func testTimestampRepairDoesNotCorroborateAcrossMoreThan24Hours() {
+        let midnight = Date(timeIntervalSince1970: (1_800_000_000.0 / 86400.0).rounded(.down) * 86400.0)
+        let dates = [-5400.0, -2100.0, 82800.0].map { midnight.addingTimeInterval($0) }
+        let stored = dates.enumerated().flatMap { index, date in
+            (0..<4).map { shift in
+                repairRecord(date.addingTimeInterval(Double(shift)), amount: Double(index + 1) / 10)
+            }
+        }
+        XCTAssertTrue(CareLinkTimestampRepair.plan(stored: stored, incoming: []).removed.isEmpty)
+    }
+
     func testTimestampRepairRequiresVariedSequencesAndProtectsCurrentEvents() {
         let base = now.addingTimeInterval(-86400)
         func sequence(shift: Double, patient: String = "repair-patient", serverIDs: Bool = false) -> [CareLinkTherapyRecord] {
