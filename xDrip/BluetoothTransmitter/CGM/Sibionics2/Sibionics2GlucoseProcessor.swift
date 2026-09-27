@@ -24,6 +24,7 @@ struct Sibionics2GlucoseProcessor {
     private static let snapshotMagic: [UInt8] = [0x53, 0x32, 0x47, 0x50] // S2GP
     private static let snapshotVersion: UInt16 = 2
     private static let maximumCoreHexLength = 16_384
+    private static let coreSnapshotChunkByteCount = 256
 
     private final class CoreBox {
         let value: Sibionics2V116AFacade
@@ -108,9 +109,8 @@ struct Sibionics2GlucoseProcessor {
 
     func snapshot() -> Data {
         guard validSensitivity else { return Data() }
-        let coreHex = coreBox.value.snapshotHex()
-        let bytes = Array(coreHex.utf8)
-        guard !bytes.isEmpty, bytes.count <= Self.maximumCoreHexLength else { return Data() }
+        guard let bytes = Self.snapshotCoreHexBytes(from: coreBox.value),
+              !bytes.isEmpty, bytes.count <= Self.maximumCoreHexLength else { return Data() }
         var flags: UInt8 = 0
         if liveDeltaMmol != nil { flags |= 1 }
         if replayDeltaMmol != nil { flags |= 2 }
@@ -145,13 +145,17 @@ struct Sibionics2GlucoseProcessor {
               let replayBits = data.uint32BE(at: 20),
               let coreLength = data.uint32BE(at: 24),
               coreLength > 0, coreLength <= Self.maximumCoreHexLength,
+              coreLength % 2 == 0,
               data.count == headerSize + Int(coreLength) + checksumSize
         else { return false }
 
         let checksumOffset = data.count - checksumSize
         guard let storedChecksum = data.uint32BE(at: checksumOffset),
-              Self.checksum(Data(data.prefix(checksumOffset))) == storedChecksum,
-              let hex = String(data: data[headerSize..<checksumOffset], encoding: .utf8)
+              Self.checksum(Data(data.prefix(checksumOffset))) == storedChecksum
+        else { return false }
+        let coreHexBytes = Array(data[headerSize..<checksumOffset])
+        guard coreHexBytes.count == Int(coreLength),
+              coreHexBytes.allSatisfy(Self.isHexByte)
         else { return false }
 
         let restoredIndex: Int?
@@ -169,12 +173,54 @@ struct Sibionics2GlucoseProcessor {
         else { return false }
 
         let restored = Sibionics2V116AFacade(sensitivity: sensitivity)
-        guard restored.restoreHex(snapshot: hex) else { return false }
+        guard Self.restoreCoreSnapshot(hexBytes: coreHexBytes, into: restored) else { return false }
         coreBox = CoreBox(restored)
         self.lastIndex = restoredIndex
         self.liveDeltaMmol = (flags & 1) == 0 ? nil : liveDelta
         self.replayDeltaMmol = (flags & 2) == 0 ? nil : replayDelta
         return true
+    }
+
+    private static func snapshotCoreHexBytes(from core: Sibionics2V116AFacade) -> [UInt8]? {
+        let byteCount = Int(core.snapshotByteCount())
+        guard byteCount > 0, byteCount <= maximumCoreHexLength / 2,
+              byteCount <= Int(Int32.max) else { return nil }
+
+        var hexBytes: [UInt8] = []
+        hexBytes.reserveCapacity(byteCount * 2)
+        for offset in stride(from: 0, to: byteCount, by: coreSnapshotChunkByteCount) {
+            let chunkByteCount = min(coreSnapshotChunkByteCount, byteCount - offset)
+            let chunk = core.snapshotHexChunk(
+                offsetBytes: Int32(offset),
+                lengthBytes: Int32(chunkByteCount)
+            )
+            let chunkBytes = Array(chunk.utf8)
+            guard chunkBytes.count == chunkByteCount * 2,
+                  chunkBytes.allSatisfy(isHexByte) else { return nil }
+            hexBytes.append(contentsOf: chunkBytes)
+        }
+        guard hexBytes.count == byteCount * 2 else { return nil }
+        return hexBytes
+    }
+
+    private static func restoreCoreSnapshot(hexBytes: [UInt8], into core: Sibionics2V116AFacade) -> Bool {
+        guard !hexBytes.isEmpty, hexBytes.count <= maximumCoreHexLength,
+              hexBytes.count.isMultiple(of: 2),
+              hexBytes.allSatisfy(isHexByte),
+              core.beginRestoreHex(characterCount: Int32(hexBytes.count))
+        else { return false }
+
+        let chunkCharacterCount = coreSnapshotChunkByteCount * 2
+        for offset in stride(from: 0, to: hexBytes.count, by: chunkCharacterCount) {
+            let end = min(offset + chunkCharacterCount, hexBytes.count)
+            let chunk = String(decoding: hexBytes[offset..<end], as: UTF8.self)
+            guard core.appendRestoreHexChunk(chunk) else { return false }
+        }
+        return core.finishRestoreHex()
+    }
+
+    private static func isHexByte(_ byte: UInt8) -> Bool {
+        (byte >= 0x30 && byte <= 0x39) || (byte >= 0x61 && byte <= 0x66)
     }
 
     private func isValid(_ reading: Sibionics2RawReading) -> Bool {
@@ -186,7 +232,8 @@ struct Sibionics2GlucoseProcessor {
     private mutating func ensureUniqueCore() {
         guard !isKnownUniquelyReferenced(&coreBox) else { return }
         let copy = Sibionics2V116AFacade(sensitivity: sensitivity)
-        if copy.restoreHex(snapshot: coreBox.value.snapshotHex()) {
+        if let hexBytes = Self.snapshotCoreHexBytes(from: coreBox.value),
+           Self.restoreCoreSnapshot(hexBytes: hexBytes, into: copy) {
             coreBox = CoreBox(copy)
         }
     }
