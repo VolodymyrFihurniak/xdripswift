@@ -14,6 +14,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var advertisedName: String?
     private var characteristicWriteType: CBCharacteristicWriteType?
     private var streamingReady = false
+    private var receivedNonEmptyReadingsPacket = false
     private var notificationEnabled = false
     private var handshakeAttempt = 0
     private var handshakeReconnectCount = 0
@@ -128,6 +129,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         handshakeAttempt += 1
         handshake = nil
         streamingReady = false
+        receivedNonEmptyReadingsPacket = false
         notificationEnabled = false
         characteristicWriteType = nil
         historyRequest.reset()
@@ -171,7 +173,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         case .handshake(let response):
             receiveHandshake(response, at: Date())
         case .readings(let readings):
-            guard let first = readings.first, let last = readings.last else { return }
+            guard let first = readings.first, let last = readings.last else {
+                trace("Sibionics 2 FF31 data packet contained no glucose readings", log: transmitterLog,
+                      category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+                return
+            }
+            receivedNonEmptyReadingsPacket = true
             guard var handshake, handshake.receiveReadings() else {
                 trace("Sibionics 2 readings before authentication", log: transmitterLog,
                       category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
@@ -241,6 +248,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         batchProcessor = makeBatchProcessor(for: address)
 
         streamingReady = false
+        receivedNonEmptyReadingsPacket = false
         historyRequest.reset()
         historyRecoveryToken += 1
         historyRetryScheduled = false
@@ -257,7 +265,14 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         handshake = newHandshake
         _ = writeCommand(command, label: "auth")
         runOnCentralQueue(after: 75) { [weak self] in
-            guard let self, self.handshakeAttempt == attempt, !self.streamingReady else { return }
+            guard let self, self.handshakeAttempt == attempt else { return }
+            if self.streamingReady {
+                guard !self.receivedNonEmptyReadingsPacket else { return }
+                trace("Sibionics 2 received streaming-ready but no glucose readings after 75 seconds",
+                      log: self.transmitterLog,
+                      category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+                return
+            }
             trace("Sibionics 2 handshake stalled: FF31 has not begun streaming",
                   log: self.transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
@@ -332,6 +347,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         } else if !wasStreaming && handshake.isStreaming {
             streamingReady = true
             handshakeReconnectCount = 0
+            trace("Sibionics 2 received streaming-ready ACK; waiting for glucose readings",
+                  log: transmitterLog,
+                  category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
         }
     }
 
