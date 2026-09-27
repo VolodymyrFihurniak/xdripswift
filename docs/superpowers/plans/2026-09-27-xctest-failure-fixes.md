@@ -38,7 +38,7 @@
 - Test: `xDrip Tests/Sibionics2RegistrationAndDeliveryTests.swift`
 
 **Interfaces:**
-- Consumes: `Sibionics2GlucoseProcessor.snapshot()`, `restore(from:)`, and `Sibionics2V116AFacade.snapshotHex()/restoreHex(snapshot:)`.
+- Consumes: `Sibionics2GlucoseProcessor.snapshot()` and `restore(from:)`, backed by `Sibionics2V116AFacade.snapshotByteCount()`, `snapshotHexChunk`, and chunked restore methods.
 - Produces: continuation that accepts the same snapshot and emits the same next processed reading.
 
 - [x] Use the CI failure as RED evidence: `testSnapshotRestoresTheSameNextReading` failed at `XCTAssertTrue`; delivery and reconnect tests emitted uncorrected 115.2/118.8 mg/dL instead of 64.8 mg/dL.
@@ -88,4 +88,4 @@
 - [ ] Run the full Xcode test workflow on the updated branch head and confirm no failures; the user will dispatch this workflow.
 - [x] Do not claim the updated tests pass until the fresh workflow result is available.
 
-The reported run tested commit `6be7df00826384957124cd978fce29b43389090a`. The current branch head after these fixes is `b91c3ba4bbc6eff6719655766d6757bcdf155810`.
+The reported run tested commit `6be7df00826384957124cd978fce29b43389090a`. The implementation changes end at `b91c3ba4bbc6eff6719655766d6757bcdf155810`; the current branch tip is `745042acf59c258fc973c024d5dd3e5785b29e9f` after this plan-status update.
