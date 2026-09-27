@@ -3,6 +3,7 @@
 //  xdripTests
 //
 
+import CoreBluetooth
 import XCTest
 @testable import xdrip
 
@@ -62,10 +63,15 @@ final class Sibionics2ProtocolTests: XCTestCase {
         guard case .malformed = codec.parseV120(truncated) else {
             return XCTFail("Truncated readings were accepted")
         }
-        // A data packet with extra bytes is not a valid single frame.
-        guard case .malformed = codec.parseV120(encryptedFrame([0x0A, 0x08, 0, 0, 0, 0, 0, 0, 0, 0])) else {
-            return XCTFail("Oversized frame was accepted")
-        }
+        // The sensor may include trailing status bytes. The declared frame and
+        // checksum still have to be valid before its data records are accepted.
+        guard case .readings(let keepalive) = codec.parseV120(
+            encryptedFrame([0x0A, 0x08, 0, 0, 0, 0, 0, 0, 0, 0])
+        ) else { return XCTFail("Expected a keepalive with trailing status") }
+        XCTAssertTrue(keepalive.isEmpty)
+        guard case .handshake(.authenticationAccepted) = codec.parseV120(
+            encryptedFrame([0x04, 0x01, 0x42, 0x99])
+        ) else { return XCTFail("Valid handshake with status bytes was rejected") }
     }
 
     func testV120ReadingsDecodeLittleEndianIndexTimeAndTrend() {
@@ -104,6 +110,57 @@ final class Sibionics2ProtocolTests: XCTestCase {
         assertCommand(handshake.receive(.dataRequested, at: now), equals: [0x06, 0x08, 0x34, 0x12, 0, 0])
         XCTAssertNil(handshake.receive(.streamingReady, at: now))
         XCTAssertNil(handshake.receive(.authenticationAccepted, at: now))
+    }
+
+    func testSensorCaptureCommandVectors() {
+        let sessionKey = Data("GKSHGDU0TYA456G4".utf8)
+        XCTAssertEqual(
+            [UInt8](codec.buildAuthPacket(
+                macAddress: [0xC7, 0x71, 0xB0, 0xD1, 0x5B, 0x32],
+                sessionKey: sessionKey
+            )),
+            [0x3E, 0xF6, 0x6F, 0xEB, 0x53, 0xA2, 0xE8, 0xAD, 0x7A, 0xC6, 0xCD, 0x50,
+             0x47, 0xF0, 0x42, 0xD9, 0xB2, 0xE7, 0xBD, 0x0D, 0x16, 0xB1, 0x57, 0xF1,
+             0x4A, 0x51]
+        )
+        XCTAssertEqual(
+            [UInt8](codec.buildDataRequestPacket(lastIndex: 25_296)),
+            [0x21, 0xFF, 0xBF, 0xBB, 0x08, 0x73, 0x98]
+        )
+    }
+
+    func testFirstDataFrameStartsStreamingWithoutOptionalReadyAcknowledgement() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        var handshake = Sibionics2Handshake(macAddress: [UInt8](repeating: 0, count: 6),
+                                             sessionKey: Data("GKSHGDU0TYA456G4".utf8),
+                                             lastDeliveredIndex: 0)
+        XCTAssertFalse(handshake.receiveReadings())
+        _ = handshake.start(at: now)
+        XCTAssertFalse(handshake.receiveReadings(), "No readings before auth")
+        _ = handshake.receive(.authenticationAccepted, at: now)
+        _ = handshake.receive(.timeSyncNeeded, at: now)
+        assertCommand(handshake.receive(.dataRequested, at: now),
+                      equals: [0x06, 0x08, 0, 0, 0, 0])
+        XCTAssertTrue(handshake.receiveReadings())
+        XCTAssertTrue(handshake.receiveReadings())
+        XCTAssertNil(handshake.receive(.streamingReady, at: now))
+
+        var earlyData = Sibionics2Handshake(macAddress: [UInt8](repeating: 0, count: 6),
+                                            sessionKey: Data("GKSHGDU0TYA456G4".utf8),
+                                            lastDeliveredIndex: nil)
+        _ = earlyData.start(at: now)
+        _ = earlyData.receive(.authenticationAccepted, at: now)
+        XCTAssertTrue(earlyData.receiveReadings(), "Some sensors stream immediately after authentication")
+    }
+
+    func testSibionicsWriteTypeMatchesFF32Properties() {
+        XCTAssertEqual(CGMSibionics2Transmitter.writeType(
+            for: [.writeWithoutResponse]), .withoutResponse)
+        XCTAssertEqual(CGMSibionics2Transmitter.writeType(
+            for: [.write]), .withResponse)
+        XCTAssertEqual(CGMSibionics2Transmitter.writeType(
+            for: [.write, .writeWithoutResponse]), .withoutResponse)
+        XCTAssertNil(CGMSibionics2Transmitter.writeType(for: [.read]))
     }
 
     func testOnlySibionics2AdvertisementNamesMatch() {

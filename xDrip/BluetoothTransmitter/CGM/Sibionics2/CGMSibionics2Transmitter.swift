@@ -7,10 +7,15 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private weak var cgmTransmitterDelegate: CGMTransmitterDelegate?
     private let codec = Sibionics2ProtocolCodec()
     private let stateStore = Sibionics2ReadingStateStore()
+    private let factorySettings = Sibionics2FactorySettings()
     private var batchProcessor: Sibionics2ReadingBatchProcessor?
     private var handshake: Sibionics2Handshake?
-    private var handshakeResponseCount = 0
+    private var advertisedName: String?
+    private var characteristicWriteType: CBCharacteristicWriteType?
     private var streamingReady = false
+    private var notificationEnabled = false
+    private var handshakeAttempt = 0
+    private var lastRequestedHistoryStart: Date?
     private let transmitterLog = OSLog(subsystem: ConstantsLog.subSystem, category: ConstantsLog.categoryBluetoothPeripheralManager)
 
     init(
@@ -26,6 +31,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             addressAndName = .notYetConnected(expectedName: nil)
         }
         self.cgmTransmitterDelegate = cGMTransmitterDelegate
+        self.advertisedName = name
         super.init(
             addressAndName: addressAndName,
             CBUUID_Advertisement: nil,
@@ -60,7 +66,37 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             storedAddress: deviceAddress,
             peripheralAddress: peripheral.identifier.uuidString
         ) else { return }
+        self.advertisedName = advertisedName
         super.centralManager(central, didDiscover: peripheral, advertisementData: advertisementData, rssi: RSSI)
+    }
+
+    static func writeType(for properties: CBCharacteristicProperties) -> CBCharacteristicWriteType? {
+        if properties.contains(.writeWithoutResponse) { return .withoutResponse }
+        if properties.contains(.write) { return .withResponse }
+        return nil
+    }
+
+    override func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        super.peripheral(peripheral, didDiscoverCharacteristicsFor: service, error: error)
+        guard error == nil, service.uuid == Sibionics2ProtocolCodec.serviceUUID else { return }
+        characteristicWriteType = service.characteristics?
+            .first(where: { $0.uuid == Sibionics2ProtocolCodec.writeUUID })
+            .flatMap { Self.writeType(for: $0.properties) }
+        trace("Sibionics 2 FF32 write type: %{public}@", log: transmitterLog,
+              category: ConstantsLog.categoryBluetoothPeripheralManager,
+              type: characteristicWriteType == nil ? .error : .info,
+              characteristicWriteType == .withoutResponse ? "withoutResponse"
+                  : characteristicWriteType == .withResponse ? "withResponse" : "unsupported")
+    }
+
+    override func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        handshakeAttempt += 1
+        handshake = nil
+        streamingReady = false
+        notificationEnabled = false
+        characteristicWriteType = nil
+        lastRequestedHistoryStart = nil
+        super.centralManager(central, didDisconnectPeripheral: peripheral, error: error)
     }
 
     override func peripheral(
@@ -72,6 +108,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         guard error == nil,
               characteristic.uuid == Sibionics2ProtocolCodec.notifyUUID,
               characteristic.isNotifying else { return }
+        notificationEnabled = true
         startHandshake()
     }
 
@@ -81,20 +118,37 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         error: Error?
     ) {
         super.peripheral(peripheral, didUpdateValueFor: characteristic, error: error)
-        guard error == nil,
-              characteristic.uuid == Sibionics2ProtocolCodec.notifyUUID,
-              let value = characteristic.value else { return }
+        guard characteristic.uuid == Sibionics2ProtocolCodec.notifyUUID else { return }
+        guard error == nil, let value = characteristic.value else {
+            trace("Sibionics 2 FF31 notification failed: %{public}@", log: transmitterLog,
+                  category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
+                  error?.localizedDescription ?? "missing value")
+            return
+        }
 
         switch codec.parseV120(value) {
         case .malformed:
-            trace("ignored malformed Sibionics 2 V120 notification", log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+            trace("Sibionics 2 rejected V120 notification of %{public}@ bytes", log: transmitterLog,
+                  category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
+                  value.count.description)
         case .handshake(let response):
             receiveHandshake(response, at: Date())
         case .readings(let readings):
-            guard streamingReady else {
-                trace("ignored readings before Sibionics 2 handshake completed", log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+            guard let first = readings.first, let last = readings.last else { return }
+            guard var handshake, handshake.receiveReadings() else {
+                trace("Sibionics 2 readings before authentication", log: transmitterLog,
+                      category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
                 return
             }
+            self.handshake = handshake
+            if !streamingReady {
+                streamingReady = true
+                trace("Sibionics 2 streaming started with first data packet (ready ACK optional)",
+                      log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+            }
+            trace("Sibionics 2 FF31 readings=%{public}@ firstIndex=%{public}@ lastIndex=%{public}@",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info,
+                  readings.count.description, first.index.description, last.index.description)
             receiveReadings(readings, at: Date())
         }
     }
@@ -104,7 +158,10 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             self.handshake = nil
             self.batchProcessor = nil
             self.streamingReady = false
-            self.handshakeResponseCount = 0
+            self.notificationEnabled = false
+            self.characteristicWriteType = nil
+            self.lastRequestedHistoryStart = nil
+            self.handshakeAttempt += 1
         }
         super.prepareForRelease()
     }
@@ -123,12 +180,26 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                   self.streamingReady,
                   let address = self.deviceAddress else { return }
             let lastIndex = self.stateStore.load(for: address)?.lastDeliveredIndex ?? 0
-            _ = self.writeDataToPeripheral(
-                data: self.codec.buildDataRequestPacket(lastIndex: lastIndex),
-                type: .withResponse
-            )
+            _ = self.writeCommand(self.codec.buildDataRequestPacket(lastIndex: lastIndex),
+                                  label: "data-request index=\(lastIndex)")
         }
     }
+    /// Called after the user enters the factory code for this iOS peripheral.
+    func factoryCodeDidChange() {
+        runOnCentralQueue { [weak self] in
+            guard let self, let address = self.deviceAddress else { return }
+            self.stateStore.clear(for: address)
+            self.batchProcessor = nil
+            self.lastRequestedHistoryStart = nil
+            self.batchProcessor = self.makeBatchProcessor(for: address)
+            if self.streamingReady {
+                self.requestNewReading()
+            } else if self.notificationEnabled && self.handshake == nil {
+                self.startHandshake()
+            }
+        }
+    }
+
     func maxSensorAgeInDays() -> Double? { nil }
     func startSensor(sensorCode: String?, startDate: Date) {}
     func stopSensor(stopDate: Date) {}
@@ -141,23 +212,36 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     func getCBUUID_Receive() -> String { Sibionics2ProtocolCodec.notifyUUID.uuidString }
 
     private func startHandshake() {
-        guard let address = deviceAddress, let sessionKey = codec.deriveSessionKey(),
-              let batchProcessor = makeBatchProcessor(for: address) else {
-            trace("could not initialize Sibionics 2 handshake or persisted state", log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+        guard let address = deviceAddress, let sessionKey = codec.deriveSessionKey() else {
+            trace("could not initialize Sibionics 2 authentication", log: transmitterLog,
+                  category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
             return
         }
-        self.batchProcessor = batchProcessor
+        batchProcessor = makeBatchProcessor(for: address)
+        if batchProcessor == nil {
+            trace("Sibionics 2 factory code missing or invalid; enter this sensor's QR code to calculate glucose",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+        }
+
         streamingReady = false
-        handshakeResponseCount = 0
+        lastRequestedHistoryStart = nil
+        handshakeAttempt += 1
+        let attempt = handshakeAttempt
         var newHandshake = Sibionics2Handshake(
             macAddress: [UInt8](repeating: 0, count: 6),
             sessionKey: sessionKey,
-            lastDeliveredIndex: batchProcessor.state?.lastDeliveredIndex
+            lastDeliveredIndex: batchProcessor?.state?.lastDeliveredIndex
         )
         let command = newHandshake.start(at: Date())
         guard !command.isEmpty else { return }
         handshake = newHandshake
-        _ = writeDataToPeripheral(data: command, type: .withResponse)
+        _ = writeCommand(command, label: "auth")
+        runOnCentralQueue(after: 75) { [weak self] in
+            guard let self, self.handshakeAttempt == attempt, !self.streamingReady else { return }
+            trace("Sibionics 2 handshake stalled: FF31 has not begun streaming",
+                  log: self.transmitterLog,
+                  category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+        }
     }
 
     private func makeBatchProcessor(for address: String) -> Sibionics2ReadingBatchProcessor? {
@@ -165,33 +249,57 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
            batchProcessor.state != nil || stateStore.load(for: address) == nil {
             return batchProcessor
         }
+        guard let sensitivity = factorySettings.sensitivity(
+            for: address, advertisedName: advertisedName
+        ) else { return nil }
+        trace("Sibionics 2 factory sensitivity=%{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+              type: .info, sensitivity.description)
         return Sibionics2ReadingBatchProcessor(
             deviceIdentifier: address,
             stateStore: stateStore,
-            processor: Sibionics2GlucoseProcessor(
-                sensitivity: Sibionics2FactorySensitivity.resolve(probeCode: nil, shortCode: nil)
-            )
+            processor: Sibionics2GlucoseProcessor(sensitivity: sensitivity)
         )
     }
 
-    private func receiveHandshake(_ response: Sibionics2HandshakeResponse, at date: Date) {
-        let expectedResponseCount: Int
-        switch response {
-        case .authenticationAccepted: expectedResponseCount = 0
-        case .timeSyncNeeded: expectedResponseCount = 1
-        case .dataRequested: expectedResponseCount = 2
-        case .streamingReady: expectedResponseCount = 3
+    @discardableResult
+    private func writeCommand(_ command: Data, label: String) -> Bool {
+        guard let type = characteristicWriteType else {
+            trace("Sibionics 2 FF32 cannot send %{public}@: missing supported write property",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+                  type: .error, label)
+            return false
         }
-        guard handshakeResponseCount == expectedResponseCount,
-              var handshake else { return }
+        let sent = writeDataToPeripheral(data: command, type: type)
+        trace("Sibionics 2 FF32 %{public}@ queued=%{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+              type: sent ? .info : .error, label, sent.description)
+        return sent
+    }
 
+    private func receiveHandshake(_ response: Sibionics2HandshakeResponse, at date: Date) {
+        guard var handshake else {
+            trace("Sibionics 2 FF31 unexpected handshake response=%{public}@",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+                  type: .error, response.rawValue.description)
+            return
+        }
+        let wasStreaming = handshake.isStreaming
         let nextCommand = handshake.receive(response, at: date)
         self.handshake = handshake
+        trace("Sibionics 2 FF31 response=%{public}@ nextCommand=%{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+              type: .info, response.rawValue.description, (nextCommand != nil).description)
         if let nextCommand {
-            handshakeResponseCount += 1
-            _ = writeDataToPeripheral(data: nextCommand, type: .withResponse)
-        } else if response == .streamingReady {
-            handshakeResponseCount += 1
+            let label: String
+            switch response {
+            case .authenticationAccepted: label = "activation"
+            case .timeSyncNeeded: label = "time-sync"
+            case .dataRequested: label = "data-request"
+            case .streamingReady: label = "unexpected"
+            }
+            _ = writeCommand(nextCommand, label: label)
+        } else if !wasStreaming && handshake.isStreaming {
             streamingReady = true
         }
     }
@@ -201,7 +309,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         if batchProcessor == nil {
             batchProcessor = makeBatchProcessor(for: address)
         }
-        guard var batchProcessor else { return }
+        guard var batchProcessor else {
+            trace("Sibionics 2 decoded readings but factory code is not configured",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+                  type: .error)
+            return
+        }
 
         let previousStartDate = batchProcessor.state?.sensorStartDate
         let glucoseData = batchProcessor.process(readings, receivedAt: receivedAt)
@@ -209,11 +322,21 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let currentState = batchProcessor.state
         self.batchProcessor = batchProcessor
 
-        if requiresHistoryReplay {
+        if requiresHistoryReplay, let sessionStart = currentState?.sensorStartDate,
+           lastRequestedHistoryStart != sessionStart {
+            lastRequestedHistoryStart = sessionStart
+            trace("Sibionics 2 needs first history page from index 0", log: transmitterLog,
+                  category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
             requestNewReading()
         }
 
-        guard let sensorStartDate = currentState?.sensorStartDate else { return }
+        trace("Sibionics 2 processor input=%{public}@ delivered=%{public}@ cursor=%{public}@ replay=%{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info,
+              readings.count.description, glucoseData.count.description,
+              currentState?.lastDeliveredIndex.map { String($0) } ?? "waiting",
+              requiresHistoryReplay.description)
+        guard !requiresHistoryReplay,
+              let sensorStartDate = currentState?.sensorStartDate else { return }
         let detectedNewSensor = previousStartDate.map {
             abs($0.timeIntervalSince(sensorStartDate)) > 10 * 60
         } ?? true

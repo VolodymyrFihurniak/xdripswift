@@ -544,7 +544,7 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         case .MedtrumTouchCareNanoType:
             return makeMedtrumTouchCareNanoSections(bluetoothPeripheral: bluetoothPeripheral)
         case .Sibionics2Type:
-            return []
+            return [makeSibionics2FactorySection(bluetoothPeripheral: bluetoothPeripheral)]
         case .M5StackType:
             return makeM5StackSections(bluetoothPeripheral: bluetoothPeripheral, includesSpecificM5StackSection: true)
         case .M5StickCType:
@@ -556,6 +556,58 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         case .OmniPodHeartBeatType:
             return []
         }
+    }
+
+    private func makeSibionics2FactorySection(bluetoothPeripheral: BluetoothPeripheral) -> BluetoothPeripheralDetailSection {
+        let address = bluetoothPeripheral.blePeripheral.address
+        let settings = Sibionics2FactorySettings()
+        let sensitivity = settings.sensitivity(for: address, advertisedName: bluetoothPeripheral.blePeripheral.name)
+        let detail = sensitivity.map { String(format: "%.2f", $0) }
+            ?? Texts_BluetoothPeripheralView.sibionics2FactoryCodeRequired
+
+        return BluetoothPeripheralDetailSection(
+            id: "sibionics2-factory",
+            title: Texts_BluetoothPeripheralView.sibionics2FactoryTitle,
+            footer: Texts_BluetoothPeripheralView.sibionics2FactoryFooter,
+            rows: [row(
+                id: "sibionics2-factory-code",
+                title: Texts_BluetoothPeripheralView.sibionics2FactoryCode,
+                detail: detail,
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.requestSibionics2FactoryCode(address: address)
+                }
+            )]
+        )
+    }
+
+    private func requestSibionics2FactoryCode(address: String) {
+        presentTextEntryView(BluetoothPeripheralTextEntry(
+            title: Texts_BluetoothPeripheralView.sibionics2FactoryCode,
+            message: Texts_BluetoothPeripheralView.sibionics2FactoryFooter,
+            keyboardType: .asciiCapable,
+            textInputAutocapitalization: .characters,
+            text: Sibionics2FactorySettings().code(for: address),
+            placeholder: Texts_BluetoothPeripheralView.sibionics2FactoryCode,
+            actionTitle: Texts_Common.Ok,
+            cancelTitle: Texts_Common.Cancel,
+            actionHandler: { [weak self] code in
+                guard Sibionics2FactorySettings().save(code, for: address) else { return }
+                guard let self else { return }
+                if let peripheral = self.bluetoothPeripheral,
+                   let transmitter = self.bluetoothPeripheralManager?.getBluetoothTransmitter(
+                       for: peripheral, createANewOneIfNecesssary: false
+                   ) as? CGMSibionics2Transmitter {
+                    transmitter.factoryCodeDidChange()
+                }
+                self.refresh()
+            },
+            actionIsEnabled: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
+            inputValidator: { code in
+                Sibionics2FactorySettings.normalizedValidCode(code) == nil
+                    ? Texts_BluetoothPeripheralView.sibionics2FactoryCodeInvalid : nil
+            }
+        ))
     }
 
     /// Keep the device choice simple; subscription details remain available in the trace.

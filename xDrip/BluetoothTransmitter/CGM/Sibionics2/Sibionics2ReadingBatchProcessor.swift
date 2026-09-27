@@ -59,18 +59,22 @@ struct Sibionics2ReadingBatchProcessor {
         guard let firstReading = uniqueReadings.first else { return [] }
 
         let inferredStartDate = Self.sensorStartDate(for: firstReading)
-        let didResetSession = shouldResetSession(inferredStartDate: inferredStartDate)
+        let didResetSession = shouldResetSession(
+            inferredStartDate: inferredStartDate,
+            firstReadingIndex: firstReading.index
+        )
         if didResetSession {
             processor.reset()
             readingState = nil
         }
 
+        let firstConnectionWithoutHistory = readingState == nil
         let waitingForHistoryReplay = readingState?.lastDeliveredIndex == nil &&
             readingState?.processorSnapshot != nil &&
             readingState?.sensorStartDate != nil
-        if (didResetSession || waitingForHistoryReplay), firstReading.index > 1 {
+        if (firstConnectionWithoutHistory || waitingForHistoryReplay), firstReading.index > 1 {
             requiresHistoryReplay = true
-            if didResetSession {
+            if firstConnectionWithoutHistory {
                 let pendingState = Sibionics2ReadingState(
                     lastDeliveredIndex: nil,
                     processorSnapshot: processor.snapshot(),
@@ -126,10 +130,20 @@ struct Sibionics2ReadingBatchProcessor {
             }
     }
 
-    private func shouldResetSession(inferredStartDate: Date) -> Bool {
+    private func shouldResetSession(inferredStartDate: Date, firstReadingIndex: Int) -> Bool {
         guard let savedStartDate = readingState?.sensorStartDate else { return false }
         let difference = inferredStartDate.timeIntervalSince(savedStartDate)
-        return difference.isFinite && abs(difference) > Self.sessionStartTolerance
+        guard difference.isFinite else { return false }
+
+        // The sensor's minute index can drift from wall time by tens of minutes
+        // over a long session. A later index alone is not a new sensor.
+        let lastIndex = Int(readingState?.lastDeliveredIndex ?? 0)
+        let observedAge = Double(max(firstReadingIndex, lastIndex)) * 60
+        let driftTolerance = min(6 * 60 * 60, max(Self.sessionStartTolerance, observedAge * 0.01))
+        let tolerance = firstReadingIndex > lastIndex
+            ? max(2 * 60 * 60, driftTolerance)
+            : driftTolerance
+        return abs(difference) > tolerance
     }
 
     private static func sensorStartDate(for reading: Sibionics2RawReading) -> Date {

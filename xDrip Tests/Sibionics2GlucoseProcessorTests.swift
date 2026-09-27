@@ -284,6 +284,30 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         }
     }
 
+    func testFactoryConfigurationRequiresAValidatedSensorCode() throws {
+        let suiteName = "Sibionics2FactorySettingsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = Sibionics2FactorySettings(userDefaults: defaults)
+        let address = "ios-sensor-uuid"
+
+        XCTAssertNil(settings.sensitivity(for: address, advertisedName: "P225044UHA"))
+        XCTAssertFalse(settings.save("invalid", for: address))
+        XCTAssertNil(settings.code(for: address))
+
+        XCTAssertTrue(settings.save("EU2VCZUQPSHD5Q", for: address))
+        XCTAssertEqual(settings.sensitivity(for: address, advertisedName: "P225044UHA") ?? 0,
+                       1.73, accuracy: 0.00001)
+        XCTAssertFalse(settings.save("garbage", for: address))
+        XCTAssertEqual(settings.code(for: address), "EU2VCZUQPSHD5Q")
+
+        XCTAssertTrue(settings.save("0316015A", for: address))
+        XCTAssertEqual(settings.sensitivity(for: address, advertisedName: nil) ?? 0,
+                       1.44, accuracy: 0.00001)
+        settings.remove(for: address)
+        XCTAssertNil(settings.code(for: address))
+    }
+
     func testFactorySensitivityUsesProbeThenShortCodeThenDocumentedFallback() throws {
         XCTAssertEqual(Sibionics2FactorySensitivity.resolve(
             probeCode: "EU2VCZUQPSHD5Q", shortCode: "0316015A"), 1.73, accuracy: 0.00001)

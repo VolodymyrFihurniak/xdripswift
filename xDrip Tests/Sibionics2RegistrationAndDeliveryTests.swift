@@ -387,6 +387,61 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(batchProcessor.state?.sensorStartDate, newSessionStart)
     }
 
+    func testFirstConnectionToAgedSensorRequestsEarlyHistoryBeforeAdvancingCursor() throws {
+        let rows = try fixtureRows()
+        let (suiteName, defaults, stateStore) = try isolatedStateStore()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let address = "cold-attach-aged-sensor"
+        var batchProcessor = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: address,
+            stateStore: stateStore,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        )
+
+        let lateReading = rows[49].reading(sensorStartDate: sensorStartDate)
+        XCTAssertTrue(batchProcessor.process([lateReading], receivedAt: lateReading.eventTime).isEmpty)
+        XCTAssertTrue(batchProcessor.requiresHistoryReplay)
+        XCTAssertNil(batchProcessor.state?.lastDeliveredIndex)
+        XCTAssertNil(stateStore.load(for: address)?.lastDeliveredIndex)
+
+        let firstPage = rows.prefix(50).map { $0.reading(sensorStartDate: sensorStartDate) }
+        let delivered = batchProcessor.process(firstPage, receivedAt: lateReading.eventTime)
+        XCTAssertFalse(batchProcessor.requiresHistoryReplay)
+        XCTAssertEqual(batchProcessor.state?.lastDeliveredIndex, 50)
+        XCTAssertEqual(delivered.first?.timeStamp, lateReading.eventTime)
+    }
+
+    func testGrowingIndexWithClockDriftDoesNotEraseAValidAlgorithmSnapshot() throws {
+        let rows = try fixtureRows()
+        let (suiteName, defaults, stateStore) = try isolatedStateStore()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let address = "clock-drift"
+        let preparedProcessor = processor(through: 127, rows: rows)
+        stateStore.save(
+            Sibionics2ReadingState(
+                lastDeliveredIndex: 127,
+                processorSnapshot: preparedProcessor.snapshot(),
+                sensorStartDate: sensorStartDate
+            ),
+            for: address
+        )
+
+        var batchProcessor = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: address,
+            stateStore: stateStore,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        )
+        let current = rows[127].reading(
+            eventTime: sensorStartDate.addingTimeInterval(128 * 60 + 45 * 60),
+            sensorStartDate: sensorStartDate
+        )
+        let delivered = batchProcessor.process([current], receivedAt: current.eventTime)
+        XCTAssertFalse(delivered.isEmpty)
+        XCTAssertFalse(batchProcessor.requiresHistoryReplay)
+        XCTAssertEqual(batchProcessor.state?.lastDeliveredIndex, 128)
+        XCTAssertEqual(batchProcessor.state?.sensorStartDate, sensorStartDate)
+    }
+
     func testIndexResetStartsANewSensorSessionAndClearsProcessorState() throws {
         let rows = try fixtureRows()
         let (suiteName, defaults, stateStore) = try isolatedStateStore()

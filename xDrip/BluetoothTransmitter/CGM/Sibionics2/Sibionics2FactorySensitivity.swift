@@ -166,3 +166,64 @@ enum Sibionics2FactorySensitivity {
         return Int(String(String.UnicodeScalarView([c0, c1, c2])))
     }
 }
+
+ 
+/// The exact algorithm needs the factory sensitivity of this particular sensor.
+/// Keep it by iOS peripheral identifier; a code from another sensor must not be reused.
+struct Sibionics2FactorySettings {
+    private let userDefaults: UserDefaults
+    private let keyPrefix = "sibionics2.factoryCode."
+
+    init(userDefaults: UserDefaults = .standard) {
+        self.userDefaults = userDefaults
+    }
+
+    static func normalizedValidCode(_ source: String) -> String? {
+        let code = source.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        switch code.count {
+        case 14:
+            return Sibionics2FactorySensitivity.decodeProbe(code) == nil ? nil : code
+        case 8:
+            return Sibionics2FactorySensitivity.decodeShortCode(code) == nil ? nil : code
+        default:
+            return nil
+        }
+    }
+
+    func code(for address: String) -> String? {
+        guard let key = key(for: address),
+              let saved = userDefaults.string(forKey: key) else { return nil }
+        return Self.normalizedValidCode(saved)
+    }
+
+    @discardableResult
+    func save(_ source: String, for address: String) -> Bool {
+        guard let key = key(for: address),
+              let code = Self.normalizedValidCode(source) else { return false }
+        userDefaults.set(code, forKey: key)
+        return true
+    }
+
+    func remove(for address: String) {
+        guard let key = key(for: address) else { return }
+        userDefaults.removeObject(forKey: key)
+    }
+
+    func sensitivity(for address: String, advertisedName: String?) -> Double? {
+        if let code = code(for: address) {
+            return Sibionics2FactorySensitivity.decodeProbe(code)
+                ?? Sibionics2FactorySensitivity.decodeShortCode(code)
+        }
+        // Some transmitters advertise an eight-character factory short code.
+        // Validate its checksum instead of assuming a default for arbitrary names.
+        let normalizedName = String((advertisedName ?? "").uppercased()
+            .filter { $0.isLetter || $0.isNumber }.prefix(8))
+        guard normalizedName.count == 8 else { return nil }
+        return Sibionics2FactorySensitivity.decodeShortCode(normalizedName)
+    }
+
+    private func key(for address: String) -> String? {
+        let identifier = address.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return identifier.isEmpty ? nil : keyPrefix + identifier
+    }
+}

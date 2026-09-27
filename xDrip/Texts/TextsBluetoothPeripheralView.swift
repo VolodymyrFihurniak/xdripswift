@@ -4,6 +4,12 @@ class Texts_BluetoothPeripheralView {
     
     static private let filename = "BluetoothPeripheralView"
 
+    static let sibionics2FactoryTitle = NSLocalizedString("sibionics2.factoryTitle", tableName: filename, bundle: .main, value: "Sibionics 2", comment: "Factory settings for the selected sensor")
+    static let sibionics2FactoryCode = NSLocalizedString("sibionics2.factoryCode", tableName: filename, bundle: .main, value: "Factory sensor code", comment: "Opens entry for the sensor QR probe code")
+    static let sibionics2FactoryCodeRequired = NSLocalizedString("sibionics2.factoryCodeRequired", tableName: filename, bundle: .main, value: "Required", comment: "Factory code must be entered before sensor glucose is calculated")
+    static let sibionics2FactoryFooter = NSLocalizedString("sibionics2.factoryFooter", tableName: filename, bundle: .main, value: "Enter the 14-character QR probe code or 8-character short code for this sensor. The exact glucose algorithm needs its factory sensitivity.", comment: "Help for factory sensor code")
+    static let sibionics2FactoryCodeInvalid = NSLocalizedString("sibionics2.factoryCodeInvalid", tableName: filename, bundle: .main, value: "This factory code is invalid. Check the code printed on this sensor's packaging.", comment: "Invalid QR probe or short code")
+    
     static let signalStrengthDisconnected = NSLocalizedString("signalStrengthDisconnected", tableName: filename, bundle: .main, value: "Disconnected", comment: "Signal value replacement while an always-on device is disconnected")
     static let signalStrength = NSLocalizedString("signalStrength", tableName: filename, bundle: .main, value: "Signal Strength", comment: "Bluetooth signal strength row")
     static let signalStrengthLastMeasurement = NSLocalizedString("signalStrengthLastMeasurement", tableName: filename, bundle: .main, value: "Last measurement", comment: "Elapsed time since RSSI measurement for intermittent devices")

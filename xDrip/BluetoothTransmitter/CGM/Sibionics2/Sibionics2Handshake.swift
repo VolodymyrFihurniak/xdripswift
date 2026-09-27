@@ -41,6 +41,25 @@ struct Sibionics2Handshake {
         return command
     }
 
+    var isStreaming: Bool {
+        if case .streaming = phase { return true }
+        return false
+    }
+
+    /// A valid data frame itself establishes streaming on V120; some firmware
+    /// does not send a separate streaming-ready acknowledgement.
+    mutating func receiveReadings() -> Bool {
+        switch phase {
+        case .awaitingTimeSync, .awaitingDataRequest, .awaitingStreaming:
+            phase = .streaming
+            return true
+        case .streaming:
+            return true
+        default:
+            return false
+        }
+    }
+
     mutating func receive(_ response: Sibionics2HandshakeResponse, at date: Date) -> Data? {
         switch (phase, response) {
         case (.awaitingAuthentication, .authenticationAccepted):

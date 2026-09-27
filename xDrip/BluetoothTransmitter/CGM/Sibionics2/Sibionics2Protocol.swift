@@ -98,14 +98,13 @@ struct Sibionics2ProtocolCodec {
               packet.reduce(UInt8(0), { $0 &+ $1 }) == 0 else { return .malformed }
 
         if packet.count == 5 {
-            guard packet[2] == 0, packet[3] == 0,
-                  let response = Sibionics2HandshakeResponse(rawValue: packet[1]) else { return .malformed }
+            guard let response = Sibionics2HandshakeResponse(rawValue: packet[1]) else { return .malformed }
             return .handshake(response)
         }
 
         guard packet.count >= 10, packet[1] == 0x08 else { return .malformed }
         let count = Int(packet[2])
-        guard packet.count == 10 + count * 8 else { return .malformed }
+        guard packet.count >= 10 + count * 8 else { return .malformed }
         let firstIndex = Int(Self.word(packet, at: 3))
         guard firstIndex + count <= Int(UInt16.max) + 1 else { return .malformed }
         let epoch = UInt32(packet[5]) | (UInt32(packet[6]) << 8)
@@ -114,7 +113,6 @@ struct Sibionics2ProtocolCodec {
         readings.reserveCapacity(count)
         for position in 0..<count {
             let start = 9 + position * 8
-            guard packet[start + 7] == 0 else { return .malformed }
             let trendValue = (packet[start + 6] >> 3) & 0x07
             guard let trend = Sibionics2Trend(rawValue: trendValue) else { return .malformed }
             readings.append(Sibionics2RawReading(

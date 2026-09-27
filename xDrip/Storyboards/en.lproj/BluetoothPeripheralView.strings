@@ -169,3 +169,10 @@
 
 /* Label before the transmitter expiry date. */
 "transmitterExpiresLabel" = "Expires";
+
+/* Per-sensor factory calibration for Sibionics 2. */
+"sibionics2.factoryTitle" = "Sibionics 2";
+"sibionics2.factoryCode" = "Factory sensor code";
+"sibionics2.factoryCodeRequired" = "Required";
+"sibionics2.factoryFooter" = "Enter the 14-character QR probe code or 8-character short code for this sensor. The exact glucose algorithm needs its factory sensitivity.";
+"sibionics2.factoryCodeInvalid" = "This factory code is invalid. Check the code printed on this sensor's packaging.";
