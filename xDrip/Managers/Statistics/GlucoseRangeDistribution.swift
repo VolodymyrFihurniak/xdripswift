@@ -47,7 +47,10 @@ enum ProportionalIntegerAllocator {
             let leftRemainder = scaledValues[leftIndex] - floor(scaledValues[leftIndex])
             let rightRemainder = scaledValues[rightIndex] - floor(scaledValues[rightIndex])
 
-            if leftRemainder == rightRemainder {
+            // Normalization can perturb mathematically equal remainders by a few
+            // floating-point ULPs (for example 3.6 and 87.6 out of 100).
+            // Treat those as ties so input order remains stable across reports.
+            if abs(leftRemainder - rightRemainder) <= 1e-12 {
                 return leftIndex < rightIndex
             }
 
