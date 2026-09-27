@@ -176,3 +176,8 @@
 "sibionics2.discoveryEmpty" = "Searching for Sibionics 2 sensors…";
 "sibionics2.discoveryNoMatches" = "No matching sensors";
 "sibionics2.discoverySearch" = "Search sensors";
+"sibionics2.factorySensitivityTitle" = "Factory sensitivity";
+"sibionics2.factorySensitivityFooter" = "Sibionics 2 readings already use the sensor's stock correction. Enter the factory qrSens value from the sensor label or a verified log. Leave empty to use the automatic estimate. Libre fingerstick calibration modes are not used for this output.";
+"sibionics2.factorySensitivityAutomatic" = "automatic";
+"sibionics2.factorySensitivityManual" = "manual";
+"sibionics2.factorySensitivityInvalid" = "Enter a value from 0.80 to 2.50.";
