@@ -14,6 +14,19 @@ struct BluetoothPeripheralDetailView: View {
     @ObservedObject var state: BluetoothPeripheralDetailState
 
     var body: some View {
+        Group {
+            if state.shouldShowSibionics2DiscoverySearch {
+                listContent.searchable(
+                    text: $state.sibionics2SearchText,
+                    prompt: Text(Texts_BluetoothPeripheralView.sibionics2DiscoverySearch)
+                )
+            } else {
+                listContent
+            }
+        }
+    }
+
+    private var listContent: some View {
         List {
             // The connection banner identifies this section for every peripheral type.
             Section {

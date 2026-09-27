@@ -170,9 +170,9 @@
 /* Label before the transmitter expiry date. */
 "transmitterExpiresLabel" = "Expires";
 
-/* Per-sensor factory calibration for Sibionics 2. */
-"sibionics2.factoryTitle" = "Sibionics 2";
-"sibionics2.factoryCode" = "Factory sensor code";
-"sibionics2.factoryCodeRequired" = "Required";
-"sibionics2.factoryFooter" = "Enter this sensor's 14-character QR probe code, 8-character short code, or 11-character serial number. The exact glucose algorithm needs its factory sensitivity.";
-"sibionics2.factoryCodeInvalid" = "This factory code is invalid. Check the code printed on this sensor's packaging.";
+/* Select a nearby Sibionics 2 sensor. */
+"sibionics2.discoveryTitle" = "Nearby Sibionics 2 sensors";
+"sibionics2.discoveryFooter" = "Keep this screen open and select your sensor when it appears.";
+"sibionics2.discoveryEmpty" = "Searching for Sibionics 2 sensors…";
+"sibionics2.discoveryNoMatches" = "No matching sensors";
+"sibionics2.discoverySearch" = "Search sensors";

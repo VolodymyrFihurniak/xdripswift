@@ -7,7 +7,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private weak var cgmTransmitterDelegate: CGMTransmitterDelegate?
     private let codec = Sibionics2ProtocolCodec()
     private let stateStore = Sibionics2ReadingStateStore()
-    private let factorySettings = Sibionics2FactorySettings()
+    private var discoveredPeripherals = [String: CBPeripheral]()
+    private var discoveredPeripheralNames = [String: String]()
     private var batchProcessor: Sibionics2ReadingBatchProcessor?
     private var handshake: Sibionics2Handshake?
     private var advertisedName: String?
@@ -49,23 +50,16 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         )
     }
 
-    func canAdoptPeripheral(
+    static func canAdoptPeripheral(
         advertisedName: String?,
         storedAddress: String?,
         peripheralAddress: String
     ) -> Bool {
-        // Enhanced device validation: combine stored address check with service/UUID validation
         if let storedAddress, !storedAddress.isEmpty {
             return storedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
                 .caseInsensitiveCompare(peripheralAddress.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
         }
-        
-        // Validate device name pattern for new sensors
-        guard Sibionics2DeviceIdentity.isSibionics2(name: advertisedName) else { return false }
-        
-        // Additional validation: check that peripheral actually advertises our service
-        // (this is handled at the scanning level by setting CBUUID_Advertisement)
-        return true
+        return Sibionics2DeviceIdentity.isSibionics2(name: advertisedName)
     }
 
     override func centralManager(
@@ -74,35 +68,41 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         advertisementData: [String: Any],
         rssi RSSI: NSNumber
     ) {
-        let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name
+        let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name
         guard Self.canAdoptPeripheral(
-            advertisedName: advertisedName,
+            advertisedName: name,
             storedAddress: deviceAddress,
             peripheralAddress: peripheral.identifier.uuidString
-        ) else {
-            // Log detailed discovery rejection for debugging
-            if let name = peripheral.name {
-                trace("in didDiscover, rejected peripheral: %{public}@ (name: %{public}@, storedAddress: %{public}@)",
-                      log: log,
-                      category: ConstantsLog.categoryBlueToothTransmitter,
-                      type: .info,
-                      peripheral.identifier.uuidString,
-                      name,
-                      deviceAddress?.description ?? "nil")
-            }
+        ) else { return }
+
+        guard deviceAddress == nil else {
+            super.centralManager(central, didDiscover: peripheral, advertisementData: advertisementData, rssi: RSSI)
             return
         }
-        
-        trace("in didDiscover, adopting peripheral: %{public}@ (name: %{public}@, storedAddress: %{public}@)",
-              log: log,
-              category: ConstantsLog.categoryBlueToothTransmitter,
-              type: .info,
-              peripheral.identifier.uuidString,
-              advertisedName ?? "nil",
-              deviceAddress?.description ?? "nil")
-              
-        self.advertisedName = advertisedName
-        super.centralManager(central, didDiscover: peripheral, advertisementData: advertisementData, rssi: RSSI)
+
+        guard let name else { return }
+        let identifier = peripheral.identifier.uuidString
+        discoveredPeripherals[identifier] = peripheral
+        discoveredPeripheralNames[identifier] = name
+        trace("Sibionics 2 candidate found: name=%{public}@ rssi=%{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+              type: .info, name, RSSI.intValue.description)
+        bluetoothTransmitterDelegate?.didDiscoverBluetoothPeripheral(
+            BluetoothPeripheralScanResult(identifier: identifier, name: name, rssi: RSSI.intValue),
+            bluetoothTransmitter: self
+        )
+    }
+
+    func selectDiscoveredPeripheral(identifier: String) {
+        runOnCentralQueue { [weak self] in
+            guard let self,
+                  self.deviceAddress == nil,
+                  let peripheral = self.discoveredPeripherals[identifier] else { return }
+            self.advertisedName = self.discoveredPeripheralNames[identifier]
+            self.discoveredPeripherals.removeAll()
+            self.discoveredPeripheralNames.removeAll()
+            self.connectToDiscoveredPeripheral(peripheral)
+        }
     }
 
     static func writeType(for properties: CBCharacteristicProperties) -> CBCharacteristicWriteType? {
@@ -221,28 +221,6 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             _ = self.sendDataRequest(for: address)
         }
     }
-    /// Called after the user enters the factory code for this iOS peripheral.
-    func factoryCodeDidChange() {
-        runOnCentralQueue { [weak self] in
-            guard let self, let address = self.deviceAddress else { return }
-            self.stateStore.clear(for: address)
-            self.batchProcessor = nil
-            self.historyRequest.reset()
-            self.historyRecoveryToken += 1
-            self.historyRetryScheduled = false
-            self.historyWriteFailures = 0
-            self.historyReconnectCount = 0
-            self.batchProcessor = self.makeBatchProcessor(for: address)
-            if self.streamingReady {
-                self.requestNewReading()
-            } else if self.notificationEnabled {
-                // A stale authentication cannot be restarted reliably mid-session.
-                // Reconnect so the sensor receives a fresh auth and history request.
-                self.disconnect()
-            }
-        }
-    }
-
     func maxSensorAgeInDays() -> Double? { nil }
     func startSensor(sensorCode: String?, startDate: Date) {}
     func stopSensor(stopDate: Date) {}
@@ -261,10 +239,6 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             return
         }
         batchProcessor = makeBatchProcessor(for: address)
-        if batchProcessor == nil {
-            trace("Sibionics 2 factory code missing or invalid; enter this sensor's factory code or serial to calculate glucose",
-                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
-        }
 
         streamingReady = false
         historyRequest.reset()
@@ -294,15 +268,13 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
 
-    private func makeBatchProcessor(for address: String) -> Sibionics2ReadingBatchProcessor? {
+    private func makeBatchProcessor(for address: String) -> Sibionics2ReadingBatchProcessor {
         if let batchProcessor,
            batchProcessor.state != nil || stateStore.load(for: address) == nil {
             return batchProcessor
         }
-        guard let sensitivity = factorySettings.sensitivity(
-            for: address, advertisedName: advertisedName
-        ) else { return nil }
-        trace("Sibionics 2 factory sensitivity=%{public}@",
+        let sensitivity = Sibionics2FactorySensitivity.resolve(advertisedName: advertisedName)
+        trace("Sibionics 2 automatic sensitivity=%{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
               type: .info, sensitivity.description)
         return Sibionics2ReadingBatchProcessor(
@@ -417,21 +389,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
     private func receiveReadings(_ readings: [Sibionics2RawReading], at receivedAt: Date) {
         guard let address = deviceAddress else { return }
-        if batchProcessor == nil {
-            batchProcessor = makeBatchProcessor(for: address)
-        }
-        guard var batchProcessor else {
-            trace("Sibionics 2 decoded readings but factory code is not configured",
-                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
-                  type: .error)
-            return
-        }
-
-        let previousStartDate = batchProcessor.state?.sensorStartDate
-        let glucoseData = batchProcessor.process(readings, receivedAt: receivedAt)
-        let requiresHistoryReplay = batchProcessor.requiresHistoryReplay
-        let currentState = batchProcessor.state
-        self.batchProcessor = batchProcessor
+        var currentProcessor = batchProcessor ?? makeBatchProcessor(for: address)
+        let previousStartDate = currentProcessor.state?.sensorStartDate
+        let glucoseData = currentProcessor.process(readings, receivedAt: receivedAt)
+        let requiresHistoryReplay = currentProcessor.requiresHistoryReplay
+        let currentState = currentProcessor.state
+        batchProcessor = currentProcessor
 
         if requiresHistoryReplay, let sessionStart = currentState?.sensorStartDate {
             trace("Sibionics 2 waiting for missing history from saved cursor",

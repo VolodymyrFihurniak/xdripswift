@@ -1,74 +1,16 @@
-# Sibionics 2 Troubleshooting Guide
+# Sibionics 2 troubleshooting
 
-## Поточна ситуація
+## Add a sensor
 
-✅ **Що працює:**
-- Автопошук датчика через service UUID (FF30)
-- Підключення до пристрою
-- Фільтрація за назвою пристрою (P + 3 цифри)
+1. Open Devices and add Sibionics 2.
+2. Start scanning and keep the iPhone near the sensor.
+3. Choose the matching nearby sensor by its Bluetooth name and signal level.
+4. Keep the app open while it connects and requests readings.
 
-❌ **Проблема:**
-- Дані з датчика не надходять після підключення
+Only advertisements that match the Sibionics 2 name pattern and FF30 service are listed. If the list stays empty, confirm Bluetooth is enabled, move the iPhone closer, and restart the scan.
 
-## Можливі причини
+## Connected, but no glucose
 
-### 1. Session Key проблема
-**Симптом:** Датчик підключається, але не автентифікується
-**Перевірка:** Логи мають показувати `authenticationAccepted`
-**Рішення:** Перевірити `deriveSessionKey()` та `ecoRegistration`
+Check the Sibionics 2 device logs for FF31 notifications, handshake responses, parsed reading indices, and the reading processor cursor. The saved cursor advances only through contiguous history so the exact algorithm can replay missing minutes. The replay target is saved with the processor state and restored after an app restart.
 
-### 2. Handshake не завершується
-**Симптом:** Застряє на `awaitingAuthentication` або `awaitingTimeSync`
-**Перевірка:** Логи Sibionics 2 FF31 response
-**Рішення:** Перевірити послідовність команд
-
-### 3. Factory Code відсутній
-**Симптом:** Датчик стрімить, але readings показують "factory code missing"
-**Перевірка:** `batchProcessor == nil`
-**Рішення:** Встановити factory code/sensitivity датчика
-
-### 4. Notification не обробляються
-**Симптом:** Дані надходять, але не розпарсюються
-**Перевірка:** Логи `parseV120` показують `.malformed`
-**Рішення:** Перевірити шифрування/дешифрування
-
-## Порівняння з JugglucoNG
-
-### Критичні відмінності:
-
-1. **Auto-start після streaming:**
-```kotlin
-// JugglucoNG автоматично запитує історію після streaming ready
-if (phase == Phase.STREAMING && !initialDataFetched) {
-    requestHistoricalData(lastIndex = 0)
-    initialDataFetched = true
-}
-```
-
-2. **Session Key derivation:**
-```kotlin
-// JugglucoNG: deriveSessionKey(variant)
-// xDripSwift: deriveSessionKey() - фіксований ключ
-```
-
-3. **Battery reading:**
-JugglucoNG зчитує рівень батареї з окремого characteristic перед auth
-
-## Наступні кроки діагностики
-
-1. Увімкнути детальне логування всіх BLE операцій
-2. Перевірити, чи надходять notification на FF31
-3. Перевірити, чи успішно проходить кожна фаза handshake
-4. Перевірити, чи встановлений factory code
-5. Порівняти зашифровані пакети з JugglucoNG
-
-## Рекомендовані виправлення
-
-### Пріоритет 1: Логування
-Додати trace для кожної фази handshake та кожного notification
-
-### Пріоритет 2: Factory Code
-Переконатися, що factory sensitivity встановлена для активного датчика
-
-### Пріоритет 3: Auto-history request
-Після досягнення streaming автоматично запитувати історію даних
+Sensitivity is inferred from a short code when the BLE name contains one. If the name does not carry that value, xDripSwift uses the existing 1.44 fallback. Some sensors may have a different individual sensitivity; verify displayed values against the sensor official reader during testing.

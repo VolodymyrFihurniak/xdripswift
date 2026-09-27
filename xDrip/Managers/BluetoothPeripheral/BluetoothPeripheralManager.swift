@@ -1365,7 +1365,6 @@ extension BluetoothPeripheralManager: BluetoothPeripheralManaging {
 
         if bluetoothPeripheral.bluetoothPeripheralType() == .Sibionics2Type {
             Sibionics2ReadingStateStore().clear(for: bluetoothPeripheral.blePeripheral.address)
-            Sibionics2FactorySettings().remove(for: bluetoothPeripheral.blePeripheral.address)
         }
 
         if let dexcomG7 = bluetoothPeripheral as? DexcomG7 {

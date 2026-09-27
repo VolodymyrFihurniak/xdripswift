@@ -4,6 +4,19 @@ struct Sibionics2ReadingState: Codable {
     let lastDeliveredIndex: UInt16?
     let processorSnapshot: Data?
     let sensorStartDate: Date?
+    let replayTargetIndex: UInt16?
+
+    init(
+        lastDeliveredIndex: UInt16?,
+        processorSnapshot: Data?,
+        sensorStartDate: Date?,
+        replayTargetIndex: UInt16? = nil
+    ) {
+        self.lastDeliveredIndex = lastDeliveredIndex
+        self.processorSnapshot = processorSnapshot
+        self.sensorStartDate = sensorStartDate
+        self.replayTargetIndex = replayTargetIndex
+    }
 }
 
 /// Persists one independent decoder/processor continuation per saved BLE peripheral.

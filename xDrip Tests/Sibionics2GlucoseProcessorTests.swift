@@ -284,32 +284,16 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         }
     }
 
-    func testFactoryConfigurationRequiresAValidatedSensorCode() throws {
-        let suiteName = "Sibionics2FactorySettingsTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let settings = Sibionics2FactorySettings(userDefaults: defaults)
-        let address = "ios-sensor-uuid"
-
-        XCTAssertNil(settings.sensitivity(for: address, advertisedName: "P225044UHA"))
-        XCTAssertFalse(settings.save("invalid", for: address))
-        XCTAssertNil(settings.code(for: address))
-
-        XCTAssertTrue(settings.save("EU2VCZUQPSHD5Q", for: address))
-        XCTAssertEqual(settings.sensitivity(for: address, advertisedName: "P225044UHA") ?? 0,
-                       1.73, accuracy: 0.00001)
-        XCTAssertFalse(settings.save("garbage", for: address))
-        XCTAssertEqual(settings.code(for: address), "EU2VCZUQPSHD5Q")
-
-        XCTAssertTrue(settings.save("0316015A", for: address))
-        XCTAssertEqual(settings.sensitivity(for: address, advertisedName: nil) ?? 0,
+    func testSensitivityUsesAdvertisedNameWithoutManualCodeEntry() {
+        XCTAssertEqual(
+            Sibionics2FactorySensitivity.resolve(advertisedName: "0401671KCJ2"),
+            1.37,
+            accuracy: 0.00001
+        )
+        XCTAssertEqual(Sibionics2FactorySensitivity.resolve(advertisedName: nil),
                        1.44, accuracy: 0.00001)
-        XCTAssertTrue(settings.save("0401671KCJ2", for: address))
-        XCTAssertEqual(settings.code(for: address), "0401671K")
-        XCTAssertEqual(settings.sensitivity(for: address, advertisedName: "P225044UHA") ?? 0,
-                       1.37, accuracy: 0.00001)
-        settings.remove(for: address)
-        XCTAssertNil(settings.code(for: address))
+        XCTAssertEqual(Sibionics2FactorySensitivity.resolve(advertisedName: "P225044UHA"),
+                       1.44, accuracy: 0.00001)
     }
 
     func testFactorySensitivityUsesProbeThenShortCodeThenDocumentedFallback() throws {

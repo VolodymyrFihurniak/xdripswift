@@ -87,6 +87,13 @@ enum Sibionics2FactorySensitivity {
         return nil
     }
 
+    static func resolve(advertisedName: String?) -> Double {
+        let normalizedName = normalize(advertisedName)
+        let probeCode = normalizedName.count == 14 ? normalizedName : nil
+        let shortCode = normalizedName.count >= 8 ? String(normalizedName.prefix(8)) : normalizedName
+        return resolve(probeCode: probeCode, shortCode: shortCode)
+    }
+
     static func resolve(probeCode: String?, shortCode: String?) -> Double {
         decodeProbe(probeCode)
             ?? decodeShortCode(shortCode)
@@ -164,82 +171,5 @@ enum Sibionics2FactorySensitivity {
               let c0 = UnicodeScalar(out0), let c1 = UnicodeScalar(out1), let c2 = UnicodeScalar(out2)
         else { return nil }
         return Int(String(String.UnicodeScalarView([c0, c1, c2])))
-    }
-}
-
- 
-/// The exact algorithm needs the factory sensitivity of this particular sensor.
-/// Keep it by iOS peripheral identifier; a code from another sensor must not be reused.
-struct Sibionics2FactorySettings {
-    private let userDefaults: UserDefaults
-    private let keyPrefix = "sibionics2.factoryCode."
-
-    init(userDefaults: UserDefaults = .standard) {
-        self.userDefaults = userDefaults
-    }
-
-    static func normalizedValidCode(_ source: String) -> String? {
-        let code = source.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        switch code.count {
-        case 14:
-            return Sibionics2FactorySensitivity.decodeProbe(code) == nil ? nil : code
-        case 8:
-            return Sibionics2FactorySensitivity.decodeShortCode(code) == nil ? nil : code
-        case 11:
-            // The printed serial can contain an eight-character factory short
-            // code followed by a three-character suffix (e.g. 0401671KCJ2).
-            let shortCode = String(code.prefix(8))
-            return Sibionics2FactorySensitivity.decodeShortCode(shortCode) == nil
-                ? nil : shortCode
-        default:
-            return nil
-        }
-    }
-
-    func code(for address: String) -> String? {
-        guard let key = key(for: address),
-              let saved = userDefaults.string(forKey: key) else { return nil }
-        return Self.normalizedValidCode(saved)
-    }
-
-    @discardableResult
-    func save(_ source: String, for address: String) -> Bool {
-        guard let key = key(for: address),
-              let code = Self.normalizedValidCode(source) else { return false }
-        userDefaults.set(code, forKey: key)
-        return true
-    }
-
-    func remove(for address: String) {
-        guard let key = key(for: address) else { return }
-        userDefaults.removeObject(forKey: key)
-    }
-
-    func sensitivity(for address: String, advertisedName: String?) -> Double? {
-        if let code = code(for: address) {
-            return Sibionics2FactorySensitivity.decodeProbe(code)
-                ?? Sibionics2FactorySensitivity.decodeShortCode(code)
-        }
-        // Some transmitters advertise an eight-character factory short code.
-        // Validate its checksum instead of assuming a default for arbitrary names.
-        let normalizedName = String((advertisedName ?? "").uppercased()
-            .filter { $0.isLetter || $0.isNumber }.prefix(8))
-        if normalizedName.count == 8,
-           let decoded = Sibionics2FactorySensitivity.decodeShortCode(normalizedName) {
-            return decoded
-        }
-        
-        // Fallback: use default Sibionics 2 sensitivity like JugglucoNG
-        // This allows the sensor to stream data even without factory code
-        // Users can calibrate or enter factory code later for better accuracy
-        return Sibionics2FactorySensitivity.resolve(
-            probeCode: nil,
-            shortCode: sibionics2FallbackShortCode
-        )
-    }
-
-    private func key(for address: String) -> String? {
-        let identifier = address.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return identifier.isEmpty ? nil : keyPrefix + identifier
     }
 }

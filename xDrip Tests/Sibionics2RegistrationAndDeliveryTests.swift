@@ -416,6 +416,27 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertTrue(batchProcessor.requiresHistoryReplay,
                       "A duplicate history page must not cancel replay")
         XCTAssertEqual(batchProcessor.state?.lastDeliveredIndex, 50)
+
+        // A new transmitter is created after an app restart while the sensor's history
+        // is still being replayed. It must retain the original live index as its target.
+        var resumedProcessor = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: address,
+            stateStore: stateStore,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        )
+        XCTAssertTrue(resumedProcessor.requiresHistoryReplay)
+        let secondPage = Array(rows.dropFirst(50).prefix(50))
+        _ = resumedProcessor.process(secondPage, receivedAt: lateReading.eventTime)
+        XCTAssertTrue(resumedProcessor.requiresHistoryReplay)
+        XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 100)
+        XCTAssertEqual(stateStore.load(for: address)?.replayTargetIndex, 25_298)
+    }
+
+    func testSibionics2DiscoverySearchMatchesSensorName() {
+        XCTAssertTrue(Sibionics2DeviceIdentity.matchesSearch(name: "P225044UHA", query: "225044"))
+        XCTAssertTrue(Sibionics2DeviceIdentity.matchesSearch(name: "P225044UHA", query: "  p225 "))
+        XCTAssertTrue(Sibionics2DeviceIdentity.matchesSearch(name: "P225044UHA", query: ""))
+        XCTAssertFalse(Sibionics2DeviceIdentity.matchesSearch(name: "P225044UHA", query: "0401671K"))
     }
 
     func testMissingHistoryMinuteCannotAdvanceExactAlgorithmCursor() throws {

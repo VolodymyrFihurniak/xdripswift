@@ -4,11 +4,11 @@ class Texts_BluetoothPeripheralView {
     
     static private let filename = "BluetoothPeripheralView"
 
-    static let sibionics2FactoryTitle = NSLocalizedString("sibionics2.factoryTitle", tableName: filename, bundle: .main, value: "Sibionics 2", comment: "Factory settings for the selected sensor")
-    static let sibionics2FactoryCode = NSLocalizedString("sibionics2.factoryCode", tableName: filename, bundle: .main, value: "Factory sensor code", comment: "Opens entry for the sensor QR probe code")
-    static let sibionics2FactoryCodeRequired = NSLocalizedString("sibionics2.factoryCodeRequired", tableName: filename, bundle: .main, value: "Required", comment: "Factory code must be entered before sensor glucose is calculated")
-    static let sibionics2FactoryFooter = NSLocalizedString("sibionics2.factoryFooter", tableName: filename, bundle: .main, value: "Enter this sensor's 14-character QR probe code, 8-character short code, or 11-character serial number. The exact glucose algorithm needs its factory sensitivity.", comment: "Help for factory sensor code")
-    static let sibionics2FactoryCodeInvalid = NSLocalizedString("sibionics2.factoryCodeInvalid", tableName: filename, bundle: .main, value: "This factory code is invalid. Check the code printed on this sensor's packaging.", comment: "Invalid QR probe or short code")
+    static let sibionics2DiscoveryTitle = NSLocalizedString("sibionics2.discoveryTitle", tableName: filename, bundle: .main, value: "Nearby Sibionics 2 sensors", comment: "Heading for nearby Sibionics 2 scan results")
+    static let sibionics2DiscoveryFooter = NSLocalizedString("sibionics2.discoveryFooter", tableName: filename, bundle: .main, value: "Keep this screen open and select your sensor when it appears.", comment: "Instructions for selecting a discovered Sibionics 2 sensor")
+    static let sibionics2DiscoveryEmpty = NSLocalizedString("sibionics2.discoveryEmpty", tableName: filename, bundle: .main, value: "Searching for Sibionics 2 sensors…", comment: "Shown while no Sibionics 2 devices have appeared yet")
+    static let sibionics2DiscoveryNoMatches = NSLocalizedString("sibionics2.discoveryNoMatches", tableName: filename, bundle: .main, value: "No matching sensors", comment: "Shown when a search filters all Sibionics 2 scan results")
+    static let sibionics2DiscoverySearch = NSLocalizedString("sibionics2.discoverySearch", tableName: filename, bundle: .main, value: "Search sensors", comment: "Search prompt for Sibionics 2 scan results")
     
     static let signalStrengthDisconnected = NSLocalizedString("signalStrengthDisconnected", tableName: filename, bundle: .main, value: "Disconnected", comment: "Signal value replacement while an always-on device is disconnected")
     static let signalStrength = NSLocalizedString("signalStrength", tableName: filename, bundle: .main, value: "Signal Strength", comment: "Bluetooth signal strength row")

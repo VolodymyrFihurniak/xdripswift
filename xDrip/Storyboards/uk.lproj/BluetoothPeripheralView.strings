@@ -258,9 +258,9 @@
 /* Label before the transmitter expiry date. */
 "transmitterExpiresLabel" = "Закінчується";
 
-/* Заводське калібрування для конкретного датчика Sibionics 2. */
-"sibionics2.factoryTitle" = "Sibionics 2";
-"sibionics2.factoryCode" = "Заводський код датчика";
-"sibionics2.factoryCodeRequired" = "Потрібен код";
-"sibionics2.factoryFooter" = "Введіть 14-символьний код із QR, 8-символьний короткий код або 11-символьний серійний номер саме цього датчика. Код потрібен для розрахунку глюкози.";
-"sibionics2.factoryCodeInvalid" = "Невірний заводський код. Звірте його з пакованням цього датчика.";
+/* Вибір знайденого датчика Sibionics 2. */
+"sibionics2.discoveryTitle" = "Знайдені датчики Sibionics 2";
+"sibionics2.discoveryFooter" = "Залиште цей екран відкритим і виберіть свій датчик, коли він з’явиться.";
+"sibionics2.discoveryEmpty" = "Пошук датчиків Sibionics 2…";
+"sibionics2.discoveryNoMatches" = "Відповідних датчиків не знайдено";
+"sibionics2.discoverySearch" = "Пошук датчиків";

@@ -35,8 +35,14 @@ struct Sibionics2ReadingBatchProcessor {
                 restoredState = nil
             }
         }
+        let savedCursor = Int(restoredState?.lastDeliveredIndex ?? 0)
+        let restoredReplayTarget = restoredState?.replayTargetIndex
+            .map { Int($0) }
+            .flatMap { $0 > savedCursor ? $0 : nil }
         self.processor = restoredProcessor
         self.readingState = restoredState
+        self.replayTargetIndex = restoredReplayTarget
+        self.requiresHistoryReplay = restoredReplayTarget != nil
     }
 
     mutating func process(_ batch: [Sibionics2RawReading], receivedAt: Date) -> [GlucoseData] {
@@ -81,7 +87,8 @@ struct Sibionics2ReadingBatchProcessor {
                 let pendingState = Sibionics2ReadingState(
                     lastDeliveredIndex: nil,
                     processorSnapshot: processor.snapshot(),
-                    sensorStartDate: inferredStartDate
+                    sensorStartDate: inferredStartDate,
+                    replayTargetIndex: replayTargetIndex.flatMap { UInt16(exactly: $0) }
                 )
                 readingState = pendingState
                 stateStore.save(pendingState, for: deviceIdentifier)
@@ -126,7 +133,8 @@ struct Sibionics2ReadingBatchProcessor {
         let state = Sibionics2ReadingState(
             lastDeliveredIndex: UInt16(exactly: latestProcessedIndex),
             processorSnapshot: processor.snapshot(),
-            sensorStartDate: sensorStartDate
+            sensorStartDate: sensorStartDate,
+            replayTargetIndex: replayTargetIndex.flatMap { UInt16(exactly: $0) }
         )
         readingState = state
         stateStore.save(state, for: deviceIdentifier)

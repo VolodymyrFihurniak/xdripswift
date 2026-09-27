@@ -18,6 +18,14 @@ enum Sibionics2DeviceIdentity {
         guard (8...16).contains(normalized.count), normalized[0] == 80 else { return false }
         return normalized[1...3].allSatisfy { (48...57).contains($0) }
     }
+
+    static func matchesSearch(name: String, query: String) -> Bool {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        guard !normalizedQuery.isEmpty else { return true }
+        return name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .contains(normalizedQuery)
+    }
 }
 
 struct Sibionics2Handshake {
