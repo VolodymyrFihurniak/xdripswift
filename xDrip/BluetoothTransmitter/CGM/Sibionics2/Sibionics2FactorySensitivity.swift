@@ -21,12 +21,29 @@ enum Sibionics2FactorySensitivity {
         let values = characters.compactMap { alphabet.firstIndex(of: $0) }
         guard values.count == 14, (values[7] + values[11]) % 32 == 1 else { return nil }
 
-        let batch = (0..<4).map { (values[$0] + values[$0 + 8]) % 32 }
-        let sensitivity = (0..<3).map {
-            (values[$0] + values[$0 + 4] + values[$0 + 8]) % 32
+        let batch: [Int] = (0..<4).map { index in
+            let firstValue = values[index]
+            let secondValue = values[index + 8]
+            return (firstValue + secondValue) % 32
         }
-        let checksum = (batch.reduce(0, +) + values[8..<12].reduce(0, +)
-            + sensitivity.reduce(0, +)) % 1024
+        let sensitivity: [Int] = (0..<3).map { index in
+            let firstValue = values[index]
+            let secondValue = values[index + 4]
+            let thirdValue = values[index + 8]
+            let sum = firstValue + secondValue + thirdValue
+            return sum % 32
+        }
+        var checksum = 0
+        for value in batch {
+            checksum += value
+        }
+        for value in values[8..<12] {
+            checksum += value
+        }
+        for value in sensitivity {
+            checksum += value
+        }
+        checksum %= 1024
         guard checksum == values[12] * 32 + values[13] else { return nil }
 
         let batchBits = permute(batch, order: identityBits)
