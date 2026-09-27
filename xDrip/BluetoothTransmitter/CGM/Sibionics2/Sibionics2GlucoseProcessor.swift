@@ -169,7 +169,7 @@ struct Sibionics2GlucoseProcessor {
         else { return false }
 
         let restored = Sibionics2V116AFacade(sensitivity: sensitivity)
-        guard restored.restoreHex(hex) else { return false }
+        guard restored.restoreHex(snapshot: hex) else { return false }
         coreBox = CoreBox(restored)
         self.lastIndex = restoredIndex
         self.liveDeltaMmol = (flags & 1) == 0 ? nil : liveDelta
@@ -186,7 +186,7 @@ struct Sibionics2GlucoseProcessor {
     private mutating func ensureUniqueCore() {
         guard !isKnownUniquelyReferenced(&coreBox) else { return }
         let copy = Sibionics2V116AFacade(sensitivity: sensitivity)
-        if copy.restoreHex(coreBox.value.snapshotHex()) {
+        if copy.restoreHex(snapshot: coreBox.value.snapshotHex()) {
             coreBox = CoreBox(copy)
         }
     }
