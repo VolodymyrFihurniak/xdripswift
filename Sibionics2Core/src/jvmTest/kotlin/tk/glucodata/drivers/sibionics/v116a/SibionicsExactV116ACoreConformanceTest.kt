@@ -6,6 +6,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import tk.glucodata.drivers.sibionics.Sibionics2V116AFacade
 
 class SibionicsExactV116ACoreConformanceTest {
     @Test
@@ -64,6 +65,42 @@ class SibionicsExactV116ACoreConformanceTest {
             assertEquals(legacySource.process(row.rawMmol, row.temperatureC, row.index),
                 legacyRestored.process(row.rawMmol, row.temperatureC, row.index))
             assertEquals(legacySource.stateHash(), legacyRestored.stateHash())
+        }
+    }
+
+    @Test
+    fun facadeSnapshotChunksRestoreExactState() {
+        val rows = startupRows()
+        val source = Sibionics2V116AFacade(sensitivity = 1.44f)
+        rows.take(70).forEach { source.process(it.rawMmol, it.temperatureC, it.index) }
+
+        val snapshotByteCount = source.snapshotByteCount()
+        assertEquals(2_504, snapshotByteCount)
+        val hex = buildString {
+            var offset = 0
+            while (offset < snapshotByteCount) {
+                val chunkByteCount = minOf(256, snapshotByteCount - offset)
+                val chunk = source.snapshotHexChunk(offset, chunkByteCount)
+                assertEquals(chunkByteCount * 2, chunk.length)
+                append(chunk)
+                offset += chunkByteCount
+            }
+        }
+        assertEquals(snapshotByteCount * 2, hex.length)
+
+        val restored = Sibionics2V116AFacade(sensitivity = 1.44f)
+        assertTrue(restored.beginRestoreHex(hex.length))
+        hex.chunked(512).forEach { assertTrue(restored.appendRestoreHexChunk(it)) }
+        assertTrue(restored.finishRestoreHex())
+
+        rows.drop(70).forEach { row ->
+            val expected = source.process(row.rawMmol, row.temperatureC, row.index)
+            val actual = restored.process(row.rawMmol, row.temperatureC, row.index)
+            if (expected.isNaN()) {
+                assertTrue(actual.isNaN(), "facade output at index ${row.index}")
+            } else {
+                assertEquals(expected, actual, 0.0001f, "facade output at index ${row.index}")
+            }
         }
     }
 
