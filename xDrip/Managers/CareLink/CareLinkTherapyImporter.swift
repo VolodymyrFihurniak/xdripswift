@@ -457,7 +457,6 @@ enum CareLinkTimestampRepair {
 
     private struct Shift: Hashable {
         let patient: String
-        let day: Int
         let seconds: Int
     }
 
@@ -530,16 +529,35 @@ enum CareLinkTimestampRepair {
             let latest = stored[cluster.indices.last!].date
             let offsets = Set(cluster.indices.dropLast().map { Int(latest.timeIntervalSince(stored[$0].date).rounded()) })
             for offset in offsets where offset > 0 {
-                let shift = Shift(patient: cluster.key.patient,
-                                  day: Int(latest.timeIntervalSince1970 / 86400), seconds: offset)
+                let shift = Shift(patient: cluster.key.patient, seconds: offset)
                 evidence[shift, default: []].append(latest)
             }
         }
-        let confirmed = Set(evidence.compactMap { shift, dates -> Shift? in
-            guard Set(dates).count >= 3, let first = dates.min(), let last = dates.max(),
-                  last.timeIntervalSince(first) >= 60 else { return nil }
-            return shift
-        })
+        // Corroborate each shifted event within a rolling 24-hour window. UTC calendar
+        // days can split a repeated import stream just before midnight.
+        let confirmed = evidence.mapValues { dates -> Set<Date> in
+            let sorted = Array(Set(dates)).sorted()
+            var right = 0
+            var windowCounts = [Int](repeating: 0, count: sorted.count + 1)
+            for left in sorted.indices {
+                right = max(right, left)
+                while right + 1 < sorted.count,
+                      sorted[right + 1].timeIntervalSince(sorted[left]) <= 86400 {
+                    right += 1
+                }
+                if right - left >= 2, sorted[right].timeIntervalSince(sorted[left]) >= 60 {
+                    windowCounts[left] += 1
+                    windowCounts[right + 1] -= 1
+                }
+            }
+            var count = 0
+            var result = Set<Date>()
+            for (index, date) in sorted.enumerated() {
+                count += windowCounts[index]
+                if count > 0 { result.insert(date) }
+            }
+            return result
+        }
         let incomingByKey = Dictionary(grouping: incoming.filter { key($0) != nil }, by: { key($0)! })
         var plan = Plan()
         for cluster in clusters {
@@ -561,9 +579,8 @@ enum CareLinkTimestampRepair {
             }
             for index in cluster.indices.dropLast() {
                 let offset = Int(latest.timeIntervalSince(stored[index].date).rounded())
-                let shift = Shift(patient: cluster.key.patient,
-                                  day: Int(latest.timeIntervalSince1970 / 86400), seconds: offset)
-                if offset == 0 || confirmed.contains(shift) {
+                let shift = Shift(patient: cluster.key.patient, seconds: offset)
+                if offset == 0 || confirmed[shift]?.contains(latest) == true {
                     plan.removed.insert(index)
                 }
             }
