@@ -212,6 +212,29 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         super.prepareForRelease()
     }
 
+    /// Rebuilds state after the per-device factory sensitivity changes. The
+    /// snapshot contains its sensitivity, so the batch processor will reject the
+    /// old snapshot and request history from the sensor before publishing again.
+    func factorySensitivityDidChange(for address: String) {
+        runOnCentralQueue { [weak self] in
+            guard let self,
+                  let currentAddress = self.deviceAddress,
+                  currentAddress.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    == address.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            else { return }
+
+            self.batchProcessor = nil
+            self.historyRequest.reset()
+            self.historyRecoveryToken += 1
+            self.historyRetryScheduled = false
+            self.historyWriteFailures = 0
+            trace("Sibionics 2 factory sensitivity changed; restarting processor from saved sensor history",
+                  log: self.transmitterLog,
+                  category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+            self.requestNewReading()
+        }
+    }
+
     func setNonFixedSlopeEnabled(enabled: Bool) {}
     func isNonFixedSlopeEnabled() -> Bool { false }
     func setWebOOPEnabled(enabled: Bool) {}
@@ -288,10 +311,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
            batchProcessor.state != nil || stateStore.load(for: address) == nil {
             return batchProcessor
         }
-        let sensitivity = Sibionics2FactorySensitivity.resolve(advertisedName: advertisedName)
-        trace("Sibionics 2 automatic sensitivity=%{public}@",
+        let automaticSensitivity = Sibionics2FactorySensitivity.resolve(advertisedName: advertisedName)
+        let override = Sibionics2FactorySensitivity.override(for: address)
+        let sensitivity = override ?? automaticSensitivity
+        trace("Sibionics 2 sensitivity=%{public}@ source=%{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
-              type: .info, sensitivity.description)
+              type: .info, sensitivity.description, override == nil ? "automatic" : "peripheral override")
         return Sibionics2ReadingBatchProcessor(
             deviceIdentifier: address,
             stateStore: stateStore,
