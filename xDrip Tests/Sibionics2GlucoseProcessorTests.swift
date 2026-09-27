@@ -229,7 +229,7 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         XCTAssertFalse(truncatedTarget.restore(from: truncated))
 
         var trailing = snapshot
-        trailing.append(0)
+        trailing.append(UInt8(0))
         var trailingTarget = Sibionics2GlucoseProcessor(sensitivity: 1.44)
         XCTAssertFalse(trailingTarget.restore(from: trailing))
     }

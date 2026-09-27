@@ -306,6 +306,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         let delivered = batchProcessor.process(readings, receivedAt: receivedAt)
 
         XCTAssertEqual(delivered.count, 3)
+        guard delivered.count == 3 else { return }
         XCTAssertEqual(delivered.map(\.timeStamp), [
             rows[129].reading(sensorStartDate: sensorStartDate).eventTime,
             rows[128].reading(sensorStartDate: sensorStartDate).eventTime,

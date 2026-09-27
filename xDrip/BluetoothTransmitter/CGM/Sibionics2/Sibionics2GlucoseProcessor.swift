@@ -119,7 +119,8 @@ struct Sibionics2GlucoseProcessor {
         var data = Data(Self.snapshotMagic)
         data.appendUInt16BE(Self.snapshotVersion)
         data.append(flags)
-        data.append(0)
+        // The reserved field is one byte; an untyped literal selects Data.append<Int>.
+        data.append(UInt8(0))
         data.appendUInt32BE(sensitivity.bitPattern)
         data.appendUInt32BE(UInt32(lastIndex ?? 0))
         data.appendUInt32BE((liveDeltaMmol ?? 0).bitPattern)
