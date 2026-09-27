@@ -247,12 +247,23 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare iOS test simulator
+        run: |
+          runtime_id="com.apple.CoreSimulator.SimRuntime.iOS-26-2"
+          xcrun simctl list runtimes available
+          if ! xcrun simctl list runtimes available | grep -Fq "$runtime_id"; then
+            xcodebuild -downloadPlatform iOS -buildVersion 26.2
+          fi
+          simulator_id=$(xcrun simctl create "xDrip CI iPhone 17" "com.apple.CoreSimulator.SimDeviceType.iPhone-17" "$runtime_id")
+          echo "TEST_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+          xcrun simctl list devices available
+
       - name: Run xDrip tests
         env:
           XCODE_RESULT_BUNDLE: ${{ runner.temp }}/xdrip-tests.xcresult
         run: |
           set +e
-          xcodebuild test -project xdrip.xcodeproj -scheme xdrip -destination 'platform=iOS Simulator,name=iPhone 17' -parallel-testing-enabled NO -resultBundlePath "$XCODE_RESULT_BUNDLE" CODE_SIGNING_ALLOWED=NO
+          xcodebuild test -project xdrip.xcodeproj -scheme xdrip -destination "platform=iOS Simulator,id=$TEST_SIMULATOR_ID" -parallel-testing-enabled NO -resultBundlePath "$XCODE_RESULT_BUNDLE" CODE_SIGNING_ALLOWED=NO
           test_status=$?
           if [ -d "$XCODE_RESULT_BUNDLE" ]; then
             echo "##[group]XCTest result summary"
