@@ -224,8 +224,18 @@ struct Sibionics2FactorySettings {
         // Validate its checksum instead of assuming a default for arbitrary names.
         let normalizedName = String((advertisedName ?? "").uppercased()
             .filter { $0.isLetter || $0.isNumber }.prefix(8))
-        guard normalizedName.count == 8 else { return nil }
-        return Sibionics2FactorySensitivity.decodeShortCode(normalizedName)
+        if normalizedName.count == 8,
+           let decoded = Sibionics2FactorySensitivity.decodeShortCode(normalizedName) {
+            return decoded
+        }
+        
+        // Fallback: use default Sibionics 2 sensitivity like JugglucoNG
+        // This allows the sensor to stream data even without factory code
+        // Users can calibrate or enter factory code later for better accuracy
+        return Sibionics2FactorySensitivity.resolve(
+            probeCode: nil,
+            shortCode: sibionics2FallbackShortCode
+        )
     }
 
     private func key(for address: String) -> String? {

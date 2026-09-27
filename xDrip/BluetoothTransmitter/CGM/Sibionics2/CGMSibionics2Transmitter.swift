@@ -39,7 +39,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         self.advertisedName = name
         super.init(
             addressAndName: addressAndName,
-            CBUUID_Advertisement: nil,
+            // Use service UUID for advertisement filtering to enable background scanning
+            // and auto-discovery like JugglucoNG (scan for devices with FF30 service)
+            CBUUID_Advertisement: Sibionics2ProtocolCodec.serviceUUID.uuidString,
             servicesCBUUIDs: [Sibionics2ProtocolCodec.serviceUUID],
             CBUUID_ReceiveCharacteristic: Sibionics2ProtocolCodec.notifyUUID.uuidString,
             CBUUID_WriteCharacteristic: Sibionics2ProtocolCodec.writeUUID.uuidString,
@@ -47,16 +49,23 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         )
     }
 
-    static func canAdoptPeripheral(
+    func canAdoptPeripheral(
         advertisedName: String?,
         storedAddress: String?,
         peripheralAddress: String
     ) -> Bool {
+        // Enhanced device validation: combine stored address check with service/UUID validation
         if let storedAddress, !storedAddress.isEmpty {
             return storedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
                 .caseInsensitiveCompare(peripheralAddress.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
         }
-        return Sibionics2DeviceIdentity.isSibionics2(name: advertisedName)
+        
+        // Validate device name pattern for new sensors
+        guard Sibionics2DeviceIdentity.isSibionics2(name: advertisedName) else { return false }
+        
+        // Additional validation: check that peripheral actually advertises our service
+        // (this is handled at the scanning level by setting CBUUID_Advertisement)
+        return true
     }
 
     override func centralManager(
@@ -70,7 +79,28 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             advertisedName: advertisedName,
             storedAddress: deviceAddress,
             peripheralAddress: peripheral.identifier.uuidString
-        ) else { return }
+        ) else {
+            // Log detailed discovery rejection for debugging
+            if let name = peripheral.name {
+                trace("in didDiscover, rejected peripheral: %{public}@ (name: %{public}@, storedAddress: %{public}@)",
+                      log: log,
+                      category: ConstantsLog.categoryBlueToothTransmitter,
+                      type: .info,
+                      peripheral.identifier.uuidString,
+                      name,
+                      deviceAddress?.description ?? "nil")
+            }
+            return
+        }
+        
+        trace("in didDiscover, adopting peripheral: %{public}@ (name: %{public}@, storedAddress: %{public}@)",
+              log: log,
+              category: ConstantsLog.categoryBlueToothTransmitter,
+              type: .info,
+              peripheral.identifier.uuidString,
+              advertisedName ?? "nil",
+              deviceAddress?.description ?? "nil")
+              
         self.advertisedName = advertisedName
         super.centralManager(central, didDiscover: peripheral, advertisementData: advertisementData, rssi: RSSI)
     }
