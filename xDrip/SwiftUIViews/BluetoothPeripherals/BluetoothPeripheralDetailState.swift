@@ -620,7 +620,7 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         case .MedtrumTouchCareNanoType:
             return makeMedtrumTouchCareNanoSections(bluetoothPeripheral: bluetoothPeripheral)
         case .Sibionics2Type:
-            return []
+            return makeSibionics2Sections(bluetoothPeripheral: bluetoothPeripheral)
         case .M5StackType:
             return makeM5StackSections(bluetoothPeripheral: bluetoothPeripheral, includesSpecificM5StackSection: true)
         case .M5StickCType:
@@ -634,6 +634,33 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         }
     }
 
+
+    private func makeSibionics2Sections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        let address = bluetoothPeripheral.blePeripheral.address
+        let override = Sibionics2FactorySensitivity.override(for: address)
+        let sensitivity = override
+            ?? Sibionics2FactorySensitivity.resolve(advertisedName: bluetoothPeripheral.blePeripheral.name)
+        let source = override == nil
+            ? Texts_BluetoothPeripheralView.sibionics2FactorySensitivityAutomatic
+            : Texts_BluetoothPeripheralView.sibionics2FactorySensitivityManual
+
+        return [BluetoothPeripheralDetailSection(
+            id: "sibionics2-factory-sensitivity",
+            title: Texts_SettingsView.labelAlgorithmType,
+            footer: Texts_BluetoothPeripheralView.sibionics2FactorySensitivityFooter,
+            rows: [
+                row(
+                    id: "sibionics2-factory-sensitivity-value",
+                    title: Texts_BluetoothPeripheralView.sibionics2FactorySensitivityTitle,
+                    detail: String(format: "%.2f · %@", sensitivity, source),
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        self?.requestSibionics2FactorySensitivity(for: bluetoothPeripheral)
+                    }
+                )
+            ]
+        )]
+    }
 
     private func makeGenericHeartbeatSettingsSections() -> [BluetoothPeripheralDetailSection] {
         guard let address = bluetoothPeripheral?.blePeripheral.address else { return [] }
@@ -1728,6 +1755,70 @@ private extension BluetoothPeripheralDetailState {
 // MARK: - Algorithm and Calibration
 
 private extension BluetoothPeripheralDetailState {
+    func requestSibionics2FactorySensitivity(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        let currentOverride = Sibionics2FactorySensitivity.override(for: address)
+        let automaticValue = Sibionics2FactorySensitivity.resolve(
+            advertisedName: bluetoothPeripheral.blePeripheral.name
+        )
+
+        presentTextEntryView(BluetoothPeripheralTextEntry(
+            title: Texts_BluetoothPeripheralView.sibionics2FactorySensitivityTitle,
+            message: Texts_BluetoothPeripheralView.sibionics2FactorySensitivityFooter,
+            keyboardType: .decimalPad,
+            text: currentOverride?.stringWithoutTrailingZeroes,
+            placeholder: automaticValue.stringWithoutTrailingZeroes,
+            actionTitle: Texts_Common.Ok,
+            cancelTitle: Texts_Common.Cancel,
+            actionHandler: { [weak self] text in
+                self?.saveSibionics2FactorySensitivity(text, for: bluetoothPeripheral)
+            },
+            actionIsEnabled: { [weak self] text in
+                guard let self else { return false }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty || self.parsedSibionics2Sensitivity(trimmed) != nil
+            },
+            inputValidator: { [weak self] text in
+                guard let self else { return nil }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, self.parsedSibionics2Sensitivity(trimmed) == nil else { return nil }
+                return Texts_BluetoothPeripheralView.sibionics2FactorySensitivityInvalid
+            }
+        ))
+    }
+
+    func parsedSibionics2Sensitivity(_ text: String) -> Double? {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: ".")
+        guard let value = Double(normalized), Sibionics2FactorySensitivity.isSupported(value) else {
+            return nil
+        }
+        return value
+    }
+
+    func saveSibionics2FactorySensitivity(_ text: String, for bluetoothPeripheral: BluetoothPeripheral) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sensitivity = trimmed.isEmpty ? nil : parsedSibionics2Sensitivity(trimmed)
+        guard trimmed.isEmpty || sensitivity != nil else { return }
+
+        let address = bluetoothPeripheral.blePeripheral.address
+        guard Sibionics2FactorySensitivity.setOverride(sensitivity, for: address) else { return }
+
+        (bluetoothPeripheralManager?.getBluetoothTransmitter(
+            for: bluetoothPeripheral,
+            createANewOneIfNecesssary: false
+        ) as? CGMSibionics2Transmitter)?.factorySensitivityDidChange(for: address)
+
+        trace(
+            "Sibionics 2 factory sensitivity override was %{public}@",
+            log: log,
+            category: ConstantsLog.categoryBluetoothPeripheralViewController,
+            type: .info,
+            sensitivity?.description ?? "cleared; automatic estimate restored"
+        )
+        refresh()
+    }
+
     func requestAlgorithmType() {
         guard let bluetoothPeripheral = bluetoothPeripheral else { return }
 
