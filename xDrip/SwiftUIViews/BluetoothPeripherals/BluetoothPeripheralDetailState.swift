@@ -646,7 +646,7 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
 
         return [BluetoothPeripheralDetailSection(
             id: "sibionics2-factory-sensitivity",
-            title: Texts_SettingsView.labelAlgorithmType,
+            title: Texts_BluetoothPeripheralView.sibionics2FactoryCorrectionTitle,
             footer: Texts_BluetoothPeripheralView.sibionics2FactorySensitivityFooter,
             rows: [
                 row(
