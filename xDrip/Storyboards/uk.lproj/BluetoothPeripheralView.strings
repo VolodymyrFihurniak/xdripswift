@@ -264,6 +264,7 @@
 "sibionics2.discoveryEmpty" = "Пошук датчиків Sibionics 2…";
 "sibionics2.discoveryNoMatches" = "Відповідних датчиків не знайдено";
 "sibionics2.discoverySearch" = "Пошук датчиків";
+"sibionics2.factoryCorrectionTitle" = "Заводська корекція";
 "sibionics2.factorySensitivityTitle" = "Заводська чутливість";
 "sibionics2.factorySensitivityFooter" = "Показники Sibionics 2 уже скориговані штатним алгоритмом датчика. Введіть заводське значення qrSens з етикетки або перевіреного журналу. Залиште поле порожнім, щоб використовувати автоматичну оцінку. Режими калібрування Libre за глюкометром для цих показників не застосовуються.";
 "sibionics2.factorySensitivityAutomatic" = "автоматично";
