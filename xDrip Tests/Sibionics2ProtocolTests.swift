@@ -112,6 +112,51 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertNil(handshake.receive(.authenticationAccepted, at: now))
     }
 
+    func testBluetoothAddressOverrideProducesTheWorkingSensorAuthPacket() throws {
+        let suiteName = "Sibionics2AuthAddress.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let identifier = "DE1815CA-590A-1AAF-9C98-34082E80A191"
+        let otherIdentifier = "another-peripheral"
+
+        XCTAssertEqual(Sibionics2AuthenticationAddress.macBytes(for: identifier, userDefaults: defaults),
+                       [UInt8](repeating: 0, count: 6))
+        XCTAssertTrue(Sibionics2AuthenticationAddress.setOverride(
+            " c7:71:b0:d1:5b:32 ", for: identifier, userDefaults: defaults
+        ))
+        XCTAssertEqual(Sibionics2AuthenticationAddress.override(for: identifier, userDefaults: defaults),
+                       "C7:71:B0:D1:5B:32")
+        let mac = Sibionics2AuthenticationAddress.macBytes(for: identifier, userDefaults: defaults)
+        XCTAssertEqual(mac, [0xC7, 0x71, 0xB0, 0xD1, 0x5B, 0x32])
+        XCTAssertEqual(Sibionics2AuthenticationAddress.macBytes(for: otherIdentifier, userDefaults: defaults),
+                       [UInt8](repeating: 0, count: 6))
+        XCTAssertEqual(
+            [UInt8](codec.buildAuthPacket(macAddress: mac, sessionKey: Data("GKSHGDU0TYA456G4".utf8))),
+            [0x3E, 0xF6, 0x6F, 0xEB, 0x53, 0xA2, 0xE8, 0xAD, 0x7A, 0xC6, 0xCD, 0x50,
+             0x47, 0xF0, 0x42, 0xD9, 0xB2, 0xE7, 0xBD, 0x0D, 0x16, 0xB1, 0x57, 0xF1,
+             0x4A, 0x51]
+        )
+    }
+
+    func testInvalidBluetoothAddressCannotReplaceStoredAuthenticationAddress() throws {
+        let suiteName = "Sibionics2AuthAddress.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let identifier = "saved-device"
+
+        XCTAssertTrue(Sibionics2AuthenticationAddress.setOverride(
+            "C7:71:B0:D1:5B:32", for: identifier, userDefaults: defaults
+        ))
+        for input in ["C7:71:B0:D1:5B", "C7:71:B0:D1:5B:GG", "00:00:00:00:00:00", "C7-71-B0-D1-5B-32"] {
+            XCTAssertNil(Sibionics2AuthenticationAddress.normalize(input))
+            XCTAssertFalse(Sibionics2AuthenticationAddress.setOverride(input, for: identifier, userDefaults: defaults))
+            XCTAssertEqual(Sibionics2AuthenticationAddress.override(for: identifier, userDefaults: defaults),
+                           "C7:71:B0:D1:5B:32")
+        }
+        XCTAssertTrue(Sibionics2AuthenticationAddress.setOverride(nil, for: identifier, userDefaults: defaults))
+        XCTAssertNil(Sibionics2AuthenticationAddress.override(for: identifier, userDefaults: defaults))
+    }
+
     func testSensorCaptureCommandVectors() {
         let sessionKey = Data("GKSHGDU0TYA456G4".utf8)
         XCTAssertEqual(

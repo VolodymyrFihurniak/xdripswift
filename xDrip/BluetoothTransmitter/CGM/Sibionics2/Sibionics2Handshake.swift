@@ -28,6 +28,63 @@ enum Sibionics2DeviceIdentity {
     }
 }
 
+/// Core Bluetooth identifies peripherals by UUID, which is not the Bluetooth address
+/// carried in a Sibionics V120 authentication command. A sensor-specific address
+/// can be entered from a verified device log when the zero-address fallback is
+/// acknowledged but the sensor never sends readings.
+enum Sibionics2AuthenticationAddress {
+    private static let keyPrefix = "sibionics2.authenticationAddress."
+
+    static func normalize(_ value: String) -> String? {
+        let parts = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+            .split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 6 else { return nil }
+        let bytes = parts.compactMap { part -> UInt8? in
+            guard part.count == 2 else { return nil }
+            return UInt8(part, radix: 16)
+        }
+        guard bytes.count == 6, bytes.contains(where: { $0 != 0 }) else { return nil }
+        return bytes.map { String(format: "%02X", $0) }.joined(separator: ":")
+    }
+
+    static func override(for identifier: String, userDefaults: UserDefaults = .standard) -> String? {
+        guard let key = key(for: identifier),
+              let saved = userDefaults.string(forKey: key) else { return nil }
+        return normalize(saved)
+    }
+
+    static func macBytes(for identifier: String, userDefaults: UserDefaults = .standard) -> [UInt8] {
+        guard let address = override(for: identifier, userDefaults: userDefaults) else {
+            return [UInt8](repeating: 0, count: 6)
+        }
+        return address.split(separator: ":").compactMap { UInt8($0, radix: 16) }
+    }
+
+    @discardableResult
+    static func setOverride(
+        _ value: String?,
+        for identifier: String,
+        userDefaults: UserDefaults = .standard
+    ) -> Bool {
+        guard let key = key(for: identifier) else { return false }
+        let text = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !text.isEmpty else {
+            userDefaults.removeObject(forKey: key)
+            return true
+        }
+        guard let address = normalize(text) else { return false }
+        userDefaults.set(address, forKey: key)
+        return true
+    }
+
+    private static func key(for identifier: String) -> String? {
+        let normalized = identifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+        return keyPrefix + normalized
+    }
+}
+
 struct Sibionics2Handshake {
     private enum Phase { case idle, awaitingAuthentication, awaitingTimeSync, awaitingDataRequest, awaitingStreaming, streaming }
 

@@ -236,6 +236,27 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
 
+    /// Apply a newly saved authentication address at the next connection.
+    /// Keep the reading cursor and algorithm snapshot intact.
+    func authenticationAddressDidChange(for address: String) {
+        runOnCentralQueue { [weak self] in
+            guard let self,
+                  let currentAddress = self.deviceAddress,
+                  currentAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .caseInsensitiveCompare(address.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+            else { return }
+
+            trace("Sibionics 2 authentication address updated; reconnecting",
+                  log: self.transmitterLog,
+                  category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+            if self.getConnectionStatus() == .connected || self.getConnectionStatus() == .connecting {
+                self.disconnect()
+            } else {
+                self.connect()
+            }
+        }
+    }
+
     func setNonFixedSlopeEnabled(enabled: Bool) {}
     func isNonFixedSlopeEnabled() -> Bool { false }
     func setWebOOPEnabled(enabled: Bool) {}
@@ -279,8 +300,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         historyWriteFailures = 0
         handshakeAttempt += 1
         let attempt = handshakeAttempt
+        let configuredAddress = Sibionics2AuthenticationAddress.override(for: address)
+        trace("Sibionics 2 authentication address source=%{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+              type: .info, configuredAddress == nil ? "zero fallback" : "saved Bluetooth address")
         var newHandshake = Sibionics2Handshake(
-            macAddress: [UInt8](repeating: 0, count: 6),
+            macAddress: Sibionics2AuthenticationAddress.macBytes(for: address),
             sessionKey: sessionKey,
             lastDeliveredIndex: batchProcessor?.state?.lastDeliveredIndex
         )
