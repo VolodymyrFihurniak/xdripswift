@@ -406,10 +406,16 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
 
         let firstPage = rows.prefix(50).map { $0.reading(sensorStartDate: sensorStartDate) }
         let delivered = batchProcessor.process(firstPage, receivedAt: lateReading.eventTime)
-        XCTAssertFalse(batchProcessor.requiresHistoryReplay)
+        XCTAssertTrue(batchProcessor.requiresHistoryReplay,
+                      "A partial history page must request the next page until index 25,298")
         XCTAssertEqual(batchProcessor.state?.lastDeliveredIndex, 50)
         XCTAssertEqual(delivered.first?.timeStamp,
                        rows[49].reading(sensorStartDate: sensorStartDate).eventTime)
+
+        XCTAssertTrue(batchProcessor.process([firstPage[49]], receivedAt: lateReading.eventTime).isEmpty)
+        XCTAssertTrue(batchProcessor.requiresHistoryReplay,
+                      "A duplicate history page must not cancel replay")
+        XCTAssertEqual(batchProcessor.state?.lastDeliveredIndex, 50)
     }
 
     func testMissingHistoryMinuteCannotAdvanceExactAlgorithmCursor() throws {
@@ -435,6 +441,12 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertTrue(batchProcessor.requiresHistoryReplay)
         XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 5)
 
+        let duplicate = rows[4].reading(sensorStartDate: sensorStartDate)
+        XCTAssertTrue(batchProcessor.process([duplicate], receivedAt: afterGap.eventTime).isEmpty)
+        XCTAssertTrue(batchProcessor.requiresHistoryReplay,
+                      "A duplicate before the gap must not cancel history recovery")
+        XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 5)
+
         // An in-page gap publishes only its contiguous prefix, leaving the
         // missing index available for the next history request.
         let partial = batchProcessor.process(
@@ -445,11 +457,17 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertTrue(batchProcessor.requiresHistoryReplay)
         XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 6)
 
-        let recovered = batchProcessor.process(
-            [rows[6].reading(sensorStartDate: sensorStartDate), afterGap],
+        let nextPage = batchProcessor.process(
+            [rows[6].reading(sensorStartDate: sensorStartDate)],
             receivedAt: afterGap.eventTime
         )
-        XCTAssertEqual(recovered.count, 2)
+        XCTAssertEqual(nextPage.count, 1)
+        XCTAssertTrue(batchProcessor.requiresHistoryReplay,
+                      "A short contiguous page must request the remaining minute")
+        XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 7)
+
+        let recovered = batchProcessor.process([afterGap], receivedAt: afterGap.eventTime)
+        XCTAssertEqual(recovered.count, 1)
         XCTAssertFalse(batchProcessor.requiresHistoryReplay)
         XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 8)
     }

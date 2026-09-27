@@ -11,6 +11,7 @@ struct Sibionics2ReadingBatchProcessor {
     private var readingState: Sibionics2ReadingState?
 
     private(set) var requiresHistoryReplay = false
+    private var replayTargetIndex: Int?
 
     var state: Sibionics2ReadingState? { readingState }
 
@@ -39,7 +40,6 @@ struct Sibionics2ReadingBatchProcessor {
     }
 
     mutating func process(_ batch: [Sibionics2RawReading], receivedAt: Date) -> [GlucoseData] {
-        requiresHistoryReplay = false
         guard receivedAt.timeIntervalSince1970.isFinite else { return [] }
 
         let validReadings = batch
@@ -66,6 +66,8 @@ struct Sibionics2ReadingBatchProcessor {
         if didResetSession {
             processor.reset()
             readingState = nil
+            replayTargetIndex = nil
+            requiresHistoryReplay = false
         }
 
         let firstConnectionWithoutHistory = readingState == nil
@@ -73,6 +75,7 @@ struct Sibionics2ReadingBatchProcessor {
             readingState?.processorSnapshot != nil &&
             readingState?.sensorStartDate != nil
         if (firstConnectionWithoutHistory || waitingForHistoryReplay), firstReading.index > 1 {
+            replayTargetIndex = max(replayTargetIndex ?? 0, uniqueReadings.last?.index ?? firstReading.index)
             requiresHistoryReplay = true
             if firstConnectionWithoutHistory {
                 let pendingState = Sibionics2ReadingState(
@@ -97,6 +100,7 @@ struct Sibionics2ReadingBatchProcessor {
         var expectedIndex = lastIndex + 1
         for reading in pendingReadings {
             guard reading.index == expectedIndex else {
+                replayTargetIndex = max(replayTargetIndex ?? 0, uniqueReadings.last?.index ?? reading.index)
                 requiresHistoryReplay = true
                 break
             }
@@ -115,6 +119,10 @@ struct Sibionics2ReadingBatchProcessor {
         }
 
         let latestProcessedIndex = newReadings.last?.index ?? lastIndex
+        if let replayTargetIndex, latestProcessedIndex >= replayTargetIndex {
+            self.replayTargetIndex = nil
+            requiresHistoryReplay = false
+        }
         let state = Sibionics2ReadingState(
             lastDeliveredIndex: UInt16(exactly: latestProcessedIndex),
             processorSnapshot: processor.snapshot(),
