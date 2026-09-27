@@ -349,7 +349,7 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         for invalid in [Double.nan, Double.infinity, 0.79, 2.51] {
             XCTAssertFalse(Sibionics2FactorySensitivity.setOverride(invalid, for: "sensor-A", userDefaults: defaults))
             XCTAssertEqual(
-                Sibionics2FactorySensitivity.override(for: "sensor-A", userDefaults: defaults),
+                try XCTUnwrap(Sibionics2FactorySensitivity.override(for: "sensor-A", userDefaults: defaults)),
                 1.37,
                 accuracy: 0.00001
             )
