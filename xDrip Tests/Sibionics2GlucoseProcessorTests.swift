@@ -150,8 +150,12 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
             for row in rows.prefix(checkpoint) {
                 _ = uninterrupted.process(row.reading(), mode: .replay)
             }
+            let snapshot = uninterrupted.snapshot()
+            XCTAssertEqual(snapshot.count, 5_040,
+                           "Checkpoint \(checkpoint) must contain the 28-byte Swift envelope, 5008-byte core hex, and checksum")
             var restored = Sibionics2GlucoseProcessor(sensitivity: 1.44)
-            XCTAssertTrue(restored.restore(from: uninterrupted.snapshot()))
+            XCTAssertTrue(restored.restore(from: snapshot),
+                          "Failed to restore Sibionics processor checkpoint \(checkpoint)")
             for row in rows.dropFirst(checkpoint) {
                 let control = try XCTUnwrap(uninterrupted.process(row.reading(), mode: .live))
                 let actual = try XCTUnwrap(restored.process(row.reading(), mode: .live))
