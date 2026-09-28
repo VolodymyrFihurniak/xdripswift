@@ -146,6 +146,13 @@ struct Sibionics2ProtocolCodec {
         packet([0x08, UInt8(truncatingIfNeeded: lastIndex), UInt8(truncatingIfNeeded: lastIndex >> 8), 0, 0])
     }
 
+    /// V120 maintenance reset command from JugglucoNG's Sibionics protocol.
+    /// Reset is intentionally independent of local history; the batch processor
+    /// switches sessions only after the sensor confirms its new start/index.
+    func buildResetPacket(resetType: UInt8 = 0) -> Data {
+        packet([0x10, resetType])
+    }
+
     private func packet(_ body: [UInt8]) -> Data {
         var bytes = [UInt8(body.count + 1)] + body
         bytes.append(0 &- bytes.reduce(UInt8(0), { $0 &+ $1 }))

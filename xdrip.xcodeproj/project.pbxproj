@@ -840,6 +840,8 @@
 		D3E300070000000000000001 /* CGMSibionics2Transmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E300080000000000000001 /* CGMSibionics2Transmitter.swift */; };
 		D3E300090000000000000001 /* Sibionics2ReadingStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E3000A0000000000000001 /* Sibionics2ReadingStateStore.swift */; };
 		D3E3000B0000000000000001 /* Sibionics2ReadingBatchProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E3000C0000000000000001 /* Sibionics2ReadingBatchProcessor.swift */; };
+		D3E400010000000000000001 /* Sibionics2Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E400020000000000000001 /* Sibionics2Configuration.swift */; };
+		D3E500010000000000000001 /* Sibionics2Calibrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E500020000000000000001 /* Sibionics2Calibrator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -2060,6 +2062,8 @@
 		D3E3000A0000000000000001 /* Sibionics2ReadingStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sibionics2ReadingStateStore.swift"; sourceTree = "<group>"; };
 		D3E3000C0000000000000001 /* Sibionics2ReadingBatchProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sibionics2ReadingBatchProcessor.swift"; sourceTree = "<group>"; };
 		D3E3000D0000000000000001 /* xdrip v33.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v33.xcdatamodel"; sourceTree = "<group>"; };
+		D3E400020000000000000001 /* Sibionics2Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Configuration.swift; sourceTree = "<group>"; };
+		D3E500020000000000000001 /* Sibionics2Calibrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Calibrator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2661,6 +2665,7 @@
 				D3E300080000000000000001 /* CGMSibionics2Transmitter.swift */,
 				D3E3000A0000000000000001 /* Sibionics2ReadingStateStore.swift */,
 				D3E3000C0000000000000001 /* Sibionics2ReadingBatchProcessor.swift */,
+				D3E400020000000000000001 /* Sibionics2Configuration.swift */,
 				A1B200013102000100000001 /* Sibionics2GlucoseProcessor.swift */,
 				A1B200033102000100000001 /* Sibionics2FactorySensitivity.swift */,
 				51B200013102000100000001 /* Sibionics2Protocol.swift */,
@@ -3592,6 +3597,7 @@
 			children = (
 				F8E3C3AC21FE551C00907A04 /* DexcomCalibrator.swift */,
 				F8025E5321EE8D2100ECF0C0 /* Libre1Calibrator.swift */,
+				D3E500020000000000000001 /* Sibionics2Calibrator.swift */,
 				F51B9F7C24B216CD00FC0643 /* Libre1NonFixedSlopeCalibrator.swift */,
 				F8EEDD6323020FAD00D2D610 /* NoCalibrator.swift */,
 				F8A54AAC22D6859200934E7A /* SlopeParameters.swift */,
@@ -4539,6 +4545,7 @@
 				D3E300070000000000000001 /* CGMSibionics2Transmitter.swift in Sources */,
 				D3E300090000000000000001 /* Sibionics2ReadingStateStore.swift in Sources */,
 				D3E3000B0000000000000001 /* Sibionics2ReadingBatchProcessor.swift in Sources */,
+				D3E400010000000000000001 /* Sibionics2Configuration.swift in Sources */,
 				5A0100023015000100000001 /* GlucoseRangeDistribution.swift in Sources */,
 				4D7A00023014000100000001 /* TroubleshootingLog.swift in Sources */,
 				4D7A00043014000100000001 /* TroubleshootingLogView.swift in Sources */,
@@ -4661,6 +4668,7 @@
 				47B60F3726F389E2003198D3 /* LandscapeChartView.swift in Sources */,
 				4D42B0013013000100000001 /* LandscapeLoopalyzerChart.swift in Sources */,
 				F8025E5421EE8D2100ECF0C0 /* Libre1Calibrator.swift in Sources */,
+				D3E500010000000000000001 /* Sibionics2Calibrator.swift in Sources */,
 				F8F71D742B7C1143005076E8 /* CGMG7Transmitter.swift in Sources */,
 				47F012D12FC9D71700112233 /* DexcomG7AuthBridge.m in Sources */,
 				47F012D42FC9D71700112233 /* DexcomG7ECC.c in Sources */,

@@ -13,6 +13,8 @@ The algorithm source was adapted to common Kotlin: Java unsigned integer compari
 
 The Sibionics probe sensitivity decoder in `xDrip/BluetoothTransmitter/CGM/Sibionics2/Sibionics2FactorySensitivity.swift` is behavior-adapted from JugglucoNG's `SibionicsProbeSensitivity.kt` and `SibionicsProtocol.kt`; the short decoder retains the original A/P-base checksum rules. No iGlucco source code is included.
 
+The `JugglucoNG` calibration profile and V120 maintenance-reset command in `xDrip/BluetoothTransmitter/CGM/Sibionics2/Sibionics2Configuration.swift` and `Sibionics2Protocol.swift` are behavior-adapted from ctqvva/JugglucoNG commit `da788a73f897a19707adf3111e39f2735cfc2cad` (`Common/src/main/java/tk/glucodata/data/calibration/CalibrationMath.kt` and `Common/src/main/java/tk/glucodata/drivers/sibionics/SibionicsProtocol.kt`). JugglucoNG is licensed under GPL-3.0; this repository is distributed under GPL-3.0 as well.
+
 ## JugglucoNG V116A conformance fixture
 
 The startup fixture and native-state vectors are adapted from the same pinned revision:

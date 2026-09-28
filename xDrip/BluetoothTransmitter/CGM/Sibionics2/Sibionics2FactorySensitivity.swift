@@ -15,46 +15,11 @@ enum Sibionics2FactorySensitivity {
         sensitivity.isFinite && (0.8...2.5).contains(sensitivity)
     }
 
-    private static let overrideKeyPrefix = "sibionics2.factorySensitivity."
-
-    /// A factory sensitivity override belongs to one saved BLE peripheral. It is
-    /// separate from pairing/discovery, so users can select a sensor without a factory code.
-    static func override(for identifier: String, userDefaults: UserDefaults = .standard) -> Double? {
-        guard let key = overrideKey(for: identifier),
-              userDefaults.object(forKey: key) != nil else { return nil }
-        let value = userDefaults.double(forKey: key)
-        return isSupported(value) ? value : nil
-    }
-
-    @discardableResult
-    static func setOverride(
-        _ sensitivity: Double?,
-        for identifier: String,
-        userDefaults: UserDefaults = .standard
-    ) -> Bool {
-        guard let key = overrideKey(for: identifier) else { return false }
-        if let sensitivity {
-            guard isSupported(sensitivity) else { return false }
-            userDefaults.set(sensitivity, forKey: key)
-        } else {
-            userDefaults.removeObject(forKey: key)
-        }
-        return true
-    }
-
     static func effectiveSensitivity(
-        for identifier: String,
         advertisedName: String?,
-        userDefaults: UserDefaults = .standard
+        probeCode: String? = nil
     ) -> Double {
-        override(for: identifier, userDefaults: userDefaults)
-            ?? resolve(advertisedName: advertisedName)
-    }
-
-    private static func overrideKey(for identifier: String) -> String? {
-        let normalized = identifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalized.isEmpty else { return nil }
-        return overrideKeyPrefix + normalized
+        resolve(probeCode: probeCode, shortCode: advertisedName)
     }
 
     static func decodeProbe(_ code: String?) -> Double? {

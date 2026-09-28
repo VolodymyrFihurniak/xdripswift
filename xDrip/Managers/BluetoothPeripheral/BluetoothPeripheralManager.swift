@@ -1274,9 +1274,18 @@ extension BluetoothPeripheralManager: BluetoothPeripheralManaging {
                 
 
         }
-        
+
     }
-    
+
+    /// Rebuilds the active CGM calibration pipeline after a sensor-specific
+    /// calibration profile changes without changing the transmitter's web OOP setting.
+    func cgmConfigurationDidChange(for bluetoothPeripheral: BluetoothPeripheral) {
+        guard bluetoothPeripheral.blePeripheral.shouldconnect,
+              let cgmTransmitter = getCGMTransmitter(for: bluetoothPeripheral) else { return }
+        cgmTransmitter.requestNewReading()
+        cgmTransmitterInfoChanged()
+    }
+
     func startScanningForNewDevice(type: BluetoothPeripheralType, transmitterId: String?, dexcomG6BluetoothSlot: DexcomG6BluetoothSlot, dexcomConfiguration: DexcomAddConfiguration?, bluetoothTransmitterDelegate: BluetoothTransmitterDelegate?, callBackForScanningResult: ((BluetoothTransmitter.startScanningResult) -> Void)?, callback: @escaping (BluetoothPeripheral) -> Void)  {
         
         callBackAfterDiscoveringDevice = callback

@@ -1095,7 +1095,13 @@ import AppIntents
             trace("in processNewGlucoseData, calibrator = %{public}@", log: log, category: ConstantsLog.categoryRootView, type: .info, calibrator.description())
             
             // initialize help variables
-            var lastCalibrationsForActiveSensorInLastXDays = calibrationsAccessor.getLatestCalibrations(howManyDays: 4, forSensor: activeSensor)
+            let calibrationHistoryDays = (cgmTransmitter as? CGMSibionics2Transmitter)?.calibrationMode == .jugglucoNG
+                ? 23
+                : 4
+            var lastCalibrationsForActiveSensorInLastXDays = calibrationsAccessor.getLatestCalibrations(
+                howManyDays: calibrationHistoryDays,
+                forSensor: activeSensor
+            )
             let firstCalibrationForActiveSensor = calibrationsAccessor.firstCalibrationForActiveSensor(withActivesensor: activeSensor)
             let lastCalibrationForActiveSensor = calibrationsAccessor.lastCalibrationForActiveSensor(withActivesensor: activeSensor)
             
@@ -1863,8 +1869,14 @@ import AppIntents
             calibrator = NoCalibrator()
 
         case .sibionics2:
-            // Sibionics2GlucoseProcessor applies the sensor's stock correction and returns mg/dL.
-            calibrator = NoCalibrator()
+            // The stock V116A correction produces mg/dL. Sibionics calibration
+            // profiles operate on that factory-corrected value, not Libre raw data.
+            if let sibionics2 = cgmTransmitter as? CGMSibionics2Transmitter,
+               sibionics2.calibrationMode == .jugglucoNG {
+                calibrator = Sibionics2JugglucoCalibrator()
+            } else {
+                calibrator = Sibionics2XDripCalibrator()
+            }
 
         }
         

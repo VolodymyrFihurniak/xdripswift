@@ -239,4 +239,121 @@ final class Sibionics2ProtocolTests: XCTestCase {
             XCTAssertFalse(Sibionics2DeviceIdentity.isSibionics2(name: name), "Unexpected match: \(name ?? "nil")")
         }
     }
+
+    func testAuthenticationAddressAcceptsCompactAndPrivateSelectorValueFormats() {
+        XCTAssertEqual(
+            Sibionics2AuthenticationAddress.normalize("c7:71:b0:d1:5b:32"),
+            "C7:71:B0:D1:5B:32"
+        )
+        XCTAssertEqual(
+            Sibionics2AuthenticationAddress.normalize("C771B0D15B32"),
+            "C7:71:B0:D1:5B:32"
+        )
+        XCTAssertEqual(
+            Sibionics2AuthenticationAddress.address(from: Data([0xC7, 0x71, 0xB0, 0xD1, 0x5B, 0x32])),
+            "C7:71:B0:D1:5B:32"
+        )
+        XCTAssertEqual(
+            Sibionics2AuthenticationAddress.address(from: "C7:71:B0:D1:5B:32"),
+            "C7:71:B0:D1:5B:32"
+        )
+        XCTAssertNil(Sibionics2AuthenticationAddress.normalize("000000000000"))
+        XCTAssertNil(Sibionics2AuthenticationAddress.address(from: Data(repeating: 0, count: 6)))
+    }
+
+    func testResetPacketMatchesJugglucoV120MaintenancePacket() {
+        let packet = codec.buildResetPacket()
+        let plaintext = [UInt8](codec.decrypt(packet))
+
+        XCTAssertEqual(plaintext, [0x03, 0x10, 0x00, 0xED])
+        XCTAssertEqual(plaintext.reduce(UInt8(0), { $0 &+ $1 }), 0)
+    }
+
+    func testSibionics2PollIntervalAndCalibrationModePersistPerPeripheral() throws {
+        let suiteName = "Sibionics2ConfigurationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-A", userDefaults: defaults), .oneMinute)
+        XCTAssertEqual(Sibionics2PollInterval.allCases.map(\.rawValue), [1, 5, 10, 15])
+        for interval in Sibionics2PollInterval.allCases {
+            XCTAssertTrue(Sibionics2Configuration.setPollInterval(interval, for: "sensor-A", userDefaults: defaults))
+            XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-A", userDefaults: defaults), interval)
+        }
+        XCTAssertTrue(Sibionics2Configuration.setCalibrationMode(.jugglucoNG, for: "sensor-A", userDefaults: defaults))
+        XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-A", userDefaults: defaults), .fifteenMinutes)
+        XCTAssertEqual(Sibionics2Configuration.calibrationMode(for: "sensor-A", userDefaults: defaults), .jugglucoNG)
+        XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-B", userDefaults: defaults), .oneMinute)
+        XCTAssertEqual(Sibionics2Configuration.calibrationMode(for: "sensor-B", userDefaults: defaults), .xDripPlus)
+        Sibionics2Configuration.requestReset(for: "sensor-A", userDefaults: defaults)
+        XCTAssertTrue(Sibionics2Configuration.resetRequested(for: "sensor-A", userDefaults: defaults))
+        XCTAssertFalse(Sibionics2Configuration.resetRequested(for: "sensor-B", userDefaults: defaults))
+        XCTAssertTrue(Sibionics2Configuration.autoResetEnabled(for: "sensor-A", userDefaults: defaults))
+        XCTAssertTrue(Sibionics2Configuration.setAutoResetEnabled(false, for: "sensor-A", userDefaults: defaults))
+        XCTAssertFalse(Sibionics2Configuration.autoResetEnabled(for: "sensor-A", userDefaults: defaults))
+        XCTAssertTrue(Sibionics2Configuration.autoResetEnabled(for: "sensor-B", userDefaults: defaults))
+
+        let readingTime = Date(timeIntervalSince1970: 1_800_000_000)
+        Sibionics2Configuration.recordReading(
+            Sibionics2AutoResetReading(glucoseMgDl: 110, timeStamp: readingTime),
+            for: "sensor-A", userDefaults: defaults
+        )
+        Sibionics2Configuration.recordReading(
+            Sibionics2AutoResetReading(glucoseMgDl: 112, timeStamp: readingTime.addingTimeInterval(60)),
+            for: "sensor-A", userDefaults: defaults
+        )
+        XCTAssertEqual(Sibionics2Configuration.previousReading(for: "sensor-A", userDefaults: defaults)?.glucoseMgDl, 110)
+        XCTAssertEqual(Sibionics2Configuration.latestReading(for: "sensor-A", userDefaults: defaults)?.glucoseMgDl, 112)
+    }
+
+    func testJugglucoCalibrationUsesOffsetThenBoundedWeightedRegression() {
+        let time = Date(timeIntervalSince1970: 1_800_000_000)
+        let single = [Sibionics2CalibrationAnchor(sensorMgDl: 150, fingerstickMgDl: 165, timeStamp: time)]
+        XCTAssertEqual(
+            Sibionics2JugglucoCalibrationMath.calibratedValue(180, at: time.addingTimeInterval(60), anchors: single),
+            195,
+            accuracy: 0.00001
+        )
+
+        let anchors = [
+            Sibionics2CalibrationAnchor(sensorMgDl: 100, fingerstickMgDl: 110, timeStamp: time),
+            Sibionics2CalibrationAnchor(sensorMgDl: 200, fingerstickMgDl: 220, timeStamp: time.addingTimeInterval(3600)),
+        ]
+        XCTAssertEqual(
+            Sibionics2JugglucoCalibrationMath.calibratedValue(200, at: time.addingTimeInterval(7200), anchors: anchors),
+            220,
+            accuracy: 0.00001
+        )
+    }
+
+    func testAutomaticSensorResetWaitsForStableReadingAndHonorsDisableSetting() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let resetWindowStartsAt = start.addingTimeInterval(Sibionics2AutoResetPolicy.normalResetAge)
+        let prior = Sibionics2AutoResetReading(glucoseMgDl: 119, timeStamp: resetWindowStartsAt.addingTimeInterval(-60))
+        let current = Sibionics2AutoResetReading(glucoseMgDl: 120, timeStamp: resetWindowStartsAt)
+
+        XCTAssertTrue(Sibionics2AutoResetPolicy.evaluate(
+            now: resetWindowStartsAt, sensorStartDate: start, enabled: true, previous: prior, latest: current
+        ).resetNow)
+        XCTAssertFalse(Sibionics2AutoResetPolicy.evaluate(
+            now: resetWindowStartsAt, sensorStartDate: start, enabled: false, previous: prior, latest: current
+        ).resetNow)
+        XCTAssertFalse(Sibionics2AutoResetPolicy.evaluate(
+            now: resetWindowStartsAt, sensorStartDate: start, enabled: true,
+            previous: Sibionics2AutoResetReading(glucoseMgDl: 200, timeStamp: resetWindowStartsAt.addingTimeInterval(-60)),
+            latest: Sibionics2AutoResetReading(glucoseMgDl: 205, timeStamp: resetWindowStartsAt)
+        ).resetNow)
+        let forced = Sibionics2AutoResetPolicy.evaluate(
+            now: start.addingTimeInterval(23 * 24 * 60 * 60 - 4 * 60 * 60),
+            sensorStartDate: start, enabled: true, previous: nil, latest: nil
+        )
+        XCTAssertTrue(forced.resetNow)
+        XCTAssertTrue(forced.forced)
+        let forcedWhenDisabled = Sibionics2AutoResetPolicy.evaluate(
+            now: start.addingTimeInterval(23 * 24 * 60 * 60 - 4 * 60 * 60),
+            sensorStartDate: start, enabled: false, previous: nil, latest: nil
+        )
+        XCTAssertTrue(forcedWhenDisabled.resetNow)
+        XCTAssertTrue(forcedWhenDisabled.forced)
+    }
 }

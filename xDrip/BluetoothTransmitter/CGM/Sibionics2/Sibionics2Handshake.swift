@@ -3,6 +3,7 @@
 //  xdrip
 //
 
+import CoreBluetooth
 import Foundation
 
 enum Sibionics2DeviceIdentity {
@@ -28,24 +29,61 @@ enum Sibionics2DeviceIdentity {
     }
 }
 
-/// Core Bluetooth identifies peripherals by UUID, which is not the Bluetooth address
-/// carried in a Sibionics V120 authentication command. A sensor-specific address
-/// can be entered from a verified device log when the zero-address fallback is
-/// acknowledged but the sensor never sends readings.
+/// Resolves the Bluetooth address carried by the V120 authentication packet.
+/// iOS does not publish a public MAC API; some CoreBluetooth versions expose
+/// private selectors used by the reference apps, so the explicit address field
+/// remains available as a fallback when those selectors are absent.
 enum Sibionics2AuthenticationAddress {
     private static let keyPrefix = "sibionics2.authenticationAddress."
+    private static let detectedKeyPrefix = "sibionics2.detectedBluetoothAddress."
 
     static func normalize(_ value: String) -> String? {
-        let parts = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            .uppercased()
-            .split(separator: ":", omittingEmptySubsequences: false)
-        guard parts.count == 6 else { return nil }
-        let bytes = parts.compactMap { part -> UInt8? in
-            guard part.count == 2 else { return nil }
-            return UInt8(part, radix: 16)
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard trimmed.unicodeScalars.allSatisfy({
+            CharacterSet(charactersIn: "0123456789ABCDEF:-. ").contains($0)
+        }) else { return nil }
+        let compact = String(trimmed.filter { "0123456789ABCDEF".contains($0) })
+        guard compact.count == 12 else { return nil }
+        let bytes = stride(from: 0, to: compact.count, by: 2).compactMap { offset -> UInt8? in
+            let start = compact.index(compact.startIndex, offsetBy: offset)
+            let end = compact.index(start, offsetBy: 2)
+            return UInt8(compact[start..<end], radix: 16)
         }
         guard bytes.count == 6, bytes.contains(where: { $0 != 0 }) else { return nil }
-        return bytes.map { String(format: "%02X", $0) }.joined(separator: ":")
+        return bytes.map { String(format: "%02X", Int($0)) }.joined(separator: ":")
+    }
+
+    static func address(from value: Any?) -> String? {
+        guard let value else { return nil }
+        if let text = value as? String { return normalize(text) }
+        if let data = value as? Data, data.count == 6 {
+            return normalize(data.map { String(format: "%02X", Int($0)) }.joined(separator: ":"))
+        }
+        if let data = value as? NSData, data.length == 6 {
+            return address(from: Data(referencing: data))
+        }
+        if let numbers = value as? [NSNumber], numbers.count == 6,
+           numbers.allSatisfy({ (0...255).contains($0.intValue) }) {
+            return normalize(numbers.map { String(format: "%02X", $0.intValue) }.joined(separator: ":"))
+        }
+        return nil
+    }
+
+    static func automaticAddress(for peripheral: CBPeripheral, centralManager: CBCentralManager) -> String? {
+        let peripheralSelector = NSSelectorFromString("BDAddress")
+        if peripheral.responds(to: peripheralSelector),
+           let result = peripheral.perform(peripheralSelector)?.takeUnretainedValue(),
+           let address = address(from: result) {
+            return address
+        }
+
+        let centralSelector = NSSelectorFromString("retrieveAddressForPeripheral:")
+        if centralManager.responds(to: centralSelector),
+           let result = centralManager.perform(centralSelector, with: peripheral)?.takeUnretainedValue(),
+           let address = address(from: result) {
+            return address
+        }
+        return nil
     }
 
     static func override(for identifier: String, userDefaults: UserDefaults = .standard) -> String? {
@@ -54,8 +92,31 @@ enum Sibionics2AuthenticationAddress {
         return normalize(saved)
     }
 
+    static func detected(for identifier: String, userDefaults: UserDefaults = .standard) -> String? {
+        guard let key = detectedKey(for: identifier),
+              let saved = userDefaults.string(forKey: key) else { return nil }
+        return normalize(saved)
+    }
+
+    @discardableResult
+    static func setDetected(_ value: String?, for identifier: String, userDefaults: UserDefaults = .standard) -> Bool {
+        guard let key = detectedKey(for: identifier) else { return false }
+        guard let value else {
+            userDefaults.removeObject(forKey: key)
+            return true
+        }
+        guard let address = normalize(value) else { return false }
+        userDefaults.set(address, forKey: key)
+        return true
+    }
+
+    static func effectiveAddress(for identifier: String, userDefaults: UserDefaults = .standard) -> String? {
+        override(for: identifier, userDefaults: userDefaults)
+            ?? detected(for: identifier, userDefaults: userDefaults)
+    }
+
     static func macBytes(for identifier: String, userDefaults: UserDefaults = .standard) -> [UInt8] {
-        guard let address = override(for: identifier, userDefaults: userDefaults) else {
+        guard let address = effectiveAddress(for: identifier, userDefaults: userDefaults) else {
             return [UInt8](repeating: 0, count: 6)
         }
         return address.split(separator: ":").compactMap { UInt8($0, radix: 16) }
@@ -82,6 +143,12 @@ enum Sibionics2AuthenticationAddress {
         let normalized = identifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
         return keyPrefix + normalized
+    }
+
+    private static func detectedKey(for identifier: String) -> String? {
+        let normalized = identifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+        return detectedKeyPrefix + normalized
     }
 }
 

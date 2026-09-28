@@ -23,6 +23,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var historyWriteFailures = 0
     private var historyRetryScheduled = false
     private var historyReconnectCount = 0
+    private var readingPollGeneration = 0
+    private var autoResetCheckGeneration = 0
+    private var resetDisconnectGeneration = 0
     private let transmitterLog = OSLog(subsystem: ConstantsLog.subSystem, category: ConstantsLog.categoryBluetoothPeripheralManager)
 
     init(
@@ -70,6 +73,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         rssi RSSI: NSNumber
     ) {
         let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name
+        if let address = Sibionics2AuthenticationAddress.automaticAddress(for: peripheral, centralManager: central) {
+            _ = Sibionics2AuthenticationAddress.setDetected(address, for: peripheral.identifier.uuidString)
+        }
         guard Self.canAdoptPeripheral(
             advertisedName: name,
             storedAddress: deviceAddress,
@@ -92,6 +98,15 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             BluetoothPeripheralScanResult(identifier: identifier, name: name, rssi: RSSI.intValue),
             bluetoothTransmitter: self
         )
+    }
+
+    override func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        if let address = Sibionics2AuthenticationAddress.automaticAddress(for: peripheral, centralManager: central) {
+            _ = Sibionics2AuthenticationAddress.setDetected(address, for: peripheral.identifier.uuidString)
+            trace("Sibionics 2 Bluetooth address detected automatically",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+        }
+        super.centralManager(central, didConnect: peripheral)
     }
 
     func selectDiscoveredPeripheral(identifier: String) {
@@ -126,6 +141,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     override func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        readingPollGeneration += 1
+        resetDisconnectGeneration += 1
         handshakeAttempt += 1
         handshake = nil
         streamingReady = false
@@ -186,8 +203,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             }
             self.handshake = handshake
             if !streamingReady {
-                streamingReady = true
-                handshakeReconnectCount = 0
+                if let address = deviceAddress {
+                    markStreamingReady(for: address)
+                }
                 trace("Sibionics 2 streaming started with first data packet (ready ACK optional)",
                       log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
             }
@@ -200,6 +218,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
     override func prepareForRelease() {
         runOnCentralQueue {
+            self.readingPollGeneration += 1
+            self.autoResetCheckGeneration += 1
+            self.resetDisconnectGeneration += 1
             self.handshake = nil
             self.batchProcessor = nil
             self.streamingReady = false
@@ -212,10 +233,10 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         super.prepareForRelease()
     }
 
-    /// Rebuilds state after the per-device factory sensitivity changes. The
-    /// snapshot contains its sensitivity, so the batch processor will reject the
-    /// old snapshot and request history from the sensor before publishing again.
-    func factorySensitivityDidChange(for address: String) {
+    /// Rebuilds the stock correction after a probe code is changed. The
+    /// processor snapshot contains the sensitivity, so replay from the sensor
+    /// is required before corrected values are published again.
+    func probeCodeDidChange(for address: String) {
         runOnCentralQueue { [weak self] in
             guard let self,
                   let currentAddress = self.deviceAddress,
@@ -229,10 +250,61 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             self.historyRecoveryToken += 1
             self.historyRetryScheduled = false
             self.historyWriteFailures = 0
-            trace("Sibionics 2 factory sensitivity changed; restarting processor from saved sensor history",
+            trace("Sibionics 2 probe code changed; replaying history with decoded factory sensitivity",
                   log: self.transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
             self.requestNewReading()
+        }
+    }
+
+    var calibrationMode: Sibionics2CalibrationMode {
+        guard let address = deviceAddress else { return .xDripPlus }
+        return Sibionics2Configuration.calibrationMode(for: address)
+    }
+
+    func pollIntervalDidChange(for address: String) {
+        runOnCentralQueue { [weak self] in
+            guard let self,
+                  let currentAddress = self.deviceAddress,
+                  currentAddress.caseInsensitiveCompare(address) == .orderedSame else { return }
+            self.readingPollGeneration += 1
+            self.scheduleReadingPoll(for: currentAddress)
+        }
+    }
+
+    func autoResetSettingDidChange(for address: String) {
+        runOnCentralQueue { [weak self] in
+            guard let self,
+                  let currentAddress = self.deviceAddress,
+                  currentAddress.caseInsensitiveCompare(address) == .orderedSame else { return }
+            self.autoResetCheckGeneration += 1
+            self.scheduleAutoResetCheck(for: currentAddress)
+        }
+    }
+
+    func requestSensorReset(for requestedAddress: String? = nil) {
+        guard let address = requestedAddress ?? deviceAddress else {
+            trace("Sibionics 2 reset requested before a peripheral address was assigned",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+            return
+        }
+        Sibionics2Configuration.requestReset(for: address)
+        runOnCentralQueue { [weak self] in
+            guard let self else { return }
+            guard let currentAddress = self.deviceAddress else {
+                self.connect()
+                return
+            }
+            guard currentAddress.caseInsensitiveCompare(address) == .orderedSame else {
+                trace("Sibionics 2 reset request ignored because the transmitter is assigned to a different peripheral",
+                      log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+                return
+            }
+            if self.streamingReady {
+                self.sendPendingResetIfReady(for: currentAddress)
+            } else if self.getConnectionStatus() != .connecting {
+                self.connect()
+            }
         }
     }
 
@@ -261,7 +333,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     func isNonFixedSlopeEnabled() -> Bool { false }
     func setWebOOPEnabled(enabled: Bool) {}
     func isWebOOPEnabled() -> Bool { true }
-    func overruleIsWebOOPEnabled() -> Bool { false }
+    func overruleIsWebOOPEnabled() -> Bool { true }
     func nonWebOOPAllowed() -> Bool { false }
     func isAnubisG6() -> Bool { false }
     func cgmTransmitterType() -> CGMTransmitterType { .sibionics2 }
@@ -284,6 +356,116 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     func getCBUUID_Service() -> String { Sibionics2ProtocolCodec.serviceUUID.uuidString }
     func getCBUUID_Receive() -> String { Sibionics2ProtocolCodec.notifyUUID.uuidString }
 
+    private func markStreamingReady(for address: String) {
+        streamingReady = true
+        handshakeReconnectCount = 0
+        scheduleReadingPoll(for: address)
+        sendPendingResetIfReady(for: address)
+    }
+
+    private func scheduleReadingPoll(for address: String) {
+        guard streamingReady else { return }
+        readingPollGeneration += 1
+        let generation = readingPollGeneration
+        let interval = Sibionics2Configuration.pollInterval(for: address)
+        runOnCentralQueue(after: interval.seconds) { [weak self] in
+            guard let self,
+                  self.readingPollGeneration == generation,
+                  self.streamingReady,
+                  let currentAddress = self.deviceAddress,
+                  currentAddress.caseInsensitiveCompare(address) == .orderedSame else { return }
+            if Sibionics2Configuration.resetRequested(for: currentAddress) {
+                self.sendPendingResetIfReady(for: currentAddress)
+            } else {
+                _ = self.sendDataRequest(for: currentAddress)
+            }
+            self.scheduleReadingPoll(for: currentAddress)
+        }
+    }
+
+    private func sendPendingResetIfReady(for address: String) {
+        guard streamingReady,
+              Sibionics2Configuration.resetRequested(for: address) else { return }
+        guard writeCommand(codec.buildResetPacket(), label: "maintenance-reset") else {
+            resetDisconnectGeneration += 1
+            let generation = resetDisconnectGeneration
+            runOnCentralQueue(after: 5) { [weak self] in
+                guard let self,
+                      self.resetDisconnectGeneration == generation,
+                      let currentAddress = self.deviceAddress,
+                      currentAddress.caseInsensitiveCompare(address) == .orderedSame,
+                      self.streamingReady,
+                      Sibionics2Configuration.resetRequested(for: currentAddress) else { return }
+                self.sendPendingResetIfReady(for: currentAddress)
+            }
+            return
+        }
+
+        Sibionics2Configuration.markResetSent(for: address)
+        readingPollGeneration += 1
+        resetDisconnectGeneration += 1
+        let generation = resetDisconnectGeneration
+        trace("Sibionics 2 reset command queued; keeping local session until restart is confirmed",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+        runOnCentralQueue(after: 15) { [weak self] in
+            guard let self,
+                  self.resetDisconnectGeneration == generation,
+                  Sibionics2Configuration.awaitingResetRestart(for: address) else { return }
+            trace("Sibionics 2 reset did not disconnect; reconnecting to probe for a new session",
+                  log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+            self.disconnect()
+        }
+    }
+
+    private func scheduleAutoResetCheck(for address: String) {
+        autoResetCheckGeneration += 1
+        let generation = autoResetCheckGeneration
+        guard !Sibionics2Configuration.awaitingResetRestart(for: address),
+              let startDate = stateStore.load(for: address)?.sensorStartDate else { return }
+
+        let age = Date().timeIntervalSince(startDate)
+        let autoResetEnabled = Sibionics2Configuration.autoResetEnabled(for: address)
+        let hardResetAge = Sibionics2AutoResetPolicy.expectedSensorLife
+            - Sibionics2AutoResetPolicy.preExpiryGuard
+        let delay: TimeInterval
+        if !autoResetEnabled {
+            delay = max(1, hardResetAge - age)
+        } else if age < Sibionics2AutoResetPolicy.normalResetAge {
+            delay = max(1, Sibionics2AutoResetPolicy.normalResetAge - age)
+        } else {
+            delay = 15 * 60
+        }
+        runOnCentralQueue(after: delay) { [weak self] in
+            guard let self, self.autoResetCheckGeneration == generation else { return }
+            self.evaluateAutoReset(for: address)
+        }
+    }
+
+    private func evaluateAutoReset(for address: String) {
+        guard !Sibionics2Configuration.awaitingResetRestart(for: address) else { return }
+        let decision = Sibionics2AutoResetPolicy.evaluate(
+            now: Date(),
+            sensorStartDate: stateStore.load(for: address)?.sensorStartDate,
+            enabled: Sibionics2Configuration.autoResetEnabled(for: address),
+            previous: Sibionics2Configuration.previousReading(for: address),
+            latest: Sibionics2Configuration.latestReading(for: address)
+        )
+        guard decision.resetNow else {
+            scheduleAutoResetCheck(for: address)
+            return
+        }
+
+        trace("Sibionics 2 automatic reset due; forced=%{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+              type: .info, decision.forced.description)
+        Sibionics2Configuration.requestReset(for: address)
+        if streamingReady {
+            sendPendingResetIfReady(for: address)
+        } else if getConnectionStatus() != .connecting {
+            connect()
+        }
+    }
+
     private func startHandshake() {
         guard let address = deviceAddress, let sessionKey = codec.deriveSessionKey() else {
             trace("could not initialize Sibionics 2 authentication", log: transmitterLog,
@@ -300,19 +482,23 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         historyWriteFailures = 0
         handshakeAttempt += 1
         let attempt = handshakeAttempt
-        let configuredAddress = Sibionics2AuthenticationAddress.override(for: address)
+        let manualAddress = Sibionics2AuthenticationAddress.override(for: address)
+        let detectedAddress = Sibionics2AuthenticationAddress.detected(for: address)
         trace("Sibionics 2 authentication address source=%{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
-              type: .info, configuredAddress == nil ? "zero fallback" : "saved Bluetooth address")
+              type: .info,
+              manualAddress != nil ? "manual override" : detectedAddress != nil ? "private selector" : "zero fallback")
+        let probeAfterReset = Sibionics2Configuration.resetProbePending(for: address)
         var newHandshake = Sibionics2Handshake(
             macAddress: Sibionics2AuthenticationAddress.macBytes(for: address),
             sessionKey: sessionKey,
-            lastDeliveredIndex: batchProcessor?.state?.lastDeliveredIndex
+            lastDeliveredIndex: probeAfterReset ? nil : batchProcessor?.state?.lastDeliveredIndex
         )
         let command = newHandshake.start(at: Date())
         guard !command.isEmpty else { return }
         handshake = newHandshake
         _ = writeCommand(command, label: "auth")
+        scheduleAutoResetCheck(for: address)
         runOnCentralQueue(after: 75) { [weak self] in
             guard let self, self.handshakeAttempt == attempt else { return }
             if self.streamingReady {
@@ -337,14 +523,15 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
            batchProcessor.state != nil || stateStore.load(for: address) == nil {
             return batchProcessor
         }
-        let override = Sibionics2FactorySensitivity.override(for: address)
+        let probeCode = Sibionics2Configuration.probeCode(for: address)
         let sensitivity = Sibionics2FactorySensitivity.effectiveSensitivity(
-            for: address,
-            advertisedName: advertisedName
+            advertisedName: advertisedName,
+            probeCode: probeCode
         )
         trace("Sibionics 2 sensitivity=%{public}@ source=%{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
-              type: .info, sensitivity.description, override == nil ? "automatic" : "peripheral override")
+              type: .info, sensitivity.description,
+              probeCode != nil ? "QR probe code" : "advertisement fallback")
         return Sibionics2ReadingBatchProcessor(
             deviceIdentifier: address,
             stateStore: stateStore,
@@ -398,8 +585,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             }
             _ = writeCommand(nextCommand, label: label)
         } else if !wasStreaming && handshake.isStreaming {
-            streamingReady = true
-            handshakeReconnectCount = 0
+            if let address = deviceAddress {
+                markStreamingReady(for: address)
+            }
             trace("Sibionics 2 received streaming-ready ACK; waiting for glucose readings",
                   log: transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
@@ -490,6 +678,25 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             abs($0.timeIntervalSince(sensorStartDate)) > 10 * 60
         } ?? true
         let sensorAge = max(0, receivedAt.timeIntervalSince(sensorStartDate))
+        if detectedNewSensor, Sibionics2Configuration.awaitingResetRestart(for: address) {
+            Sibionics2Configuration.clearResetRestart(for: address)
+            resetDisconnectGeneration += 1
+            autoResetCheckGeneration += 1
+            scheduleReadingPoll(for: address)
+            trace("Sibionics 2 confirmed a new sensor session after reset; local processor state has advanced",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+        }
+        for item in glucoseData.reversed() {
+            Sibionics2Configuration.recordReading(
+                Sibionics2AutoResetReading(glucoseMgDl: item.glucoseLevelRaw, timeStamp: item.timeStamp),
+                for: address
+            )
+        }
+        if !glucoseData.isEmpty {
+            evaluateAutoReset(for: address)
+        } else {
+            scheduleAutoResetCheck(for: address)
+        }
         guard detectedNewSensor || !glucoseData.isEmpty else { return }
 
         DispatchQueue.main.async { [weak self] in
