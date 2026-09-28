@@ -209,19 +209,18 @@ struct Sibionics2AutoResetDecision {
 }
 
 enum Sibionics2AutoResetPolicy {
-    // Both reset boundaries currently use the same four-hour safety margin,
-    // while remaining separate policies for scheduled and forced reset.
-    private static let resetDeadlineMarginHours: Double = 4
+    private static let scheduledResetWindowLeadHours: Double = 4
+    private static let forcedResetDeadlineGuardHours: Double = 4
 
     /// The normal reset window opens one day before the sensor profile expires.
     static let scheduledResetAgeDays = Sibionics2SensorProfile.expectedLifeInDays - 1
-    static let resetWindowLeadHours = resetDeadlineMarginHours
+    static let resetWindowLeadHours = scheduledResetWindowLeadHours
     static let scheduledResetAge = TimeInterval(scheduledResetAgeDays) * Sibionics2Time.secondsPerDay
     static let resetWindowLead = resetWindowLeadHours * Sibionics2Time.secondsPerHour
     static let normalResetAge = scheduledResetAge - resetWindowLead
     static let expectedSensorLifeDays = Sibionics2SensorProfile.expectedLifeInDays
     static let expectedSensorLife = Sibionics2SensorProfile.expectedLife
-    static let preExpiryGuardHours = resetDeadlineMarginHours
+    static let preExpiryGuardHours = forcedResetDeadlineGuardHours
     static let preExpiryGuard = preExpiryGuardHours * Sibionics2Time.secondsPerHour
     static let defaultEnabled = true
 

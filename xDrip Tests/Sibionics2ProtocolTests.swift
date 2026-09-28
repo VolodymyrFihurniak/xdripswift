@@ -273,9 +273,10 @@ final class Sibionics2ProtocolTests: XCTestCase {
     }
 
     func testFactorySensitivityUsesJugglucoBaselineWhenNoFactoryCodeIsAvailable() {
+        XCTAssertEqual(Sibionics2FactorySensitivity.defaultSensitivity, 1.27)
         XCTAssertEqual(
             Sibionics2FactorySensitivity.effectiveSensitivity(advertisedName: nil),
-            Sibionics2FactorySensitivity.defaultSensitivity
+            1.27
         )
     }
 
