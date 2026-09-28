@@ -242,8 +242,8 @@ final class Sibionics2ProtocolTests: XCTestCase {
     func testOnlySibionics2AdvertisementNamesMatch() {
         XCTAssertTrue(Sibionics2DeviceIdentity.isSibionics2(name: "P123ABCD"))
         XCTAssertTrue(Sibionics2DeviceIdentity.isSibionics2(name: "p123-ABCD_56"))
-        XCTAssertTrue(Sibionics2DeviceIdentity.isSibionics2(name: "P1234567890123456"))
-        for name in [nil, "", "P12ABCD", "P123", "P12345678901234567", "P123_#ABCD",
+        XCTAssertTrue(Sibionics2DeviceIdentity.isSibionics2(name: "P123456789012345"))
+        for name in [nil, "", "P12ABCD", "P123", "P1234567890123456", "P12345678901234567", "P123_#ABCD",
                      "GS3-12345", "GKS2-ABCDE", "SiBionics CGM", "SiBionics 2",
                      "Sijoy CGM", "GS1ECO", "Dexcom G7"] as [String?] {
             XCTAssertFalse(Sibionics2DeviceIdentity.isSibionics2(name: name), "Unexpected match: \(name ?? "nil")")
