@@ -363,13 +363,17 @@ final class Sibionics2ProtocolTests: XCTestCase {
     func testAutomaticSensorResetWaitsForStableReadingAndHonorsDisableSetting() {
         XCTAssertEqual(Sibionics2SensorProfile.expectedLifeInDays, 23)
         XCTAssertEqual(Sibionics2AutoResetPolicy.expectedSensorLifeDays, 23)
-        XCTAssertEqual(Sibionics2AutoResetPolicy.normalResetAge, TimeInterval(22 * 24 * 60 * 60 - 4 * 60 * 60))
         XCTAssertEqual(Sibionics2CalibrationMode.jugglucoNG.calibrationHistoryDays, 23)
         let start = Date(timeIntervalSince1970: 1_800_000_000)
-        let resetWindowStartsAt = start.addingTimeInterval(Sibionics2AutoResetPolicy.normalResetAge)
+        // 22 days minus four hours after activation.
+        let resetWindowStartsAt = start.addingTimeInterval(1_886_400)
         let prior = Sibionics2AutoResetReading(glucoseMgDl: 119, timeStamp: resetWindowStartsAt.addingTimeInterval(-60))
         let current = Sibionics2AutoResetReading(glucoseMgDl: 120, timeStamp: resetWindowStartsAt)
+        let earlier = Sibionics2AutoResetReading(glucoseMgDl: 118, timeStamp: resetWindowStartsAt.addingTimeInterval(-120))
 
+        XCTAssertFalse(Sibionics2AutoResetPolicy.evaluate(
+            now: prior.timeStamp, sensorStartDate: start, enabled: true, previous: earlier, latest: prior
+        ).resetNow)
         XCTAssertTrue(Sibionics2AutoResetPolicy.evaluate(
             now: resetWindowStartsAt, sensorStartDate: start, enabled: true, previous: prior, latest: current
         ).resetNow)
