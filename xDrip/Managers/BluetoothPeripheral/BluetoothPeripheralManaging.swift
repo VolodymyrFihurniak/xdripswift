@@ -61,6 +61,9 @@ protocol BluetoothPeripheralManaging: BluetoothTransmitterDelegate {
     ///
     /// when user changes webOOP values in the Bluetooth peripheral detail view, this function will be called
     func receivedNewValue(webOOPEnabled: Bool, for bluetoothPeripheral: BluetoothPeripheral)
+
+    /// Rebuilds the active CGM pipeline when this peripheral's calibration settings change.
+    func cgmConfigurationDidChange(for bluetoothPeripheral: BluetoothPeripheral)
     
     /// - returns the currently in use CGMTransmitter, nil if non in use.
     /// - in use means : created, and shouldconnect = true
@@ -69,4 +72,9 @@ protocol BluetoothPeripheralManaging: BluetoothTransmitterDelegate {
     /// only applicable for Libre transmitters. To request a new reading.
     func requestNewReading()
     
+}
+
+/// Default keeps alternate managers and test doubles source-compatible.
+extension BluetoothPeripheralManaging {
+    func cgmConfigurationDidChange(for bluetoothPeripheral: BluetoothPeripheral) {}
 }
