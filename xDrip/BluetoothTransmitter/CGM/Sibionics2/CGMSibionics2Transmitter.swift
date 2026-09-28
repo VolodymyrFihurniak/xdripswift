@@ -130,8 +130,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     override func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         super.peripheral(peripheral, didDiscoverCharacteristicsFor: service, error: error)
         guard error == nil, service.uuid == Sibionics2ProtocolCodec.serviceUUID else { return }
-        characteristicWriteType = service.characteristics?
-            .first(where: { $0.uuid == Sibionics2ProtocolCodec.writeUUID })
+        characteristicWriteType = service.characteristics?.first(where: { $0.uuid == Sibionics2ProtocolCodec.writeUUID })
             .flatMap { Self.writeType(for: $0.properties) }
         trace("Sibionics 2 FF32 write type: %{public}@", log: transmitterLog,
               category: ConstantsLog.categoryBluetoothPeripheralManager,
