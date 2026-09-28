@@ -118,21 +118,20 @@ final class CareLinkMemoryTokenStore: CareLinkTokenStoring, @unchecked Sendable 
     private let lock = NSLock()
     private var storedToken: CareLinkToken?
 
-    func load() throws -> CareLinkToken? {
-        lock.lock()
-        defer { lock.unlock() }
-        return storedToken
+    var token: CareLinkToken? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedToken
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            storedToken = newValue
+        }
     }
 
-    func save(_ token: CareLinkToken) throws {
-        lock.lock()
-        defer { lock.unlock() }
-        storedToken = token
-    }
-
-    func clear() throws {
-        lock.lock()
-        defer { lock.unlock() }
-        storedToken = nil
-    }
+    func load() throws -> CareLinkToken? { token }
+    func save(_ token: CareLinkToken) throws { self.token = token }
+    func clear() throws { token = nil }
 }
