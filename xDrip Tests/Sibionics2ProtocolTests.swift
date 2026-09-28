@@ -272,11 +272,24 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertNil(Sibionics2AuthenticationAddress.address(from: Data(repeating: 0, count: 6)))
     }
 
-    func testFactorySensitivityUsesJugglucoBaselineWhenNoFactoryCodeIsAvailable() {
-        XCTAssertEqual(Sibionics2FactorySensitivity.defaultSensitivity, 1.27)
+    func testFactorySensitivityUsesJugglucoVariantFallbackWhenFactoryCodeIsMissing() {
+        // JugglucoNG retries the Sibionics 2 variant token after invalid QR and BLE codes.
         XCTAssertEqual(
             Sibionics2FactorySensitivity.effectiveSensitivity(advertisedName: nil),
-            1.27
+            1.44,
+            accuracy: 0.00001
+        )
+        XCTAssertEqual(
+            Sibionics2FactorySensitivity.effectiveSensitivity(
+                advertisedName: "P225XXXX", probeCode: "invalid"
+            ),
+            1.44,
+            accuracy: 0.00001
+        )
+        XCTAssertEqual(
+            Sibionics2FactorySensitivity.effectiveSensitivity(advertisedName: "P2251500"),
+            1.5,
+            accuracy: 0.00001
         )
     }
 
