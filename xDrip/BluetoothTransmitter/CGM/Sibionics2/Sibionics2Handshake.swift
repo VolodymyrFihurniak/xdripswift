@@ -39,11 +39,23 @@ enum Sibionics2AuthenticationAddress {
 
     static func normalize(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard trimmed.unicodeScalars.allSatisfy({
-            CharacterSet(charactersIn: "0123456789ABCDEF:-. ").contains($0)
-        }) else { return nil }
-        let compact = String(trimmed.filter { "0123456789ABCDEF".contains($0) })
-        guard compact.count == 12 else { return nil }
+        let hexDigits = CharacterSet(charactersIn: "0123456789ABCDEF")
+        let compact: String
+
+        if trimmed.contains(":") {
+            let octets = trimmed.split(separator: ":", omittingEmptySubsequences: false)
+            guard octets.count == 6,
+                  octets.allSatisfy({
+                      $0.unicodeScalars.count == 2 &&
+                          $0.unicodeScalars.allSatisfy({ hexDigits.contains($0) })
+                  }) else { return nil }
+            compact = octets.map(String.init).joined()
+        } else {
+            guard trimmed.unicodeScalars.count == 12,
+                  trimmed.unicodeScalars.allSatisfy({ hexDigits.contains($0) }) else { return nil }
+            compact = trimmed
+        }
+
         let bytes = stride(from: 0, to: compact.count, by: 2).compactMap { offset -> UInt8? in
             let start = compact.index(compact.startIndex, offsetBy: offset)
             let end = compact.index(start, offsetBy: 2)

@@ -147,7 +147,14 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertTrue(Sibionics2AuthenticationAddress.setOverride(
             "C7:71:B0:D1:5B:32", for: identifier, userDefaults: defaults
         ))
-        for input in ["C7:71:B0:D1:5B", "C7:71:B0:D1:5B:GG", "00:00:00:00:00:00", "C7-71-B0-D1-5B-32"] {
+        for input in [
+            "C7:71:B0:D1:5B",
+            "C7:71:B0:D1:5B:GG",
+            "00:00:00:00:00:00",
+            "C7-71-B0-D1-5B-32",
+            "C7::71:B0:D1:5B:32",
+            "C7.71.B0.D1.5B.32"
+        ] {
             XCTAssertNil(Sibionics2AuthenticationAddress.normalize(input))
             XCTAssertFalse(Sibionics2AuthenticationAddress.setOverride(input, for: identifier, userDefaults: defaults))
             XCTAssertEqual(Sibionics2AuthenticationAddress.override(for: identifier, userDefaults: defaults),
