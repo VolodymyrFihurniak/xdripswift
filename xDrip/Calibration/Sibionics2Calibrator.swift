@@ -51,20 +51,12 @@ final class Sibionics2JugglucoCalibrator: Calibrator {
             nsManagedObjectContext: nsManagedObjectContext
         )
 
-        var calibrations = lastCalibrationsForActiveSensorInLastXDays
-        if let firstCalibration,
-           !calibrations.contains(where: { $0.objectID == firstCalibration.objectID }) {
-            calibrations.append(firstCalibration)
-        }
-        let anchors = calibrations.map { calibration in
-            Sibionics2CalibrationAnchor(
-                sensorMgDl: calibration.estimateRawAtTimeOfCalibration > 0
-                    ? calibration.estimateRawAtTimeOfCalibration
-                    : calibration.adjustedRawValue,
-                fingerstickMgDl: calibration.bg,
-                timeStamp: calibration.timeStamp
-            )
-        }
+        // NoCalibrator leaves this field at zero. Manual calibration uses it
+        // as the sensor-side value, and Sibionics requires no age adjustment.
+        reading.ageAdjustedRawValue = rawData
+        let anchors = Self.uniqueAnchors(
+            lastCalibrationsForActiveSensorInLastXDays + [firstCalibration].compactMap { $0 }
+        )
         let corrected = Sibionics2JugglucoCalibrationMath.calibratedValue(
             rawData,
             at: timeStamp ?? Date(),
@@ -87,6 +79,10 @@ final class Sibionics2JugglucoCalibrator: Calibrator {
         deviceName: String?,
         nsManagedObjectContext: NSManagedObjectContext
     ) -> (firstCalibration: Calibration?, secondCalibration: Calibration?) {
+        // Repair readings created before the factory value was preserved here.
+        for reading in lastBgReadingsWithCalculatedValue0AndForSensor {
+            reading.ageAdjustedRawValue = reading.rawData
+        }
         let result = Sibionics2XDripCalibrator().initialCalibration(
             firstCalibrationBgValue: firstCalibrationBgValue,
             firstCalibrationTimeStamp: firstCalibrationTimeStamp,
@@ -96,7 +92,7 @@ final class Sibionics2JugglucoCalibrator: Calibrator {
             deviceName: deviceName,
             nsManagedObjectContext: nsManagedObjectContext
         )
-        let anchors = [result.firstCalibration, result.secondCalibration].compactMap { $0 }.map { Self.anchor($0) }
+        let anchors = Self.uniqueAnchors([result.firstCalibration, result.secondCalibration].compactMap { $0 })
         for index in lastBgReadingsWithCalculatedValue0AndForSensor.indices {
             let reading = lastBgReadingsWithCalculatedValue0AndForSensor[index]
             reading.calculatedValue = Self.clampedValue(
@@ -121,19 +117,23 @@ final class Sibionics2JugglucoCalibrator: Calibrator {
         deviceName: String?,
         nsManagedObjectContext: NSManagedObjectContext
     ) -> Calibration? {
-        guard let lastBgReading,
-              let calibration = Sibionics2XDripCalibrator().createNewCalibration(
-                bgValue: bgValue,
-                lastBgReading: lastBgReading,
-                sensor: sensor,
-                lastCalibrationsForActiveSensorInLastXDays: &lastCalibrationsForActiveSensorInLastXDays,
-                firstCalibration: firstCalibration,
-                deviceName: deviceName,
-                nsManagedObjectContext: nsManagedObjectContext
-              ) else { return nil }
+        guard let lastBgReading else { return nil }
+        lastBgReading.ageAdjustedRawValue = lastBgReading.rawData
+        guard let calibration = Sibionics2XDripCalibrator().createNewCalibration(
+            bgValue: bgValue,
+            lastBgReading: lastBgReading,
+            sensor: sensor,
+            lastCalibrationsForActiveSensorInLastXDays: &lastCalibrationsForActiveSensorInLastXDays,
+            firstCalibration: firstCalibration,
+            deviceName: deviceName,
+            nsManagedObjectContext: nsManagedObjectContext
+        ) else { return nil }
 
-        var anchors = lastCalibrationsForActiveSensorInLastXDays.map { Self.anchor($0) }
-        anchors.append(Self.anchor(calibration))
+        // The xDrip calibration path already inserts the new calibration into
+        // the inout history. Count each stored calibration only once.
+        let anchors = Self.uniqueAnchors(
+            lastCalibrationsForActiveSensorInLastXDays + [firstCalibration, calibration]
+        )
         lastBgReading.calculatedValue = Self.clampedValue(
             Sibionics2JugglucoCalibrationMath.calibratedValue(
                 lastBgReading.ageAdjustedRawValue,
@@ -142,6 +142,11 @@ final class Sibionics2JugglucoCalibrator: Calibrator {
             )
         )
         return calibration
+    }
+
+    private static func uniqueAnchors(_ calibrations: [Calibration]) -> [Sibionics2CalibrationAnchor] {
+        var seen = Set<NSManagedObjectID>()
+        return calibrations.filter { seen.insert($0.objectID).inserted }.map { anchor($0) }
     }
 
     private static func anchor(_ calibration: Calibration) -> Sibionics2CalibrationAnchor {

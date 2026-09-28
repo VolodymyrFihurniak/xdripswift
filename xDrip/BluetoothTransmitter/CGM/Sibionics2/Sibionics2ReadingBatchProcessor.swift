@@ -82,15 +82,13 @@ struct Sibionics2ReadingBatchProcessor {
             replayTargetIndex = max(replayTargetIndex ?? 0, uniqueReadings.last?.index ?? firstReading.index)
             requiresHistoryReplay = true
             if firstConnectionWithoutHistory {
-                let pendingState = Sibionics2ReadingState(
+                readingState = Sibionics2ReadingState(
                     lastDeliveredIndex: nil,
                     processorSnapshot: processor.snapshot(),
-                    sensorStartDate: inferredStartDate,
-                    replayTargetIndex: replayTargetIndex.flatMap { UInt16(exactly: $0) }
+                    sensorStartDate: inferredStartDate
                 )
-                readingState = pendingState
-                stateStore.save(pendingState, for: deviceIdentifier)
             }
+            persistReplayTarget()
             return []
         }
 
@@ -107,6 +105,7 @@ struct Sibionics2ReadingBatchProcessor {
             guard reading.index == expectedIndex else {
                 replayTargetIndex = max(replayTargetIndex ?? 0, uniqueReadings.last?.index ?? reading.index)
                 requiresHistoryReplay = true
+                persistReplayTarget()
                 break
             }
             newReadings.append(reading)
@@ -158,6 +157,20 @@ struct Sibionics2ReadingBatchProcessor {
                 }
                 return $0.timeStamp > $1.timeStamp
             }
+    }
+
+    /// A missing page can be followed by an app restart before any new minute
+    /// is processed. Persist the target without advancing the saved cursor.
+    private mutating func persistReplayTarget() {
+        guard let state = readingState else { return }
+        let updated = Sibionics2ReadingState(
+            lastDeliveredIndex: state.lastDeliveredIndex,
+            processorSnapshot: state.processorSnapshot,
+            sensorStartDate: state.sensorStartDate,
+            replayTargetIndex: replayTargetIndex.flatMap { UInt16(exactly: $0) }
+        )
+        readingState = updated
+        stateStore.save(updated, for: deviceIdentifier)
     }
 
     private func shouldResetSession(inferredStartDate: Date, firstReadingIndex: Int) -> Bool {

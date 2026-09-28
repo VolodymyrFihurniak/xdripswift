@@ -165,6 +165,71 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         return context
     }
 
+    func testJugglucoReadingPreservesFactoryValueForManualCalibration() throws {
+        let context = try inMemoryContext(model: managedObjectModel())
+        let sensor = Sensor(startDate: sensorStartDate, nsManagedObjectContext: context)
+        var readings: [BgReading] = []
+        var calibrations: [Calibration] = []
+        let reading = Sibionics2JugglucoCalibrator().createNewBgReading(
+            rawData: 150, timeStamp: sensorStartDate.addingTimeInterval(3600), sensor: sensor,
+            last3Readings: &readings, lastCalibrationsForActiveSensorInLastXDays: &calibrations,
+            firstCalibration: nil, lastCalibration: nil, deviceName: nil,
+            nsManagedObjectContext: context
+        )
+        XCTAssertEqual(reading.rawData, 150)
+        XCTAssertEqual(reading.ageAdjustedRawValue, 150)
+        XCTAssertEqual(reading.calculatedValue, 150)
+    }
+
+    func testJugglucoNewCalibrationMatchesReloadedUniqueAnchors() throws {
+        let context = try inMemoryContext(model: managedObjectModel())
+        let now = Date()
+        let sensor = Sensor(startDate: now.addingTimeInterval(-172_800), nsManagedObjectContext: context)
+        func anchor(raw: Double, glucose: Double, age: TimeInterval) -> Calibration {
+            let timestamp = now.addingTimeInterval(-age)
+            return Calibration(
+                timeStamp: timestamp, sensor: sensor, bg: glucose, rawValue: raw,
+                adjustedRawValue: raw, sensorConfidence: 1, rawTimeStamp: timestamp,
+                slope: 1, intercept: glucose - raw, distanceFromEstimate: 0,
+                estimateRawAtTimeOfCalibration: raw, slopeConfidence: 1, deviceName: nil,
+                nsManagedObjectContext: context
+            )
+        }
+        let first = anchor(raw: 100, glucose: 110, age: 7200)
+        let second = anchor(raw: 150, glucose: 155, age: 3600)
+        var calibrations = [second, first]
+        let reading = BgReading(
+            timeStamp: now, sensor: sensor, calibration: second, rawData: 200,
+            deviceName: nil, nsManagedObjectContext: context
+        )
+        // Existing readings from the former NoCalibrator path have a zero here.
+        XCTAssertEqual(reading.ageAdjustedRawValue, 0)
+        reading.calculatedValue = 200
+        let calibrator = Sibionics2JugglucoCalibrator()
+        let added = try XCTUnwrap(calibrator.createNewCalibration(
+            bgValue: 260, lastBgReading: reading, sensor: sensor,
+            lastCalibrationsForActiveSensorInLastXDays: &calibrations,
+            firstCalibration: first, deviceName: nil, nsManagedObjectContext: context
+        ))
+        let immediateValue = reading.calculatedValue
+        XCTAssertEqual(reading.ageAdjustedRawValue, 200)
+        XCTAssertEqual(added.estimateRawAtTimeOfCalibration, 200)
+
+        let request = NSFetchRequest<Calibration>(entityName: "Calibration")
+        request.sortDescriptors = [NSSortDescriptor(key: "timeStamp", ascending: false)]
+        var reloadedCalibrations = try context.fetch(request)
+        XCTAssertEqual(reloadedCalibrations.count, 3)
+        var priorReadings: [BgReading] = []
+        let reloadedReading = calibrator.createNewBgReading(
+            rawData: 200, timeStamp: added.timeStamp, sensor: sensor,
+            last3Readings: &priorReadings,
+            lastCalibrationsForActiveSensorInLastXDays: &reloadedCalibrations,
+            firstCalibration: first, lastCalibration: added, deviceName: nil,
+            nsManagedObjectContext: context
+        )
+        XCTAssertEqual(immediateValue, reloadedReading.calculatedValue, accuracy: 0.00001)
+    }
+
     func testSibionics2PeripheralFactoryAndCGMTypeMapping() throws {
         let context = try inMemoryContext(model: managedObjectModel())
         let peripheral = BluetoothPeripheralType.Sibionics2Type.createNewBluetoothPeripheral(
@@ -432,6 +497,29 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(stateStore.load(for: address)?.replayTargetIndex, 25_298)
     }
 
+    func testPendingReplayTargetSurvivesRestartBeforeFirstHistoryPage() throws {
+        let rows = try fixtureRows()
+        let (suiteName, defaults, stateStore) = try isolatedStateStore()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let address = "pending-replay-target"
+        var subject = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: address, stateStore: stateStore,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        )
+        for index in [25_298, 25_300] {
+            let reading = rows[49].reading(index: index, sensorStartDate: sensorStartDate)
+            XCTAssertTrue(subject.process([reading], receivedAt: reading.eventTime).isEmpty)
+        }
+        XCTAssertNil(stateStore.load(for: address)?.lastDeliveredIndex)
+        XCTAssertEqual(stateStore.load(for: address)?.replayTargetIndex, 25_300)
+        let resumed = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: address, stateStore: stateStore,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        )
+        XCTAssertTrue(resumed.requiresHistoryReplay)
+        XCTAssertEqual(resumed.state?.replayTargetIndex, 25_300)
+    }
+
     func testSibionics2DiscoverySearchMatchesSensorName() {
         XCTAssertTrue(Sibionics2DeviceIdentity.matchesSearch(name: "P225044UHA", query: "225044"))
         XCTAssertTrue(Sibionics2DeviceIdentity.matchesSearch(name: "P225044UHA", query: "  p225 "))
@@ -461,6 +549,15 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertTrue(batchProcessor.process([afterGap], receivedAt: afterGap.eventTime).isEmpty)
         XCTAssertTrue(batchProcessor.requiresHistoryReplay)
         XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 5)
+
+        XCTAssertEqual(stateStore.load(for: address)?.replayTargetIndex, 8)
+        batchProcessor = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: address,
+            stateStore: stateStore,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        )
+        XCTAssertTrue(batchProcessor.requiresHistoryReplay,
+                      "Restarting before the missing page arrives must preserve the replay target")
 
         let duplicate = rows[4].reading(sensorStartDate: sensorStartDate)
         XCTAssertTrue(batchProcessor.process([duplicate], receivedAt: afterGap.eventTime).isEmpty)
