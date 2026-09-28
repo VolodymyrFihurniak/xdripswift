@@ -329,9 +329,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
 
-    func setNonFixedSlopeEnabled(enabled: Bool) {}
     func isNonFixedSlopeEnabled() -> Bool { false }
-    func setWebOOPEnabled(enabled: Bool) {}
     func isWebOOPEnabled() -> Bool { true }
     func overruleIsWebOOPEnabled() -> Bool { true }
     func nonWebOOPAllowed() -> Bool { false }
@@ -345,11 +343,16 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             _ = self.sendDataRequest(for: address)
         }
     }
-    func maxSensorAgeInDays() -> Double? { nil }
-    func startSensor(sensorCode: String?, startDate: Date) {}
-    func stopSensor(stopDate: Date) {}
-    func calibrate(calibration: Calibration) {}
-    func transmitterCalibrationStatus() -> CGMTransmitterCalibrationStatus? { nil }
+    func maxSensorAgeInDays() -> Double? {
+        Sibionics2AutoResetPolicy.expectedSensorLife / (24 * 60 * 60)
+    }
+
+    /// Sibionics accepts no transmitter-side calibration write. Calibrations live
+    /// in xDrip's CGM pipeline, so request fresh data to apply the saved profile.
+    func calibrate(calibration: Calibration) {
+        requestNewReading()
+    }
+
     func needsSensorStartTime() -> Bool { false }
     func needsSensorStartCode() -> Bool { false }
     func shouldWarnOnLargeCalibrationStep() -> Bool { false }

@@ -10,6 +10,14 @@ enum Sibionics2CalibrationMode: Int, CaseIterable {
         case .jugglucoNG: return Texts_BluetoothPeripheralView.sibionics2CalibrationJugglucoNG
         }
     }
+
+    /// History used by both live glucose recalculation and new calibration creation.
+    var calibrationHistoryDays: Int {
+        switch self {
+        case .xDripPlus: return 4
+        case .jugglucoNG: return 23
+        }
+    }
 }
 
 enum Sibionics2PollInterval: Int, CaseIterable {

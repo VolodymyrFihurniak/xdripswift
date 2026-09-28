@@ -74,7 +74,3 @@ protocol BluetoothPeripheralManaging: BluetoothTransmitterDelegate {
     
 }
 
-/// Default keeps alternate managers and test doubles source-compatible.
-extension BluetoothPeripheralManaging {
-    func cgmConfigurationDidChange(for bluetoothPeripheral: BluetoothPeripheral) {}
-}

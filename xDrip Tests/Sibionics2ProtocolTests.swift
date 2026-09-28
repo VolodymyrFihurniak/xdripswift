@@ -285,6 +285,8 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertEqual(Sibionics2Configuration.calibrationMode(for: "sensor-A", userDefaults: defaults), .jugglucoNG)
         XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-B", userDefaults: defaults), .oneMinute)
         XCTAssertEqual(Sibionics2Configuration.calibrationMode(for: "sensor-B", userDefaults: defaults), .xDripPlus)
+        XCTAssertEqual(Sibionics2CalibrationMode.xDripPlus.calibrationHistoryDays, 4)
+        XCTAssertEqual(Sibionics2CalibrationMode.jugglucoNG.calibrationHistoryDays, 23)
         Sibionics2Configuration.requestReset(for: "sensor-A", userDefaults: defaults)
         XCTAssertTrue(Sibionics2Configuration.resetRequested(for: "sensor-A", userDefaults: defaults))
         XCTAssertFalse(Sibionics2Configuration.resetRequested(for: "sensor-B", userDefaults: defaults))
@@ -327,6 +329,7 @@ final class Sibionics2ProtocolTests: XCTestCase {
     }
 
     func testAutomaticSensorResetWaitsForStableReadingAndHonorsDisableSetting() {
+        XCTAssertEqual(Sibionics2AutoResetPolicy.expectedSensorLife / (24 * 60 * 60), 23)
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let resetWindowStartsAt = start.addingTimeInterval(Sibionics2AutoResetPolicy.normalResetAge)
         let prior = Sibionics2AutoResetReading(glucoseMgDl: 119, timeStamp: resetWindowStartsAt.addingTimeInterval(-60))

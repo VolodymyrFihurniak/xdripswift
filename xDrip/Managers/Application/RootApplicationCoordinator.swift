@@ -1095,9 +1095,7 @@ import AppIntents
             trace("in processNewGlucoseData, calibrator = %{public}@", log: log, category: ConstantsLog.categoryRootView, type: .info, calibrator.description())
             
             // initialize help variables
-            let calibrationHistoryDays = (cgmTransmitter as? CGMSibionics2Transmitter)?.calibrationMode == .jugglucoNG
-                ? 23
-                : 4
+            let calibrationHistoryDays = (cgmTransmitter as? CGMSibionics2Transmitter)?.calibrationMode.calibrationHistoryDays ?? 4
             var lastCalibrationsForActiveSensorInLastXDays = calibrationsAccessor.getLatestCalibrations(
                 howManyDays: calibrationHistoryDays,
                 forSensor: activeSensor
@@ -1757,7 +1755,11 @@ import AppIntents
         )
 
         var latestReadings = bgReadingsAccessor.getLatestBgReadings(limit: 36, howOld: nil, forSensor: activeSensor, ignoreRawData: false, ignoreCalculatedValue: true, includingSuppressed: true)
-        var latestCalibrations = calibrationsAccessor.getLatestCalibrations(howManyDays: 4, forSensor: activeSensor)
+        let calibrationHistoryDays = (cgmTransmitter as? CGMSibionics2Transmitter)?.calibrationMode.calibrationHistoryDays ?? 4
+        var latestCalibrations = calibrationsAccessor.getLatestCalibrations(
+            howManyDays: calibrationHistoryDays,
+            forSensor: activeSensor
+        )
 
         guard let calibrator = self.calibrator else {
             return Texts_HomeView.sensorManagementCalibrationUnavailable
