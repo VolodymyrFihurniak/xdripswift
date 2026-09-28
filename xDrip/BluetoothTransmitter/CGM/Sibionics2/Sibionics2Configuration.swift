@@ -1,8 +1,37 @@
 import Foundation
 
+enum Sibionics2Time {
+    static let secondsPerMinute: TimeInterval = 60
+    static let minutesPerHour: TimeInterval = 60
+    static let hoursPerDay: TimeInterval = 24
+    static let secondsPerHour = secondsPerMinute * minutesPerHour
+    static let secondsPerDay = secondsPerHour * hoursPerDay
+}
+
+enum Sibionics2SensorProfile {
+    static let expectedLifeInDays: Int = 23
+    static let sampleInterval: TimeInterval = Sibionics2Time.secondsPerMinute
+    static let maximumReportableGlucoseMgDl: Double = 900
+    static let expectedLife = TimeInterval(expectedLifeInDays) * Sibionics2Time.secondsPerDay
+}
+
+/// Valid ranges for decoded V120 readings before they enter the correction algorithm.
+enum Sibionics2ReadingValidationPolicy {
+    static let minimumIndex = 1
+    static let maximumIndex = Sibionics2V120ReadingFormat.maximumIndex
+    static let maximumRawGlucoseMmol =
+        Sibionics2V120ReadingFormat.maximumEncodedValue / Sibionics2V120ReadingFormat.measurementScale
+    static let maximumTemperatureCelsius = 80.0
+    static let minimumImpedance = 0
+    static let maximumImpedance = Sibionics2V120ReadingFormat.maximumIndex
+}
+
 enum Sibionics2CalibrationMode: Int, CaseIterable {
     case xDripPlus = 0
     case jugglucoNG = 1
+
+    static let defaultMode: Self = .xDripPlus
+    private static let xDripPlusHistoryWindowInDays = 4
 
     var title: String {
         switch self {
@@ -14,8 +43,8 @@ enum Sibionics2CalibrationMode: Int, CaseIterable {
     /// History used by both live glucose recalculation and new calibration creation.
     var calibrationHistoryDays: Int {
         switch self {
-        case .xDripPlus: return 4
-        case .jugglucoNG: return 23
+        case .xDripPlus: return Self.xDripPlusHistoryWindowInDays
+        case .jugglucoNG: return Sibionics2SensorProfile.expectedLifeInDays
         }
     }
 }
@@ -26,7 +55,8 @@ enum Sibionics2PollInterval: Int, CaseIterable {
     case tenMinutes = 10
     case fifteenMinutes = 15
 
-    var seconds: TimeInterval { TimeInterval(rawValue * 60) }
+    static let defaultInterval: Self = .oneMinute
+    var seconds: TimeInterval { TimeInterval(rawValue) * Sibionics2Time.secondsPerMinute }
 
     var title: String {
         switch self {
@@ -38,6 +68,37 @@ enum Sibionics2PollInterval: Int, CaseIterable {
     }
 }
 
+/// Retry, timeout, and cadence values for the Sibionics 2 BLE session lifecycle.
+enum Sibionics2ConnectionPolicy {
+    static let minimumScheduledDelay: TimeInterval = 1
+    static let resetWriteRetryDelay: TimeInterval = 5
+    static let resetRestartConfirmationDelay: TimeInterval = 15
+    static let automaticResetRecheckInterval = Sibionics2PollInterval.fifteenMinutes.seconds
+
+    static let streamingTimeout: TimeInterval = 75
+    static let maximumHandshakeReconnectAttempts = 2
+
+    static let historyResponseTimeout: TimeInterval = 90
+    static let historyWriteRetryDelay: TimeInterval = 3
+    static let maximumHistoryWriteFailures = 3
+    static let maximumHistoryReconnectAttempts = 2
+
+    static let sessionStartDateTolerance = 10 * Sibionics2Time.secondsPerMinute
+    static let maximumSessionStartDrift = 6 * Sibionics2Time.secondsPerHour
+    static let minimumForwardProgressDrift = 2 * Sibionics2Time.secondsPerHour
+    static let indexAgeDriftRatio = 0.01
+}
+
+/// Stable-session thresholds used by automatic reset.
+enum Sibionics2AutoResetReadingPolicy {
+    static let minimumComfortableMgDl = 80.0
+    static let maximumComfortableMgDl = 180.0
+    static let maximumRateMgDlPerMinute = 2.0
+    static let maximumReadingAge: TimeInterval = 10 * Sibionics2Time.secondsPerMinute
+    static let maximumReadingIntervalMinutes: TimeInterval =
+        TimeInterval(Sibionics2PollInterval.fifteenMinutes.rawValue)
+}
+
 struct Sibionics2CalibrationAnchor {
     let sensorMgDl: Double
     let fingerstickMgDl: Double
@@ -47,10 +108,26 @@ struct Sibionics2CalibrationAnchor {
 /// Mirrors JugglucoNG's default single-point offset and fresh weighted-OLS
 /// calibration profile for factory-corrected Sibionics glucose.
 enum Sibionics2JugglucoCalibrationMath {
-    private static let hour: TimeInterval = 60 * 60
-    private static let pastHalfLifeHours = 18.0 * 0.45
+    private enum Profile {
+        static let halfLifeRetention = 0.5
+        static let recentAnchorHalfLifeHours: Double = 8.1
+        static let latestAnchorWeightMultiplier = 1.25
+        static let minimumStableWeight = 1e-9
+        static let minimumRegressionDenominator = 1e-9
+        static let regressionSlopeRange: ClosedRange<Double> = 0.65...1.35
+        static let glucoseDistanceScale = 2.5
+        static let timeDistanceScaleHours = 8.0
+        static let maximumAnchorSnapContribution = 0.25
+        static let calibratedValueRange: ClosedRange<Double> = 0...1000
+    }
 
-    static func calibratedValue(_ value: Double, at timeStamp: Date, anchors: [Sibionics2CalibrationAnchor]) -> Double {
+    private static let hour = Sibionics2Time.secondsPerHour
+
+    static func calibratedValue(
+        _ value: Double,
+        at timeStamp: Date,
+        anchors: [Sibionics2CalibrationAnchor]
+    ) -> Double {
         guard value.isFinite, value > 0 else { return value }
         let usable = anchors
             .filter {
@@ -67,12 +144,15 @@ enum Sibionics2JugglucoCalibrationMath {
         let newestTime = latest.timeStamp
         let weights = usable.map { anchor -> Double in
             let ageHours = max(0, timeStamp.timeIntervalSince(anchor.timeStamp) / hour)
-            let temporal = pow(0.5, ageHours / pastHalfLifeHours)
-            return temporal * (anchor.timeStamp == newestTime ? 1.25 : 1)
+            let temporal = pow(Profile.halfLifeRetention, ageHours / Profile.recentAnchorHalfLifeHours)
+            let anchorWeight = anchor.timeStamp == newestTime
+                ? Profile.latestAnchorWeightMultiplier
+                : 1
+            return temporal * anchorWeight
         }
 
         let sumWeight = weights.reduce(0, +)
-        guard sumWeight.isFinite, sumWeight > 1e-9 else { return value }
+        guard sumWeight.isFinite, sumWeight > Profile.minimumStableWeight else { return value }
         let sumWX = zip(usable, weights).reduce(0) { $0 + $1.0.sensorMgDl * $1.1 }
         let sumWY = zip(usable, weights).reduce(0) { $0 + $1.0.fingerstickMgDl * $1.1 }
         let sumWXY = zip(usable, weights).reduce(0) {
@@ -83,8 +163,9 @@ enum Sibionics2JugglucoCalibrationMath {
         }
         let denominator = sumWeight * sumWX2 - sumWX * sumWX
         let regression: Double
-        if abs(denominator) > 1e-9 {
-            let slope = ((sumWeight * sumWXY - sumWX * sumWY) / denominator).clamped(to: 0.65...1.35)
+        if abs(denominator) > Profile.minimumRegressionDenominator {
+            let slope = ((sumWeight * sumWXY - sumWX * sumWY) / denominator)
+                .clamped(to: Profile.regressionSlopeRange)
             let intercept = (sumWY - slope * sumWX) / sumWeight
             regression = slope * value + intercept
         } else {
@@ -100,13 +181,19 @@ enum Sibionics2JugglucoCalibrationMath {
         }) else { return regression }
         let glucoseDistance = abs(nearest.sensorMgDl - value)
         let timeDistanceHours = abs(nearest.timeStamp.timeIntervalSince(timeStamp)) / hour
-        let snap = (1 / (1 + glucoseDistance * 2.5)) * (1 / (1 + timeDistanceHours / 8)) * 0.25
+        let glucoseProximity = 1 / (1 + glucoseDistance * Profile.glucoseDistanceScale)
+        let timeProximity = 1 / (1 + timeDistanceHours / Profile.timeDistanceScaleHours)
+        let snap = glucoseProximity * timeProximity * Profile.maximumAnchorSnapContribution
         let anchorValue = value + nearest.fingerstickMgDl - nearest.sensorMgDl
         let calibrated = regression * (1 - snap) + anchorValue * snap
-        return calibrated.isFinite ? calibrated.clamped(to: 0...1000) : value
+        return calibrated.isFinite ? calibrated.clamped(to: Profile.calibratedValueRange) : value
     }
 
-    private static func anchorDistance(_ anchor: Sibionics2CalibrationAnchor, value: Double, timeStamp: Date) -> Double {
+    private static func anchorDistance(
+        _ anchor: Sibionics2CalibrationAnchor,
+        value: Double,
+        timeStamp: Date
+    ) -> Double {
         abs(anchor.sensorMgDl - value) + abs(anchor.timeStamp.timeIntervalSince(timeStamp)) / hour
     }
 }
@@ -122,15 +209,27 @@ struct Sibionics2AutoResetDecision {
 }
 
 enum Sibionics2AutoResetPolicy {
-    static let scheduledResetAge: TimeInterval = 22 * 24 * 60 * 60
-    static let resetWindowLead: TimeInterval = 4 * 60 * 60
-    static let normalResetAge: TimeInterval = scheduledResetAge - resetWindowLead
-    static let expectedSensorLife: TimeInterval = 23 * 24 * 60 * 60
-    static let preExpiryGuard: TimeInterval = 4 * 60 * 60
-    private static let maximumReadingAge: TimeInterval = 10 * 60
-    private static let minimumComfortableMgDl = 80.0
-    private static let maximumComfortableMgDl = 180.0
-    private static let maximumRateMgDlPerMinute = 2.0
+    // Both reset boundaries currently use the same four-hour safety margin,
+    // while remaining separate policies for scheduled and forced reset.
+    private static let resetDeadlineMarginHours: Double = 4
+
+    /// The normal reset window opens one day before the sensor profile expires.
+    static let scheduledResetAgeDays = Sibionics2SensorProfile.expectedLifeInDays - 1
+    static let resetWindowLeadHours = resetDeadlineMarginHours
+    static let scheduledResetAge = TimeInterval(scheduledResetAgeDays) * Sibionics2Time.secondsPerDay
+    static let resetWindowLead = resetWindowLeadHours * Sibionics2Time.secondsPerHour
+    static let normalResetAge = scheduledResetAge - resetWindowLead
+    static let expectedSensorLifeDays = Sibionics2SensorProfile.expectedLifeInDays
+    static let expectedSensorLife = Sibionics2SensorProfile.expectedLife
+    static let preExpiryGuardHours = resetDeadlineMarginHours
+    static let preExpiryGuard = preExpiryGuardHours * Sibionics2Time.secondsPerHour
+    static let defaultEnabled = true
+
+    private static let minimumComfortableMgDl = Sibionics2AutoResetReadingPolicy.minimumComfortableMgDl
+    private static let maximumComfortableMgDl = Sibionics2AutoResetReadingPolicy.maximumComfortableMgDl
+    private static let maximumRateMgDlPerMinute = Sibionics2AutoResetReadingPolicy.maximumRateMgDlPerMinute
+    private static let maximumReadingAge = Sibionics2AutoResetReadingPolicy.maximumReadingAge
+    private static let maximumReadingIntervalMinutes = Sibionics2AutoResetReadingPolicy.maximumReadingIntervalMinutes
 
     static func evaluate(
         now: Date,
@@ -161,8 +260,9 @@ enum Sibionics2AutoResetPolicy {
             return Sibionics2AutoResetDecision(resetNow: false, forced: false)
         }
 
-        let elapsedMinutes = latest.timeStamp.timeIntervalSince(previous.timeStamp) / 60
-        guard elapsedMinutes > 0, elapsedMinutes <= 15 else {
+        let elapsedMinutes = latest.timeStamp.timeIntervalSince(previous.timeStamp) /
+            Sibionics2Time.secondsPerMinute
+        guard elapsedMinutes > 0, elapsedMinutes <= maximumReadingIntervalMinutes else {
             return Sibionics2AutoResetDecision(resetNow: false, forced: false)
         }
         let rate = (latest.glucoseMgDl - previous.glucoseMgDl) / elapsedMinutes
@@ -183,7 +283,7 @@ enum Sibionics2Configuration {
     static func calibrationMode(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics2CalibrationMode {
         guard let key = key("calibrationMode", identifier: identifier),
               let mode = Sibionics2CalibrationMode(rawValue: userDefaults.integer(forKey: key)) else {
-            return .xDripPlus
+            return Sibionics2CalibrationMode.defaultMode
         }
         return mode
     }
@@ -203,7 +303,7 @@ enum Sibionics2Configuration {
         guard let key = key("pollInterval", identifier: identifier),
               userDefaults.object(forKey: key) != nil,
               let interval = Sibionics2PollInterval(rawValue: userDefaults.integer(forKey: key)) else {
-            return .oneMinute
+            return Sibionics2PollInterval.defaultInterval
         }
         return interval
     }
@@ -221,7 +321,10 @@ enum Sibionics2Configuration {
 
     static func autoResetEnabled(for identifier: String, userDefaults: UserDefaults = .standard) -> Bool {
         guard let key = key("autoReset", identifier: identifier) else { return false }
-        return userDefaults.object(forKey: key) == nil ? true : userDefaults.bool(forKey: key)
+        guard userDefaults.object(forKey: key) != nil else {
+            return Sibionics2AutoResetPolicy.defaultEnabled
+        }
+        return userDefaults.bool(forKey: key)
     }
 
     @discardableResult

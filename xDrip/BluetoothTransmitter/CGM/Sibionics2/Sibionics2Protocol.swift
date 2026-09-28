@@ -27,6 +27,13 @@ struct Sibionics2RawReading {
     let reindex: Int
 }
 
+/// Numeric encoding shared by all V120 measurement fields.
+enum Sibionics2V120ReadingFormat {
+    static let measurementScale: Double = 10
+    static let maximumIndex = Int(UInt16.max)
+    static let maximumEncodedValue = Double(UInt16.max)
+}
+
 enum Sibionics2HandshakeResponse: UInt8 {
     case authenticationAccepted = 0x01
     case timeSyncNeeded = 0x07
@@ -106,7 +113,7 @@ struct Sibionics2ProtocolCodec {
         let count = Int(packet[2])
         guard packet.count >= 10 + count * 8 else { return .malformed }
         let firstIndex = Int(Self.word(packet, at: 3))
-        guard firstIndex + count <= Int(UInt16.max) + 1 else { return .malformed }
+        guard firstIndex + count <= Sibionics2V120ReadingFormat.maximumIndex + 1 else { return .malformed }
         let epoch = UInt32(packet[5]) | (UInt32(packet[6]) << 8)
             | (UInt32(packet[7]) << 16) | (UInt32(packet[8]) << 24)
         var readings = [Sibionics2RawReading]()
@@ -117,10 +124,13 @@ struct Sibionics2ProtocolCodec {
             guard let trend = Sibionics2Trend(rawValue: trendValue) else { return .malformed }
             readings.append(Sibionics2RawReading(
                 index: firstIndex + position,
-                eventTime: Date(timeIntervalSince1970: TimeInterval(epoch) + TimeInterval(position * 60)),
-                temperatureC: Double(Self.word(packet, at: start)) / 10,
+                eventTime: Date(
+                    timeIntervalSince1970: TimeInterval(epoch) +
+                        TimeInterval(position) * Sibionics2SensorProfile.sampleInterval
+                ),
+                temperatureC: Double(Self.word(packet, at: start)) / Sibionics2V120ReadingFormat.measurementScale,
                 impedance: Int(Self.word(packet, at: start + 2)),
-                rawMmol: Double(Self.word(packet, at: start + 4)) / 10,
+                rawMmol: Double(Self.word(packet, at: start + 4)) / Sibionics2V120ReadingFormat.measurementScale,
                 trend: trend,
                 reindex: count - position - 1
             ))

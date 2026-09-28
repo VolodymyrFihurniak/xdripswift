@@ -344,7 +344,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
     func maxSensorAgeInDays() -> Double? {
-        Sibionics2AutoResetPolicy.expectedSensorLife / (24 * 60 * 60)
+        Double(Sibionics2SensorProfile.expectedLifeInDays)
     }
 
     /// Sibionics accepts no transmitter-side calibration write. Calibrations live
@@ -392,7 +392,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         guard writeCommand(codec.buildResetPacket(), label: "maintenance-reset") else {
             resetDisconnectGeneration += 1
             let generation = resetDisconnectGeneration
-            runOnCentralQueue(after: 5) { [weak self] in
+            runOnCentralQueue(after: Sibionics2ConnectionPolicy.resetWriteRetryDelay) { [weak self] in
                 guard let self,
                       self.resetDisconnectGeneration == generation,
                       let currentAddress = self.deviceAddress,
@@ -410,7 +410,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let generation = resetDisconnectGeneration
         trace("Sibionics 2 reset command queued; keeping local session until restart is confirmed",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
-        runOnCentralQueue(after: 15) { [weak self] in
+        runOnCentralQueue(after: Sibionics2ConnectionPolicy.resetRestartConfirmationDelay) { [weak self] in
             guard let self,
                   self.resetDisconnectGeneration == generation,
                   Sibionics2Configuration.awaitingResetRestart(for: address) else { return }
@@ -432,11 +432,14 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             - Sibionics2AutoResetPolicy.preExpiryGuard
         let delay: TimeInterval
         if !autoResetEnabled {
-            delay = max(1, hardResetAge - age)
+            delay = max(Sibionics2ConnectionPolicy.minimumScheduledDelay, hardResetAge - age)
         } else if age < Sibionics2AutoResetPolicy.normalResetAge {
-            delay = max(1, Sibionics2AutoResetPolicy.normalResetAge - age)
+            delay = max(
+                Sibionics2ConnectionPolicy.minimumScheduledDelay,
+                Sibionics2AutoResetPolicy.normalResetAge - age
+            )
         } else {
-            delay = 15 * 60
+            delay = Sibionics2ConnectionPolicy.automaticResetRecheckInterval
         }
         runOnCentralQueue(after: delay) { [weak self] in
             guard let self, self.autoResetCheckGeneration == generation else { return }
@@ -502,19 +505,21 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         handshake = newHandshake
         _ = writeCommand(command, label: "auth")
         scheduleAutoResetCheck(for: address)
-        runOnCentralQueue(after: 75) { [weak self] in
+        runOnCentralQueue(after: Sibionics2ConnectionPolicy.streamingTimeout) { [weak self] in
             guard let self, self.handshakeAttempt == attempt else { return }
             if self.streamingReady {
                 guard !self.receivedNonEmptyReadingsPacket else { return }
-                trace("Sibionics 2 received streaming-ready but no glucose readings after 75 seconds",
+                trace("Sibionics 2 received streaming-ready but no glucose readings after %{public}@ seconds",
                       log: self.transmitterLog,
-                      category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+                      category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
+                      Sibionics2ConnectionPolicy.streamingTimeout.description)
                 return
             }
             trace("Sibionics 2 handshake stalled: FF31 has not begun streaming",
                   log: self.transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
-            if self.notificationEnabled && self.handshakeReconnectCount < 2 {
+            if self.notificationEnabled &&
+                self.handshakeReconnectCount < Sibionics2ConnectionPolicy.maximumHandshakeReconnectAttempts {
                 self.handshakeReconnectCount += 1
                 self.disconnect()
             }
@@ -610,7 +615,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             historyRetryScheduled = false
             historyRecoveryToken += 1
             let token = historyRecoveryToken
-            runOnCentralQueue(after: 90) { [weak self] in
+            runOnCentralQueue(after: Sibionics2ConnectionPolicy.historyResponseTimeout) { [weak self] in
                 guard let self, self.historyRecoveryToken == token,
                       !self.historyRequest.needsRequest(for: sessionStart, cursor: cursor),
                       self.batchProcessor?.requiresHistoryReplay == true else { return }
@@ -618,12 +623,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             }
         } else {
             historyWriteFailures += 1
-            if historyWriteFailures >= 3 {
+            if historyWriteFailures >= Sibionics2ConnectionPolicy.maximumHistoryWriteFailures {
                 reconnectForMissingHistory()
             } else if !historyRetryScheduled {
                 historyRetryScheduled = true
                 let token = historyRecoveryToken
-                runOnCentralQueue(after: 3) { [weak self] in
+                runOnCentralQueue(after: Sibionics2ConnectionPolicy.historyWriteRetryDelay) { [weak self] in
                     guard let self, self.historyRecoveryToken == token else { return }
                     self.historyRetryScheduled = false
                     guard self.batchProcessor?.requiresHistoryReplay == true,
@@ -635,7 +640,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     private func reconnectForMissingHistory() {
-        guard historyReconnectCount < 2, getConnectionStatus() == .connected else {
+        guard historyReconnectCount < Sibionics2ConnectionPolicy.maximumHistoryReconnectAttempts,
+              getConnectionStatus() == .connected else {
             trace("Sibionics 2 history page still missing; saved cursor retained",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
                   type: .error)
@@ -678,7 +684,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         guard !(requiresHistoryReplay && currentState?.lastDeliveredIndex == nil),
               let sensorStartDate = currentState?.sensorStartDate else { return }
         let detectedNewSensor = previousStartDate.map {
-            abs($0.timeIntervalSince(sensorStartDate)) > 10 * 60
+            abs($0.timeIntervalSince(sensorStartDate)) > Sibionics2ConnectionPolicy.sessionStartDateTolerance
         } ?? true
         let sensorAge = max(0, receivedAt.timeIntervalSince(sensorStartDate))
         if detectedNewSensor, Sibionics2Configuration.awaitingResetRestart(for: address) {
@@ -731,7 +737,8 @@ enum Sibionics2DelegateDelivery {
         let validGlucoseData = glucoseData.filter { reading in
             reading.timeStamp.timeIntervalSince1970.isFinite &&
                 reading.glucoseLevelRaw.isFinite &&
-                reading.glucoseLevelRaw > 0 && reading.glucoseLevelRaw <= 900
+                reading.glucoseLevelRaw > 0 &&
+                reading.glucoseLevelRaw <= Sibionics2SensorProfile.maximumReportableGlucoseMgDl
         }
         guard !validGlucoseData.isEmpty else { return }
 

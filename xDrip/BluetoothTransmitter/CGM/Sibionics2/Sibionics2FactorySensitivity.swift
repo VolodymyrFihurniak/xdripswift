@@ -7,12 +7,14 @@ import Foundation
 
 enum Sibionics2FactorySensitivity {
     private static let alphabet = Array("123456789ACDEFGHJKLMNPQRSTUVWXYZ")
+    private static let supportedSensitivityRange = 0.8...2.5
     private static let identityBits = [1, 2, 3, 4, 18, 6, 7, 8, 9, 19, 11, 12, 13, 14, 16, 17, 0, 5, 10, 15]
     private static let sensitivityBits = [7, 8, 9, 0, 1, 2, 4, 5, 6, 3]
-    private static let sibionics2FallbackShortCode = "0316015A"
+    /// JugglucoNG's baseline when no valid factory sensitivity code is available.
+    static let defaultSensitivity = 1.27
 
     static func isSupported(_ sensitivity: Double) -> Bool {
-        sensitivity.isFinite && (0.8...2.5).contains(sensitivity)
+        sensitivity.isFinite && supportedSensitivityRange.contains(sensitivity)
     }
 
     static func effectiveSensitivity(
@@ -104,8 +106,7 @@ enum Sibionics2FactorySensitivity {
     static func resolve(probeCode: String?, shortCode: String?) -> Double {
         decodeProbe(probeCode)
             ?? decodeShortCode(shortCode)
-            ?? decodeShortCode(sibionics2FallbackShortCode)
-            ?? 1.27
+            ?? defaultSensitivity
     }
 
     private static func normalize(_ source: String?) -> String {

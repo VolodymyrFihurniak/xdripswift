@@ -6,18 +6,40 @@
 import CoreBluetooth
 import Foundation
 
+private enum Sibionics2AdvertisementFormat {
+    static let normalizedNameLength = 8...16
+    static let serialPrefixDigitCount = 3
+    static let uppercaseASCIIRange: ClosedRange<UInt8> = 65...90
+    static let decimalASCIIRange: ClosedRange<UInt8> = 48...57
+    static let prefix: UInt8 = 80 // ASCII "P"
+    static let hyphen: UInt8 = 45
+    static let underscore: UInt8 = 95
+}
+
 enum Sibionics2DeviceIdentity {
     /// Sibionics 2 transmitter advertisements use P followed by three digits.
     /// Keep the suffix alphanumeric and the whole normalized name within 8...16 bytes.
     static func isSibionics2(name: String?) -> Bool {
         guard let name, !name.isEmpty else { return false }
         let characters = Array(name.uppercased().utf8)
-        guard characters.allSatisfy({ (65...90).contains($0) || (48...57).contains($0) || $0 == 45 || $0 == 95 }) else {
+        guard characters.allSatisfy({
+            Sibionics2AdvertisementFormat.uppercaseASCIIRange.contains($0) ||
+                Sibionics2AdvertisementFormat.decimalASCIIRange.contains($0) ||
+                $0 == Sibionics2AdvertisementFormat.hyphen ||
+                $0 == Sibionics2AdvertisementFormat.underscore
+        }) else {
             return false
         }
-        let normalized = characters.filter { $0 != 45 && $0 != 95 }
-        guard (8...16).contains(normalized.count), normalized[0] == 80 else { return false }
-        return normalized[1...3].allSatisfy { (48...57).contains($0) }
+        let normalized = characters.filter {
+            $0 != Sibionics2AdvertisementFormat.hyphen &&
+                $0 != Sibionics2AdvertisementFormat.underscore
+        }
+        guard Sibionics2AdvertisementFormat.normalizedNameLength.contains(normalized.count),
+              normalized[0] == Sibionics2AdvertisementFormat.prefix else { return false }
+        let serialPrefixEnd = 1 + Sibionics2AdvertisementFormat.serialPrefixDigitCount
+        return normalized[1..<serialPrefixEnd].allSatisfy {
+            Sibionics2AdvertisementFormat.decimalASCIIRange.contains($0)
+        }
     }
 
     static func matchesSearch(name: String, query: String) -> Bool {
@@ -27,6 +49,15 @@ enum Sibionics2DeviceIdentity {
         return name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             .contains(normalizedQuery)
     }
+}
+
+/// MAC representation required by the Sibionics V120 authentication packet.
+private enum Sibionics2BluetoothAddressFormat {
+    static let byteCount = 6
+    static let hexDigitsPerByte = 2
+    static let separator: Character = ":"
+    static let compactHexCharacterCount = byteCount * hexDigitsPerByte
+    static let hexadecimalDigits = CharacterSet(charactersIn: "0123456789ABCDEF")
 }
 
 /// Resolves the Bluetooth address carried by the V120 authentication packet.
@@ -39,44 +70,65 @@ enum Sibionics2AuthenticationAddress {
 
     static func normalize(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        let hexDigits = CharacterSet(charactersIn: "0123456789ABCDEF")
         let compact: String
 
-        if trimmed.contains(":") {
-            let octets = trimmed.split(separator: ":", omittingEmptySubsequences: false)
-            guard octets.count == 6,
+        if trimmed.contains(Sibionics2BluetoothAddressFormat.separator) {
+            let octets = trimmed.split(
+                separator: Sibionics2BluetoothAddressFormat.separator,
+                omittingEmptySubsequences: false
+            )
+            guard octets.count == Sibionics2BluetoothAddressFormat.byteCount,
                   octets.allSatisfy({
-                      $0.unicodeScalars.count == 2 &&
-                          $0.unicodeScalars.allSatisfy({ hexDigits.contains($0) })
+                      $0.unicodeScalars.count == Sibionics2BluetoothAddressFormat.hexDigitsPerByte &&
+                          $0.unicodeScalars.allSatisfy({
+                              Sibionics2BluetoothAddressFormat.hexadecimalDigits.contains($0)
+                          })
                   }) else { return nil }
-            compact = octets.map(String.init).joined()
+            compact = octets.map { String($0) }.joined()
         } else {
-            guard trimmed.unicodeScalars.count == 12,
-                  trimmed.unicodeScalars.allSatisfy({ hexDigits.contains($0) }) else { return nil }
+            guard trimmed.unicodeScalars.count == Sibionics2BluetoothAddressFormat.compactHexCharacterCount,
+                  trimmed.unicodeScalars.allSatisfy({
+                      Sibionics2BluetoothAddressFormat.hexadecimalDigits.contains($0)
+                  }) else {
+                return nil
+            }
             compact = trimmed
         }
 
-        let bytes = stride(from: 0, to: compact.count, by: 2).compactMap { offset -> UInt8? in
+        let bytes = stride(
+            from: 0,
+            to: compact.count,
+            by: Sibionics2BluetoothAddressFormat.hexDigitsPerByte
+        ).compactMap { offset -> UInt8? in
             let start = compact.index(compact.startIndex, offsetBy: offset)
-            let end = compact.index(start, offsetBy: 2)
+            let end = compact.index(start, offsetBy: Sibionics2BluetoothAddressFormat.hexDigitsPerByte)
             return UInt8(compact[start..<end], radix: 16)
         }
-        guard bytes.count == 6, bytes.contains(where: { $0 != 0 }) else { return nil }
-        return bytes.map { String(format: "%02X", Int($0)) }.joined(separator: ":")
+        guard bytes.count == Sibionics2BluetoothAddressFormat.byteCount,
+              bytes.contains(where: { $0 != 0 }) else { return nil }
+        return bytes.map { String(format: "%02X", Int($0)) }
+            .joined(separator: String(Sibionics2BluetoothAddressFormat.separator))
     }
 
     static func address(from value: Any?) -> String? {
         guard let value else { return nil }
         if let text = value as? String { return normalize(text) }
-        if let data = value as? Data, data.count == 6 {
-            return normalize(data.map { String(format: "%02X", Int($0)) }.joined(separator: ":"))
+        if let data = value as? Data, data.count == Sibionics2BluetoothAddressFormat.byteCount {
+            let formattedAddress = data
+                .map { String(format: "%02X", Int($0)) }
+                .joined(separator: String(Sibionics2BluetoothAddressFormat.separator))
+            return normalize(formattedAddress)
         }
-        if let data = value as? NSData, data.length == 6 {
+        if let data = value as? NSData, data.length == Sibionics2BluetoothAddressFormat.byteCount {
             return address(from: Data(referencing: data))
         }
-        if let numbers = value as? [NSNumber], numbers.count == 6,
+        if let numbers = value as? [NSNumber],
+           numbers.count == Sibionics2BluetoothAddressFormat.byteCount,
            numbers.allSatisfy({ (0...255).contains($0.intValue) }) {
-            return normalize(numbers.map { String(format: "%02X", $0.intValue) }.joined(separator: ":"))
+            let formattedAddress = numbers
+                .map { String(format: "%02X", $0.intValue) }
+                .joined(separator: String(Sibionics2BluetoothAddressFormat.separator))
+            return normalize(formattedAddress)
         }
         return nil
     }
@@ -129,9 +181,11 @@ enum Sibionics2AuthenticationAddress {
 
     static func macBytes(for identifier: String, userDefaults: UserDefaults = .standard) -> [UInt8] {
         guard let address = effectiveAddress(for: identifier, userDefaults: userDefaults) else {
-            return [UInt8](repeating: 0, count: 6)
+            return [UInt8](repeating: 0, count: Sibionics2BluetoothAddressFormat.byteCount)
         }
-        return address.split(separator: ":").compactMap { UInt8($0, radix: 16) }
+        return address
+            .split(separator: Sibionics2BluetoothAddressFormat.separator)
+            .compactMap { UInt8($0, radix: 16) }
     }
 
     @discardableResult
@@ -174,7 +228,9 @@ struct Sibionics2Handshake {
     private var phase: Phase = .idle
 
     init(macAddress: [UInt8], sessionKey: Data, lastDeliveredIndex: UInt16?) {
-        self.macAddress = macAddress.count == 6 ? macAddress : [UInt8](repeating: 0, count: 6)
+        self.macAddress = macAddress.count == Sibionics2BluetoothAddressFormat.byteCount
+            ? macAddress
+            : [UInt8](repeating: 0, count: Sibionics2BluetoothAddressFormat.byteCount)
         self.sessionKey = sessionKey
         self.lastDeliveredIndex = lastDeliveredIndex
     }

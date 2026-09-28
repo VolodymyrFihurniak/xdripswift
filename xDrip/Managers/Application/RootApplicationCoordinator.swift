@@ -1095,7 +1095,9 @@ import AppIntents
             trace("in processNewGlucoseData, calibrator = %{public}@", log: log, category: ConstantsLog.categoryRootView, type: .info, calibrator.description())
             
             // initialize help variables
-            let calibrationHistoryDays = (cgmTransmitter as? CGMSibionics2Transmitter)?.calibrationMode.calibrationHistoryDays ?? 4
+            let calibrationHistoryDays = (cgmTransmitter as? CGMSibionics2Transmitter)
+                ?.calibrationMode.calibrationHistoryDays
+                ?? Sibionics2CalibrationMode.defaultMode.calibrationHistoryDays
             var lastCalibrationsForActiveSensorInLastXDays = calibrationsAccessor.getLatestCalibrations(
                 howManyDays: calibrationHistoryDays,
                 forSensor: activeSensor
@@ -1755,7 +1757,9 @@ import AppIntents
         )
 
         var latestReadings = bgReadingsAccessor.getLatestBgReadings(limit: 36, howOld: nil, forSensor: activeSensor, ignoreRawData: false, ignoreCalculatedValue: true, includingSuppressed: true)
-        let calibrationHistoryDays = (cgmTransmitter as? CGMSibionics2Transmitter)?.calibrationMode.calibrationHistoryDays ?? 4
+        let calibrationHistoryDays = (cgmTransmitter as? CGMSibionics2Transmitter)
+                ?.calibrationMode.calibrationHistoryDays
+                ?? Sibionics2CalibrationMode.defaultMode.calibrationHistoryDays
         var latestCalibrations = calibrationsAccessor.getLatestCalibrations(
             howManyDays: calibrationHistoryDays,
             forSensor: activeSensor

@@ -8,6 +8,8 @@ import XCTest
 @testable import xdrip
 
 final class Sibionics2ProtocolTests: XCTestCase {
+    private let testBluetoothAddress = "02:00:00:00:00:01"
+    private let testBluetoothAddressBytes: [UInt8] = [0x02, 0x00, 0x00, 0x00, 0x00, 0x01]
     private let codec = Sibionics2ProtocolCodec()
 
     private func encryptedFrame(_ bytesWithoutChecksum: [UInt8]) -> Data {
@@ -112,7 +114,7 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertNil(handshake.receive(.authenticationAccepted, at: now))
     }
 
-    func testBluetoothAddressOverrideProducesTheWorkingSensorAuthPacket() throws {
+    func testBluetoothAddressOverrideUsesConfiguredAddressToBuildAuthPacket() throws {
         let suiteName = "Sibionics2AuthAddress.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -122,19 +124,19 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertEqual(Sibionics2AuthenticationAddress.macBytes(for: identifier, userDefaults: defaults),
                        [UInt8](repeating: 0, count: 6))
         XCTAssertTrue(Sibionics2AuthenticationAddress.setOverride(
-            " c7:71:b0:d1:5b:32 ", for: identifier, userDefaults: defaults
+             " \(testBluetoothAddress.lowercased()) ", for: identifier, userDefaults: defaults
         ))
         XCTAssertEqual(Sibionics2AuthenticationAddress.override(for: identifier, userDefaults: defaults),
-                       "C7:71:B0:D1:5B:32")
+                       testBluetoothAddress)
         let mac = Sibionics2AuthenticationAddress.macBytes(for: identifier, userDefaults: defaults)
-        XCTAssertEqual(mac, [0xC7, 0x71, 0xB0, 0xD1, 0x5B, 0x32])
+        XCTAssertEqual(mac, testBluetoothAddressBytes)
         XCTAssertEqual(Sibionics2AuthenticationAddress.macBytes(for: otherIdentifier, userDefaults: defaults),
                        [UInt8](repeating: 0, count: 6))
         XCTAssertEqual(
             [UInt8](codec.buildAuthPacket(macAddress: mac, sessionKey: Data("GKSHGDU0TYA456G4".utf8))),
-            [0x3E, 0xF6, 0x6F, 0xEB, 0x53, 0xA2, 0xE8, 0xAD, 0x7A, 0xC6, 0xCD, 0x50,
+            [0x3E, 0xF6, 0x6F, 0xD8, 0x08, 0x73, 0x58, 0xDC, 0xBF, 0xC6, 0xCD, 0x50,
              0x47, 0xF0, 0x42, 0xD9, 0xB2, 0xE7, 0xBD, 0x0D, 0x16, 0xB1, 0x57, 0xF1,
-             0x4A, 0x51]
+             0x4A, 0x94]
         )
     }
 
@@ -145,20 +147,20 @@ final class Sibionics2ProtocolTests: XCTestCase {
         let identifier = "saved-device"
 
         XCTAssertTrue(Sibionics2AuthenticationAddress.setOverride(
-            "C7:71:B0:D1:5B:32", for: identifier, userDefaults: defaults
+            testBluetoothAddress, for: identifier, userDefaults: defaults
         ))
         for input in [
-            "C7:71:B0:D1:5B",
-            "C7:71:B0:D1:5B:GG",
+            "02:00:00:00:00",
+            "02:00:00:00:GG:01",
             "00:00:00:00:00:00",
-            "C7-71-B0-D1-5B-32",
-            "C7::71:B0:D1:5B:32",
-            "C7.71.B0.D1.5B.32"
+            "02-00-00-00-00-01",
+            "02::00:00:00:00:01",
+            "02.00.00.00.00.01"
         ] {
             XCTAssertNil(Sibionics2AuthenticationAddress.normalize(input))
             XCTAssertFalse(Sibionics2AuthenticationAddress.setOverride(input, for: identifier, userDefaults: defaults))
             XCTAssertEqual(Sibionics2AuthenticationAddress.override(for: identifier, userDefaults: defaults),
-                           "C7:71:B0:D1:5B:32")
+                           testBluetoothAddress)
         }
         XCTAssertTrue(Sibionics2AuthenticationAddress.setOverride(nil, for: identifier, userDefaults: defaults))
         XCTAssertNil(Sibionics2AuthenticationAddress.override(for: identifier, userDefaults: defaults))
@@ -168,12 +170,12 @@ final class Sibionics2ProtocolTests: XCTestCase {
         let sessionKey = Data("GKSHGDU0TYA456G4".utf8)
         XCTAssertEqual(
             [UInt8](codec.buildAuthPacket(
-                macAddress: [0xC7, 0x71, 0xB0, 0xD1, 0x5B, 0x32],
+                macAddress: testBluetoothAddressBytes,
                 sessionKey: sessionKey
             )),
-            [0x3E, 0xF6, 0x6F, 0xEB, 0x53, 0xA2, 0xE8, 0xAD, 0x7A, 0xC6, 0xCD, 0x50,
+            [0x3E, 0xF6, 0x6F, 0xD8, 0x08, 0x73, 0x58, 0xDC, 0xBF, 0xC6, 0xCD, 0x50,
              0x47, 0xF0, 0x42, 0xD9, 0xB2, 0xE7, 0xBD, 0x0D, 0x16, 0xB1, 0x57, 0xF1,
-             0x4A, 0x51]
+             0x4A, 0x94]
         )
         XCTAssertEqual(
             [UInt8](codec.buildDataRequestPacket(lastIndex: 25_296)),
@@ -249,23 +251,32 @@ final class Sibionics2ProtocolTests: XCTestCase {
 
     func testAuthenticationAddressAcceptsCompactAndPrivateSelectorValueFormats() {
         XCTAssertEqual(
-            Sibionics2AuthenticationAddress.normalize("c7:71:b0:d1:5b:32"),
-            "C7:71:B0:D1:5B:32"
+            Sibionics2AuthenticationAddress.normalize(testBluetoothAddress.lowercased()),
+            testBluetoothAddress
         )
         XCTAssertEqual(
-            Sibionics2AuthenticationAddress.normalize("C771B0D15B32"),
-            "C7:71:B0:D1:5B:32"
+            Sibionics2AuthenticationAddress.normalize(
+                testBluetoothAddress.replacingOccurrences(of: ":", with: "")
+            ),
+            testBluetoothAddress
         )
         XCTAssertEqual(
-            Sibionics2AuthenticationAddress.address(from: Data([0xC7, 0x71, 0xB0, 0xD1, 0x5B, 0x32])),
-            "C7:71:B0:D1:5B:32"
+            Sibionics2AuthenticationAddress.address(from: Data(testBluetoothAddressBytes)),
+            testBluetoothAddress
         )
         XCTAssertEqual(
-            Sibionics2AuthenticationAddress.address(from: "C7:71:B0:D1:5B:32"),
-            "C7:71:B0:D1:5B:32"
+            Sibionics2AuthenticationAddress.address(from: testBluetoothAddress),
+            testBluetoothAddress
         )
         XCTAssertNil(Sibionics2AuthenticationAddress.normalize("000000000000"))
         XCTAssertNil(Sibionics2AuthenticationAddress.address(from: Data(repeating: 0, count: 6)))
+    }
+
+    func testFactorySensitivityUsesJugglucoBaselineWhenNoFactoryCodeIsAvailable() {
+        XCTAssertEqual(
+            Sibionics2FactorySensitivity.effectiveSensitivity(advertisedName: nil),
+            Sibionics2FactorySensitivity.defaultSensitivity
+        )
     }
 
     func testResetPacketMatchesJugglucoV120MaintenancePacket() {
@@ -336,7 +347,10 @@ final class Sibionics2ProtocolTests: XCTestCase {
     }
 
     func testAutomaticSensorResetWaitsForStableReadingAndHonorsDisableSetting() {
-        XCTAssertEqual(Sibionics2AutoResetPolicy.expectedSensorLife / (24 * 60 * 60), 23)
+        XCTAssertEqual(Sibionics2SensorProfile.expectedLifeInDays, 23)
+        XCTAssertEqual(Sibionics2AutoResetPolicy.expectedSensorLifeDays, 23)
+        XCTAssertEqual(Sibionics2AutoResetPolicy.normalResetAge, TimeInterval(22 * 24 * 60 * 60 - 4 * 60 * 60))
+        XCTAssertEqual(Sibionics2CalibrationMode.jugglucoNG.calibrationHistoryDays, 23)
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let resetWindowStartsAt = start.addingTimeInterval(Sibionics2AutoResetPolicy.normalResetAge)
         let prior = Sibionics2AutoResetReading(glucoseMgDl: 119, timeStamp: resetWindowStartsAt.addingTimeInterval(-60))
@@ -353,14 +367,17 @@ final class Sibionics2ProtocolTests: XCTestCase {
             previous: Sibionics2AutoResetReading(glucoseMgDl: 200, timeStamp: resetWindowStartsAt.addingTimeInterval(-60)),
             latest: Sibionics2AutoResetReading(glucoseMgDl: 205, timeStamp: resetWindowStartsAt)
         ).resetNow)
+        let forcedResetTime = start.addingTimeInterval(
+            Sibionics2AutoResetPolicy.expectedSensorLife - Sibionics2AutoResetPolicy.preExpiryGuard
+        )
         let forced = Sibionics2AutoResetPolicy.evaluate(
-            now: start.addingTimeInterval(23 * 24 * 60 * 60 - 4 * 60 * 60),
+            now: forcedResetTime,
             sensorStartDate: start, enabled: true, previous: nil, latest: nil
         )
         XCTAssertTrue(forced.resetNow)
         XCTAssertTrue(forced.forced)
         let forcedWhenDisabled = Sibionics2AutoResetPolicy.evaluate(
-            now: start.addingTimeInterval(23 * 24 * 60 * 60 - 4 * 60 * 60),
+            now: forcedResetTime,
             sensorStartDate: start, enabled: false, previous: nil, latest: nil
         )
         XCTAssertTrue(forcedWhenDisabled.resetNow)

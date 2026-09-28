@@ -25,6 +25,14 @@ struct Sibionics2GlucoseProcessor {
     private static let snapshotVersion: UInt16 = 2
     private static let maximumCoreHexLength = 16_384
     private static let coreSnapshotChunkByteCount = 256
+    private static let mmolToMgDlConversionFactor = 18.0
+
+    private enum Validation {
+        static let minimumCandidateMmol: Float = 1.0
+        static let maximumCandidateMmol: Float = 50.0
+        static let maximumCorrectionDeltaMmol: Float = 40.0
+        static let minimumCorrectedMmol: Float = 0.0
+    }
 
     private final class CoreBox {
         let value: Sibionics2V116AFacade
@@ -42,7 +50,9 @@ struct Sibionics2GlucoseProcessor {
         let valid = Sibionics2FactorySensitivity.isSupported(sensitivity)
         self.validSensitivity = valid
         self.sensitivity = Float(sensitivity)
-        self.coreBox = CoreBox(Sibionics2V116AFacade(sensitivity: valid ? Float(sensitivity) : 1.27))
+        self.coreBox = CoreBox(Sibionics2V116AFacade(
+            sensitivity: valid ? Float(sensitivity) : Float(Sibionics2FactorySensitivity.defaultSensitivity)
+        ))
     }
 
     mutating func process(
@@ -63,9 +73,11 @@ struct Sibionics2GlucoseProcessor {
         lastIndex = reading.index
 
         let displayMmol: Float
-        if candidate.isFinite, candidate > 1, candidate <= 50 {
+        if candidate.isFinite,
+           candidate > Validation.minimumCandidateMmol,
+           candidate <= Validation.maximumCandidateMmol {
             let delta = candidate - raw
-            guard delta.isFinite, abs(delta) < 40 else { return nil }
+            guard delta.isFinite, abs(delta) < Validation.maximumCorrectionDeltaMmol else { return nil }
             switch mode {
             case .live:
                 liveDeltaMmol = delta
@@ -83,14 +95,18 @@ struct Sibionics2GlucoseProcessor {
             case .replay:
                 delta = replayDeltaMmol
             }
-            guard let delta, delta.isFinite, abs(delta) < 40 else { return nil }
+            guard let delta, delta.isFinite, abs(delta) < Validation.maximumCorrectionDeltaMmol else { return nil }
             let corrected = raw + delta
-            guard corrected.isFinite, corrected > 0, corrected <= 50 else { return nil }
+            guard corrected.isFinite,
+                  corrected > Validation.minimumCorrectedMmol,
+                  corrected <= Validation.maximumCandidateMmol else { return nil }
             displayMmol = Self.nativeRound(corrected)
         }
 
-        let mgDl = Double(displayMmol) * 18.0
-        guard mgDl.isFinite, mgDl > 0, mgDl <= 900 else { return nil }
+        let mgDl = Double(displayMmol) * Self.mmolToMgDlConversionFactor
+        guard mgDl.isFinite,
+              mgDl > 0,
+              mgDl <= Sibionics2SensorProfile.maximumReportableGlucoseMgDl else { return nil }
         return Sibionics2ProcessedGlucose(
             glucoseMgDl: mgDl,
             index: reading.index,
@@ -225,9 +241,12 @@ struct Sibionics2GlucoseProcessor {
     }
 
     private func isValid(_ reading: Sibionics2RawReading) -> Bool {
-        reading.index > 0 && reading.index <= Int(UInt16.max) &&
-            reading.rawMmol.isFinite && reading.rawMmol > 0 && reading.rawMmol <= 6553.5 &&
-            reading.temperatureC.isFinite && reading.temperatureC > 0 && reading.temperatureC <= 80
+        reading.index >= Sibionics2ReadingValidationPolicy.minimumIndex &&
+            reading.index <= Sibionics2ReadingValidationPolicy.maximumIndex &&
+            reading.rawMmol.isFinite && reading.rawMmol > 0 &&
+            reading.rawMmol <= Sibionics2ReadingValidationPolicy.maximumRawGlucoseMmol &&
+            reading.temperatureC.isFinite && reading.temperatureC > 0 &&
+            reading.temperatureC <= Sibionics2ReadingValidationPolicy.maximumTemperatureCelsius
     }
 
     private mutating func ensureUniqueCore() {

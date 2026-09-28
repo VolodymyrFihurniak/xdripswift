@@ -3,8 +3,6 @@ import Foundation
 /// Replays unique sensor history in ascending index order and returns only accepted values
 /// in the newest-first order expected by CGMTransmitterDelegate.
 struct Sibionics2ReadingBatchProcessor {
-    private static let sessionStartTolerance: TimeInterval = 10 * 60
-
     private let deviceIdentifier: String
     private let stateStore: Sibionics2ReadingStateStore
     private var processor: Sibionics2GlucoseProcessor
@@ -120,7 +118,9 @@ struct Sibionics2ReadingBatchProcessor {
         for (position, reading) in newReadings.enumerated() {
             let mode: Sibionics2ProcessingMode = position == newReadings.count - 1 ? .live : .replay
             if let result = processor.process(reading, mode: mode),
-               result.glucoseMgDl.isFinite, result.glucoseMgDl > 0, result.glucoseMgDl <= 900 {
+               result.glucoseMgDl.isFinite,
+               result.glucoseMgDl > 0,
+               result.glucoseMgDl <= Sibionics2SensorProfile.maximumReportableGlucoseMgDl {
                 processed.append(result)
             }
         }
@@ -168,23 +168,33 @@ struct Sibionics2ReadingBatchProcessor {
         // The sensor's minute index can drift from wall time by tens of minutes
         // over a long session. A later index alone is not a new sensor.
         let lastIndex = Int(readingState?.lastDeliveredIndex ?? 0)
-        let observedAge = Double(max(firstReadingIndex, lastIndex)) * 60
-        let driftTolerance = min(6 * 60 * 60, max(Self.sessionStartTolerance, observedAge * 0.01))
+        let observedAge = Double(max(firstReadingIndex, lastIndex)) * Sibionics2SensorProfile.sampleInterval
+        let driftTolerance = min(
+            Sibionics2ConnectionPolicy.maximumSessionStartDrift,
+            max(Sibionics2ConnectionPolicy.sessionStartDateTolerance,
+                observedAge * Sibionics2ConnectionPolicy.indexAgeDriftRatio)
+        )
         let tolerance = firstReadingIndex > lastIndex
-            ? max(2 * 60 * 60, driftTolerance)
+            ? max(Sibionics2ConnectionPolicy.minimumForwardProgressDrift, driftTolerance)
             : driftTolerance
         return abs(difference) > tolerance
     }
 
     private static func sensorStartDate(for reading: Sibionics2RawReading) -> Date {
-        reading.eventTime.addingTimeInterval(-TimeInterval(reading.index) * 60)
+        reading.eventTime.addingTimeInterval(
+            -TimeInterval(reading.index) * Sibionics2SensorProfile.sampleInterval
+        )
     }
 
     private static func isValid(_ reading: Sibionics2RawReading) -> Bool {
-        reading.index > 0 && reading.index <= Int(UInt16.max) &&
+        reading.index >= Sibionics2ReadingValidationPolicy.minimumIndex &&
+            reading.index <= Sibionics2ReadingValidationPolicy.maximumIndex &&
             reading.eventTime.timeIntervalSince1970.isFinite &&
-            reading.temperatureC.isFinite && reading.temperatureC > 0 && reading.temperatureC <= 80 &&
-            reading.impedance >= 0 && reading.impedance <= Int(UInt16.max) &&
-            reading.rawMmol.isFinite && reading.rawMmol > 0 && reading.rawMmol <= 6553.5
+            reading.temperatureC.isFinite && reading.temperatureC > 0 &&
+            reading.temperatureC <= Sibionics2ReadingValidationPolicy.maximumTemperatureCelsius &&
+            reading.impedance >= Sibionics2ReadingValidationPolicy.minimumImpedance &&
+            reading.impedance <= Sibionics2ReadingValidationPolicy.maximumImpedance &&
+            reading.rawMmol.isFinite && reading.rawMmol > 0 &&
+            reading.rawMmol <= Sibionics2ReadingValidationPolicy.maximumRawGlucoseMmol
     }
 }
