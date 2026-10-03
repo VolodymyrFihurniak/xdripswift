@@ -257,3 +257,46 @@
 
 /* Label before the transmitter expiry date. */
 "transmitterExpiresLabel" = "Закінчується";
+
+/* Вибір знайденого датчика Sibionics 2. */
+"sibionics2.discoveryTitle" = "Знайдені датчики Sibionics 2";
+"sibionics2.discoveryFooter" = "Залиште цей екран відкритим і виберіть свій датчик, коли він з’явиться.";
+"sibionics2.discoveryEmpty" = "Пошук датчиків Sibionics 2…";
+"sibionics2.discoveryNoMatches" = "Відповідних датчиків не знайдено";
+"sibionics2.discoverySearch" = "Пошук датчиків";
+"sibionics2.connectionTitle" = "Підключення датчика";
+"sibionics2.bluetoothAddressTitle" = "Bluetooth-адреса";
+"sibionics2.bluetoothAddressFooter" = "xDripSwift автоматично перевіряє приватні селектори CoreBluetooth для отримання адреси. Якщо вони недоступні й датчик не передає показники, введіть MAC-адресу з перевіреного журналу Android.";
+"sibionics2.bluetoothAddressAutomatic" = "не визначено; введіть вручну";
+"sibionics2.bluetoothAddressInvalid" = "Введіть шість шістнадцяткових пар через двокрапку.";
+"sibionics2.bluetoothAddressDetected" = "визначено автоматично";
+"sibionics2.probeCodeTitle" = "QR-код датчика";
+"sibionics2.settingsTitle" = "Налаштування Sibionics 2";
+"sibionics.readingAgeTitle" = "Останнє показання";
+"sibionics.readingAgeWaiting" = "Очікування показання";
+"sibionics.readingAgeSecondsFormat" = "%d с тому";
+"sibionics.readingAgeMinutesFormat" = "%d хв тому";
+"sibionics2.settingsFooter" = "QR-код задає заводську чутливість. Калібрування коригує показники за вимірами глюкометра. Інтервал визначає, як часто xDripSwift запитує нові дані. Автоматичне скидання може початися за чотири години до 22-го дня, якщо глюкоза стабільна; захисне скидання примусово виконується за чотири години до 23-го дня, навіть коли автоматичне скидання вимкнене. Також датчик можна скинути вручну.";
+"sibionics2.probeCodeFooter" = "Введіть 14-символьний код probe з QR-етикетки датчика. Штатний алгоритм JugglucoNG автоматично декодує заводську чутливість. Якщо залишити поле порожнім, буде використано запасне значення з Bluetooth-назви.";
+"sibionics2.probeCodeAutomatic" = "автоматично з Bluetooth-назви";
+"sibionics2.probeCodeInvalid" = "Введіть правильний 14-символьний код датчика.";
+"sibionics2.calibrationTitle" = "Метод калібрування";
+"sibionics2.calibrationFooter" = "Обидва методи працюють поверх штатної корекції Sibionics. xDrip+ використовує зважене калібрування xDrip, а JugglucoNG — зважене калібрування з більшою вагою свіжих вимірювань та найближчої точки глюкометра.";
+"sibionics2.calibrationXdripPlus" = "xDrip+";
+"sibionics2.calibrationJugglucoNG" = "JugglucoNG";
+"sibionics2.pollTitle" = "Запит останнього значення";
+"sibionics2.pollFooter" = "Як часто xDripSwift запитує показники датчика після встановлення з’єднання.";
+"sibionics2.pollOneMinute" = "1 хвилина";
+"sibionics2.pollFiveMinutes" = "5 хвилин";
+"sibionics2.pollTenMinutes" = "10 хвилин";
+"sibionics2.pollFifteenMinutes" = "15 хвилин";
+"sibionics2.autoResetTitle" = "Автоматичне скидання датчика";
+"sibionics2.resetTitle" = "Скинути датчик";
+"sibionics2.resetConfirmTitle" = "Скинути Sibionics 2?";
+"sibionics2.resetConfirmMessage" = "Датчику буде надіслано команду скидання. Продовжуйте, лише якщо справді хочете почати новий сеанс датчика.";
+
+"sibionics1.discoveryTitle" = "Датчики Sibionics 1 поблизу";
+"sibionics1.discoveryEmpty" = "Пошук датчиків Sibionics 1…";
+"sibionics1.settingsTitle" = "Налаштування Sibionics 1";
+"sibionics1.settingsFooter" = "Протокол датчика визначається автоматично. Калібрування коригує показники за вимірами глюкометра. Інтервал опитування визначає частоту запиту останніх даних.";
+"sibionics1.sensitivityUnknown" = "Заводська чутливість невідома · нейтральний коефіцієнт";

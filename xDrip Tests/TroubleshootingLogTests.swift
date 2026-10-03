@@ -429,6 +429,20 @@ final class TroubleshootingLogTests: XCTestCase {
             TroubleshootingLogSource(bluetoothPeripheralType: .Libre2Type),
             .libre2
         )
+        XCTAssertEqual(
+            TroubleshootingLogSource(directTransmitterType: .sibionics2),
+            .sibionics2
+        )
+        XCTAssertEqual(
+            TroubleshootingLogSource(bluetoothPeripheralType: .Sibionics2Type),
+            .sibionics2
+        )
+        let sibionicsSource = try XCTUnwrap(
+            TroubleshootingLogSource(bluetoothPeripheralType: .Sibionics2Type)
+        )
+        XCTAssertEqual(sibionicsSource.name, "Sibionics 2")
+        XCTAssertFalse(sibionicsSource.isFollowerSource)
+
         let json = String(
             decoding: try JSONEncoder.troubleshooting.encode(XCTUnwrap(entries.last)),
             as: UTF8.self
@@ -1740,7 +1754,7 @@ final class TroubleshootingLogTests: XCTestCase {
         XCTAssertEqual(report.entries(matching: "HEARTbeat").map(\.kind), [
             .heartbeatReceived
         ])
-        XCTAssertEqual(report.entries(matching: "123 mg/dL").map(\.kind), [
+        XCTAssertEqual(report.entries(matching: "123").map(\.kind), [
             entries[2].kind
         ])
         XCTAssertEqual(report.entries(matching: "no match"), [])

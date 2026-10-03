@@ -901,6 +901,37 @@ final class CareLinkTests: XCTestCase {
             nightscoutEventType: type == .AutomaticBasal ? "Temp Basal" : (type == .Insulin ? "Bolus" : "Carbs"), notes: nil)
     }
 
+    func testTimestampRepairCorroboratesDuplicatesAcrossUTCMidnight() {
+        let midnight = Date(timeIntervalSince1970: (1_800_000_000.0 / 86400.0).rounded(.down) * 86400.0)
+        let original = (0..<4).map { index in
+            repairRecord(midnight.addingTimeInterval(-5400 + Double(index * 3300)),
+                         amount: Double(index + 1) / 10)
+        }
+        // Two distinct deliveries fall before midnight, and two after. The repeated
+        // one-, two-, and three-second shifts form a single corroborated stream.
+        let stored = original.flatMap { record in
+            (0..<4).map { shift in
+                repairRecord(record.date.addingTimeInterval(Double(shift)), amount: record.value)
+            }
+        }
+        let plan = CareLinkTimestampRepair.plan(stored: stored, incoming: [])
+        let retained = stored.indices.filter { !plan.removed.contains($0) }.map { stored[$0] }
+        XCTAssertEqual(retained.map(\.value).sorted(), original.map(\.value).sorted())
+        XCTAssertEqual(plan.removed.count, 12)
+        XCTAssertTrue(CareLinkTimestampRepair.plan(stored: retained, incoming: []).removed.isEmpty)
+    }
+
+    func testTimestampRepairDoesNotCorroborateAcrossMoreThan24Hours() {
+        let midnight = Date(timeIntervalSince1970: (1_800_000_000.0 / 86400.0).rounded(.down) * 86400.0)
+        let dates = [-5400.0, -2100.0, 82800.0].map { midnight.addingTimeInterval($0) }
+        let stored = dates.enumerated().flatMap { index, date in
+            (0..<4).map { shift in
+                repairRecord(date.addingTimeInterval(Double(shift)), amount: Double(index + 1) / 10)
+            }
+        }
+        XCTAssertTrue(CareLinkTimestampRepair.plan(stored: stored, incoming: []).removed.isEmpty)
+    }
+
     func testTimestampRepairRequiresVariedSequencesAndProtectsCurrentEvents() {
         let base = now.addingTimeInterval(-86400)
         func sequence(shift: Double, patient: String = "repair-patient", serverIDs: Bool = false) -> [CareLinkTherapyRecord] {

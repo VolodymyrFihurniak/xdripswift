@@ -221,6 +221,69 @@ jobs:
           submodules: recursive
           ref: ${{ env.TARGET_BRANCH }}
 
+      - name: Set up Temurin JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.5.0'
+          cache-provider: basic
+
+      - name: Run Sibionics 2 JVM tests
+        run: gradle -p Sibionics2Core jvmTest
+
+      - name: Build Sibionics 2 XCFramework
+        run: gradle -p Sibionics2Core assembleSibionics2CoreReleaseXCFramework
+
+      - name: Verify Sibionics 2 XCFramework
+        run: |
+          framework_path="Sibionics2Core/build/XCFrameworks/release/Sibionics2Core.xcframework"
+          if [ ! -d "$framework_path" ]; then
+            echo "::error::Expected XCFramework was not created at $framework_path"
+            exit 1
+          fi
+
+      - name: Prepare iOS test simulator
+        run: |
+          runtime_id="com.apple.CoreSimulator.SimRuntime.iOS-26-2"
+          xcrun simctl list runtimes available
+          if ! xcrun simctl list runtimes available | grep -Fq "$runtime_id"; then
+            xcodebuild -downloadPlatform iOS -buildVersion 26.2
+          fi
+          simulator_id=$(xcrun simctl create "xDrip CI iPhone 17" "com.apple.CoreSimulator.SimDeviceType.iPhone-17" "$runtime_id")
+          echo "TEST_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+          xcrun simctl list devices available
+
+      - name: Run xDrip tests
+        env:
+          XCODE_RESULT_BUNDLE: ${{ runner.temp }}/xdrip-tests.xcresult
+        run: |
+          set +e
+          xcodebuild test -project xdrip.xcodeproj -scheme xdrip -destination "platform=iOS Simulator,id=$TEST_SIMULATOR_ID" -parallel-testing-enabled NO -resultBundlePath "$XCODE_RESULT_BUNDLE" CODE_SIGNING_ALLOWED=NO
+          test_status=$?
+          if [ -d "$XCODE_RESULT_BUNDLE" ]; then
+            echo "##[group]XCTest result summary"
+            xcrun xcresulttool get test-results summary --path "$XCODE_RESULT_BUNDLE" --format json
+            summary_status=$?
+            echo "##[endgroup]"
+            if [ "$summary_status" -ne 0 ]; then
+              echo "::warning::Could not export the XCTest result summary."
+            fi
+          fi
+          exit "$test_status"
+
+      - name: Upload xDrip XCTest results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: xdrip-xctest-results
+          path: ${{ runner.temp }}/xdrip-tests.xcresult
+          if-no-files-found: ignore
+
       # Patch Fastlane Match to not print tables
       - name: Patch Match Tables
         run: find /usr/local/lib/ruby/gems -name table_printer.rb | xargs sed -i "" "/puts(Terminal::Table.new(params))/d"

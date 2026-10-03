@@ -1,11 +1,26 @@
 import Foundation
 import CoreBluetooth
 
+/// A nearby BLE peripheral found during an explicit device scan.
+struct BluetoothPeripheralScanResult: Identifiable, Equatable {
+    let identifier: String
+    let name: String
+    let rssi: Int
+
+    var id: String { identifier }
+}
+
 /// delegate used for any type of BluetoothTransmitter
 protocol BluetoothTransmitterDelegate: AnyObject {
  
     // MARK: - Generic functions that can be used for any type of BluetoothTransmitter
     
+    /// A transmitter found a compatible peripheral while the user is choosing a device.
+    func didDiscoverBluetoothPeripheral(
+        _ result: BluetoothPeripheralScanResult,
+        bluetoothTransmitter: BluetoothTransmitter
+    )
+
     /// did connect to
     /// - parameters:
     ///     - bluetoothTransmitter : the bluetoothTransmitter to which the connection is made
@@ -44,6 +59,11 @@ protocol BluetoothTransmitterDelegate: AnyObject {
 }
 
 extension BluetoothTransmitterDelegate {
+    func didDiscoverBluetoothPeripheral(
+        _: BluetoothPeripheralScanResult,
+        bluetoothTransmitter _: BluetoothTransmitter
+    ) {}
+
     func didUpdateSignalStrength(bluetoothTransmitter _: BluetoothTransmitter) {}
 
     /// Keep battery reporting optional so transmitters without EmaLink/OrangeLink-style battery

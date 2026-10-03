@@ -146,6 +146,7 @@ final class OnlineHelpTests: XCTestCase {
         XCTAssertEqual(BluetoothPeripheralType.DexcomG7HeartBeatType.onlineHelpTopic, .followerHeartbeat)
         XCTAssertEqual(BluetoothPeripheralType.OmniPodHeartBeatType.onlineHelpTopic, .followerHeartbeat)
         XCTAssertEqual(BluetoothPeripheralType.MedtrumTouchCareNanoType.onlineHelpTopic, .medtrumNano)
+        XCTAssertEqual(BluetoothPeripheralType.Sibionics2Type.onlineHelpTopic, .addDirectCGM)
     }
 
     func testBluetoothPeripheralCategoriesHaveExactTopics() {
