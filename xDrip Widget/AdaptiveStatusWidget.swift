@@ -11,7 +11,11 @@ struct AdaptiveStatusWidget: Widget {
                 .containerBackground(for: .widget) { Color.clear }
         }
         .configurationDisplayName("Adaptive Status")
-        .description(Text("adaptive_description", tableName: "Common"))
+        .description(Text(verbatim: NSLocalizedString(
+            "adaptive_description", tableName: "Common", bundle: .main,
+            value: "Glucose, trend and reading age with an adaptive glass appearance.",
+            comment: "Adaptive Status widget gallery description"
+        )))
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
     }
 }
