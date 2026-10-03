@@ -829,6 +829,24 @@
 		AD5700000000000000000012 /* AdaptiveGlucoseStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD5700000000000000000002 /* AdaptiveGlucoseStatus.swift */; };
 		AD5700000000000000000013 /* AdaptiveGlucoseStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD5700000000000000000002 /* AdaptiveGlucoseStatus.swift */; };
 		AD5700000000000000000014 /* AdaptiveGlucoseStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD5700000000000000000003 /* AdaptiveGlucoseStatusTests.swift */; };
+		51B200023102000100000001 /* Sibionics2Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B200013102000100000001 /* Sibionics2Protocol.swift */; };
+		51B200043102000100000001 /* Sibionics2Handshake.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B200033102000100000001 /* Sibionics2Handshake.swift */; };
+		51B200063102000100000001 /* Sibionics2ProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B200053102000100000001 /* Sibionics2ProtocolTests.swift */; };
+		51B210023102000100000001 /* Sibionics2GlucoseProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B210013102000100000001 /* Sibionics2GlucoseProcessorTests.swift */; };
+		D3E200013102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E200023102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift */; };
+		51B210043102000100000001 /* sibionics2_v116a_startup.csv in Resources */ = {isa = PBXBuildFile; fileRef = 51B210033102000100000001 /* sibionics2_v116a_startup.csv */; };
+		51B310043102000100000001 /* sibionics1_v115g_replay.csv in Resources */ = {isa = PBXBuildFile; fileRef = 51B310033102000100000001 /* sibionics1_v115g_replay.csv */; };
+		A1B200023102000100000001 /* Sibionics2GlucoseProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B200013102000100000001 /* Sibionics2GlucoseProcessor.swift */; };
+		A1B200043102000100000001 /* Sibionics2FactorySensitivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B200033102000100000001 /* Sibionics2FactorySensitivity.swift */; };
+		A1B200063102000100000001 /* Sibionics2Core.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B200053102000100000001 /* Sibionics2Core.xcframework */; };
+		D3E300010000000000000001 /* Sibionics2+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E300020000000000000001 /* Sibionics2+CoreDataClass.swift */; };
+		D3E300030000000000000001 /* Sibionics2+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E300040000000000000001 /* Sibionics2+CoreDataProperties.swift */; };
+		D3E300050000000000000001 /* Sibionics2+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E300060000000000000001 /* Sibionics2+BluetoothPeripheral.swift */; };
+		D3E300070000000000000001 /* CGMSibionics2Transmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E300080000000000000001 /* CGMSibionics2Transmitter.swift */; };
+		D3E300090000000000000001 /* Sibionics2ReadingStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E3000A0000000000000001 /* Sibionics2ReadingStateStore.swift */; };
+		D3E3000B0000000000000001 /* Sibionics2ReadingBatchProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E3000C0000000000000001 /* Sibionics2ReadingBatchProcessor.swift */; };
+		D3E400010000000000000001 /* Sibionics2Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E400020000000000000001 /* Sibionics2Configuration.swift */; };
+		D3E500010000000000000001 /* Sibionics2Calibrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E500020000000000000001 /* Sibionics2Calibrator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -2036,6 +2054,26 @@
 		AD5700000000000000000001 /* AdaptiveStatusWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "xDrip Widget/AdaptiveStatusWidget.swift"; sourceTree = SOURCE_ROOT; };
 		AD5700000000000000000002 /* AdaptiveGlucoseStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "xDrip/Managers/Widgets/AdaptiveGlucoseStatus.swift"; sourceTree = SOURCE_ROOT; };
 		AD5700000000000000000003 /* AdaptiveGlucoseStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveGlucoseStatusTests.swift; sourceTree = "<group>"; };
+		51B200013102000100000001 /* Sibionics2Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Protocol.swift; sourceTree = "<group>"; };
+		51B200033102000100000001 /* Sibionics2Handshake.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Handshake.swift; sourceTree = "<group>"; };
+		51B200053102000100000001 /* Sibionics2ProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2ProtocolTests.swift; sourceTree = "<group>"; };
+		51B210013102000100000001 /* Sibionics2GlucoseProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2GlucoseProcessorTests.swift; sourceTree = "<group>"; };
+		D3E200023102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2RegistrationAndDeliveryTests.swift; sourceTree = "<group>"; };
+		51B210033102000100000001 /* sibionics2_v116a_startup.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = sibionics2_v116a_startup.csv; sourceTree = "<group>"; };
+		51B310033102000100000001 /* sibionics1_v115g_replay.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = sibionics1_v115g_replay.csv; sourceTree = "<group>"; };
+		A1B200013102000100000001 /* Sibionics2GlucoseProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2GlucoseProcessor.swift; sourceTree = "<group>"; };
+		A1B200033102000100000001 /* Sibionics2FactorySensitivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2FactorySensitivity.swift; sourceTree = "<group>"; };
+		A1B200053102000100000001 /* Sibionics2Core.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Sibionics2Core/build/XCFrameworks/release/Sibionics2Core.xcframework; sourceTree = SOURCE_ROOT; };
+		D3E300020000000000000001 /* Sibionics2+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sibionics2+CoreDataClass.swift"; sourceTree = "<group>"; };
+		D3E300040000000000000001 /* Sibionics2+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sibionics2+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		D3E300060000000000000001 /* Sibionics2+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sibionics2+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
+		D3E300080000000000000001 /* CGMSibionics2Transmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CGMSibionics2Transmitter.swift"; sourceTree = "<group>"; };
+		D3E3000A0000000000000001 /* Sibionics2ReadingStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sibionics2ReadingStateStore.swift"; sourceTree = "<group>"; };
+		D3E3000C0000000000000001 /* Sibionics2ReadingBatchProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sibionics2ReadingBatchProcessor.swift"; sourceTree = "<group>"; };
+		D3E3000D0000000000000001 /* xdrip v33.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v33.xcdatamodel"; sourceTree = "<group>"; };
+		D3E4000D0000000000000001 /* xdrip v34.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v34.xcdatamodel"; sourceTree = "<group>"; };
+		D3E400020000000000000001 /* Sibionics2Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Configuration.swift; sourceTree = "<group>"; };
+		D3E500020000000000000001 /* Sibionics2Calibrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Calibrator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2084,6 +2122,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B200063102000100000001 /* Sibionics2Core.xcframework in Frameworks */,
 				F81F3C4225D1D91300520946 /* CoreNFC.framework in Frameworks */,
 				F821CF9722AE589E005C1E43 /* HealthKit.framework in Frameworks */,
 				47DE41AA2B860DF00041DA19 /* WatchConnectivity.framework in Frameworks */,
@@ -2463,6 +2502,7 @@
 		48C0E851274A3BB6D42C6F20 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				A1B200053102000100000001 /* Sibionics2Core.xcframework */,
 				F81F3C4125D1D91300520946 /* CoreNFC.framework */,
 				F821CF9622AE589E005C1E43 /* HealthKit.framework */,
 				F870D3D225126A49008967B0 /* NotificationCenter.framework */,
@@ -2631,6 +2671,21 @@
 			path = SensorHealth;
 			sourceTree = "<group>";
 		};
+		51B200073102000100000001 /* Sibionics2 */ = {
+			isa = PBXGroup;
+			children = (
+				D3E300080000000000000001 /* CGMSibionics2Transmitter.swift */,
+				D3E3000A0000000000000001 /* Sibionics2ReadingStateStore.swift */,
+				D3E3000C0000000000000001 /* Sibionics2ReadingBatchProcessor.swift */,
+				D3E400020000000000000001 /* Sibionics2Configuration.swift */,
+				A1B200013102000100000001 /* Sibionics2GlucoseProcessor.swift */,
+				A1B200033102000100000001 /* Sibionics2FactorySensitivity.swift */,
+				51B200013102000100000001 /* Sibionics2Protocol.swift */,
+				51B200033102000100000001 /* Sibionics2Handshake.swift */,
+			);
+			path = Sibionics2;
+			sourceTree = "<group>";
+		};
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
@@ -2652,6 +2707,10 @@
 				5A0100033015000100000001 /* GlucoseRangeDistributionTests.swift */,
 				5A0921013015000100000001 /* GMIStatisticsTests.swift */,
 				4D800003301F000100000001 /* Libre2FrameAssemblerTests.swift */,
+				51B200053102000100000001 /* Sibionics2ProtocolTests.swift */,
+				51B210013102000100000001 /* Sibionics2GlucoseProcessorTests.swift */,
+				D3E200023102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift */,
+				51B210053102000100000001 /* Fixtures */,
 				AB1900023014000200000001 /* LiveActivityWarmupTests.swift */,
 				BA0000020000000000000012 /* NightscoutFollowerGapFillTests.swift */,
 				A50000040000000000000001 /* OnlineHelpTests.swift */,
@@ -3492,6 +3551,8 @@
 		F8EA6CA421B9A25B0082976B /* classes */ = {
 			isa = PBXGroup;
 			children = (
+				D3E300020000000000000001 /* Sibionics2+CoreDataClass.swift */,
+				D3E300040000000000000001 /* Sibionics2+CoreDataProperties.swift */,
 				F8B3A79122635A25004BA588 /* AlertEntry+CoreDataClass.swift */,
 				F8B3A79222635A25004BA588 /* AlertEntry+CoreDataProperties.swift */,
 				F8B3A78C22622953004BA588 /* AlertType+CoreDataClass.swift */,
@@ -3549,6 +3610,7 @@
 			children = (
 				F8E3C3AC21FE551C00907A04 /* DexcomCalibrator.swift */,
 				F8025E5321EE8D2100ECF0C0 /* Libre1Calibrator.swift */,
+				D3E500020000000000000001 /* Sibionics2Calibrator.swift */,
 				F51B9F7C24B216CD00FC0643 /* Libre1NonFixedSlopeCalibrator.swift */,
 				F8EEDD6323020FAD00D2D610 /* NoCalibrator.swift */,
 				F8A54AAC22D6859200934E7A /* SlopeParameters.swift */,
@@ -3666,6 +3728,7 @@
 		F8F971AE23A5914C00C3F17D /* CGM */ = {
 			isa = PBXGroup;
 			children = (
+				D3E300100000000000000001 /* Sibionics2 peripheral group */,
 				F8DF765923E350B100063910 /* Dexcom */,
 				F808D2CF240329D40084B5DB /* Libre */,
 				4D7180102FE8000100000001 /* Medtrum */,
@@ -3726,6 +3789,7 @@
 				F8F971F023A5915900C3F17D /* Generic */,
 				F8F971D623A5915900C3F17D /* Libre */,
 				4D7180122FE8000100000001 /* Medtrum */,
+				51B200073102000100000001 /* Sibionics2 */,
 			);
 			path = CGM;
 			sourceTree = "<group>";
@@ -3861,6 +3925,23 @@
 				F8FDFEA8260DE1A70047597D /* DTCustomColoredAccessory.m */,
 			);
 			path = CustomColoredDisclosureIndicator;
+			sourceTree = "<group>";
+		};
+		51B210053102000100000001 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				51B210033102000100000001 /* sibionics2_v116a_startup.csv */,
+				51B310033102000100000001 /* sibionics1_v115g_replay.csv */,
+			);
+			path = Fixtures;
+			sourceTree = "<group>";
+		};
+		D3E300100000000000000001 /* Sibionics2 peripheral group */ = {
+			isa = PBXGroup;
+			children = (
+				D3E300060000000000000001 /* Sibionics2+BluetoothPeripheral.swift */,
+			);
+			path = Sibionics2;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -4111,6 +4192,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				51B210043102000100000001 /* sibionics2_v116a_startup.csv in Resources */,
+				51B310043102000100000001 /* sibionics1_v115g_replay.csv in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4434,6 +4517,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				51B200063102000100000001 /* Sibionics2ProtocolTests.swift in Sources */,
+				51B210023102000100000001 /* Sibionics2GlucoseProcessorTests.swift in Sources */,
+				D3E200013102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift in Sources */,
 				4F3200013008000100000001 /* BgReadingTrendTests.swift in Sources */,
 				AD5700000000000000000014 /* AdaptiveGlucoseStatusTests.swift in Sources */,
 				5A0100043015000100000001 /* GlucoseRangeDistributionTests.swift in Sources */,
@@ -4467,6 +4553,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B200043102000100000001 /* Sibionics2FactorySensitivity.swift in Sources */,
+				A1B200023102000100000001 /* Sibionics2GlucoseProcessor.swift in Sources */,
+				51B200023102000100000001 /* Sibionics2Protocol.swift in Sources */,
+				51B200043102000100000001 /* Sibionics2Handshake.swift in Sources */,
+				D3E300010000000000000001 /* Sibionics2+CoreDataClass.swift in Sources */,
+				D3E300030000000000000001 /* Sibionics2+CoreDataProperties.swift in Sources */,
+				D3E300050000000000000001 /* Sibionics2+BluetoothPeripheral.swift in Sources */,
+				D3E300070000000000000001 /* CGMSibionics2Transmitter.swift in Sources */,
+				D3E300090000000000000001 /* Sibionics2ReadingStateStore.swift in Sources */,
+				D3E3000B0000000000000001 /* Sibionics2ReadingBatchProcessor.swift in Sources */,
+				D3E400010000000000000001 /* Sibionics2Configuration.swift in Sources */,
 				5A0100023015000100000001 /* GlucoseRangeDistribution.swift in Sources */,
 				4D7A00023014000100000001 /* TroubleshootingLog.swift in Sources */,
 				4D7A00043014000100000001 /* TroubleshootingLogView.swift in Sources */,
@@ -4589,6 +4686,7 @@
 				47B60F3726F389E2003198D3 /* LandscapeChartView.swift in Sources */,
 				4D42B0013013000100000001 /* LandscapeLoopalyzerChart.swift in Sources */,
 				F8025E5421EE8D2100ECF0C0 /* Libre1Calibrator.swift in Sources */,
+				D3E500010000000000000001 /* Sibionics2Calibrator.swift in Sources */,
 				F8F71D742B7C1143005076E8 /* CGMG7Transmitter.swift in Sources */,
 				47F012D12FC9D71700112233 /* DexcomG7AuthBridge.m in Sources */,
 				47F012D42FC9D71700112233 /* DexcomG7ECC.c in Sources */,
@@ -5925,7 +6023,6 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
-				OBJROOT = "";
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SHARED_PRECOMPS_DIR = "";
@@ -5933,7 +6030,6 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_COMPILATION_MODE = singlefile;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SYMROOT = "";
 			};
 			name = Debug;
 		};
@@ -5988,13 +6084,11 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				OBJROOT = "";
 				SDKROOT = iphoneos;
 				SHARED_PRECOMPS_DIR = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SYMROOT = "";
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -6128,6 +6222,8 @@
 		F85FF3C2252D0C32004E6FF1 /* xdrip.xcdatamodeld */ = {
 			isa = XCVersionGroup;
 			children = (
+				D3E3000D0000000000000001 /* xdrip v33.xcdatamodel */,
+				D3E4000D0000000000000001 /* xdrip v34.xcdatamodel */,
 				4F3200313008000100000001 /* xdrip v32.xcdatamodel */,
 				4F3100313007000100000001 /* xdrip v31.xcdatamodel */,
 				4F3000313006000100000001 /* xdrip v30.xcdatamodel */,
@@ -6150,7 +6246,7 @@
 				F85FF3CB252F9C9A004E6FF1 /* xdrip v13.xcdatamodel */,
 				F85FF3C3252D0C32004E6FF1 /* xdrip v12.xcdatamodel */,
 			);
-			currentVersion = 4F3200313008000100000001 /* xdrip v32.xcdatamodel */;
+			currentVersion = D3E4000D0000000000000001 /* xdrip v34.xcdatamodel */;
 			path = xdrip.xcdatamodeld;
 			sourceTree = "<group>";
 			versionGroupType = wrapper.xcdatamodel;

@@ -588,6 +588,14 @@ class BluetoothTransmitter: NSObject, CBCentralManagerDelegate, CBPeripheralDele
     
     // MARK: - fileprivate functions
     
+    /// Connects to a peripheral explicitly selected from a transmitter-specific discovery list.
+    func connectToDiscoveredPeripheral(_ peripheral: CBPeripheral) {
+        runOnCentralQueue { [weak self] in
+            guard let self else { return }
+            self.stopScanAndconnect(to: peripheral)
+        }
+    }
+
     /// stops scanning and connect. To be called after diddiscover
     fileprivate func stopScanAndconnect(to peripheral: CBPeripheral) {
         

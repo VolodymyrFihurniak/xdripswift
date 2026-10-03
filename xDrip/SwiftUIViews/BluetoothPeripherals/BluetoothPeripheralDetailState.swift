@@ -14,6 +14,28 @@ import UIKit
 import UserNotifications
 import os
 
+enum SibionicsReadingAge {
+    static func matchesActivePeripheral(viewedAddress: String, activeAddress: String?) -> Bool {
+        guard let activeAddress, !activeAddress.isEmpty else { return false }
+        return viewedAddress.caseInsensitiveCompare(activeAddress) == .orderedSame
+    }
+
+    static func detail(since timestamp: Date, now: Date) -> String {
+        let seconds = max(0, now.timeIntervalSince(timestamp))
+        if seconds < 60 {
+            return String(format: Texts_BluetoothPeripheralView.sibionicsReadingAgeSecondsFormat, Int(seconds))
+        }
+        return String(format: Texts_BluetoothPeripheralView.sibionicsReadingAgeMinutesFormat, Int(seconds / 60))
+    }
+
+    static func nextRefreshInterval(since timestamp: Date, now: Date) -> TimeInterval {
+        let seconds = max(0, now.timeIntervalSince(timestamp))
+        let unit: TimeInterval = seconds < 60 ? 1 : 60
+        let remainder = seconds.truncatingRemainder(dividingBy: unit)
+        return unit - remainder
+    }
+}
+
 /// Presentation and action state for one Bluetooth peripheral detail screen.
 ///
 /// This class retains the established transmitter-specific logic while publishing value-based
@@ -36,6 +58,13 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
     @Published private(set) var category = BluetoothPeripheralCategory.CGM
     @Published private(set) var canDeletePeripheral = false
     @Published var pendingAlert: BluetoothPeripheralDetailAlert?
+    @Published var sibionics2SearchText = "" {
+        didSet {
+            if sibionics2SearchText != oldValue {
+                refresh()
+            }
+        }
+    }
 
     // MARK: - Dependencies
 
@@ -53,6 +82,23 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
     private let presentSignalStrengthView: (BluetoothPeripheral) -> Void
     private let presentBatteryHistoryView: (NSManagedObjectID) -> Void
 
+    var shouldShowSibionics2DiscoverySearch: Bool {
+        expectedBluetoothPeripheralType.isSibionics && bluetoothPeripheral == nil && isScanning
+    }
+
+    private var filteredSibionics2Devices: [BluetoothPeripheralScanResult] {
+        discoveredSibionics2Devices.values
+            .filter {
+                Sibionics2DeviceIdentity.matchesSearch(name: $0.name, query: sibionics2SearchText)
+            }
+            .sorted {
+                if $0.rssi == $1.rssi {
+                    return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
+                return $0.rssi > $1.rssi
+            }
+    }
+
     var onlineHelpTopic: OnlineHelpTopic {
         expectedBluetoothPeripheralType.onlineHelpTopic
     }
@@ -60,6 +106,9 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
     // MARK: - Working State
 
     private var transmitterIdTempValue: String?
+    private weak var sibionics2DiscoveryTransmitter: CGMSibionics2Transmitter?
+    private var discoveredSibionics2Devices = [String: BluetoothPeripheralScanResult]()
+    private var selectedSibionics2DeviceIdentifier: String?
     private var dexcomG6BluetoothSlot: DexcomG6BluetoothSlot
     private var dexcomG7BluetoothSlot: DexcomG7BluetoothSlot
     private var isScanning = false
@@ -72,6 +121,9 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
     private var cachedTransmitterReadSuccessSummaryText: String?
     private var cachedTransmitterReadSuccessSummaryIndicatorColor: Color?
     private var transmitterReadSuccessTimer: Timer?
+    private var sibionicsReadingAgeTimer: Timer?
+    private var sibionicsReadingAgeTimerTimestamp: Date?
+    private var sibionicsLastReadingTimestamp: Date?
     private var signalStrengthTimer: Timer?
     private var signalStrengthVisible = false
     private var didAddObservers = false
@@ -208,10 +260,17 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
     }
 
     func stop() {
+        didStart = false
+        sibionicsReadingAgeTimer?.invalidate()
+        sibionicsReadingAgeTimer = nil
+        sibionicsReadingAgeTimerTimestamp = nil
         setSignalStrengthVisible(false)
         stopTransmitterReadSuccessTimer()
         removeObserversIfNeeded()
         bluetoothPeripheralManager?.stopScanningForNewDevice()
+        discoveredSibionics2Devices.removeAll()
+        selectedSibionics2DeviceIdentifier = nil
+        sibionics2DiscoveryTransmitter = nil
         UIApplication.shared.isIdleTimerDisabled = false
     }
 
@@ -234,6 +293,30 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         category = expectedBluetoothPeripheralType.category()
         canDeletePeripheral = bluetoothPeripheral != nil
         sections = makeSections()
+        scheduleSibionicsReadingAgeRefresh()
+    }
+
+    private func scheduleSibionicsReadingAgeRefresh() {
+        guard didStart, let timestamp = sibionicsLastReadingTimestamp,
+              expectedBluetoothPeripheralType.isSibionics else {
+            sibionicsReadingAgeTimer?.invalidate()
+            sibionicsReadingAgeTimer = nil
+            sibionicsReadingAgeTimerTimestamp = nil
+            return
+        }
+        if sibionicsReadingAgeTimer?.isValid == true,
+           sibionicsReadingAgeTimerTimestamp == timestamp { return }
+        sibionicsReadingAgeTimer?.invalidate()
+        sibionicsReadingAgeTimer = nil
+        let interval = SibionicsReadingAge.nextRefreshInterval(since: timestamp, now: Date())
+        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
+            self?.sibionicsReadingAgeTimer = nil
+            self?.sibionicsReadingAgeTimerTimestamp = nil
+            self?.refresh()
+        }
+        sibionicsReadingAgeTimer = timer
+        sibionicsReadingAgeTimerTimestamp = timestamp
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     func connectButtonTapped() {
@@ -280,6 +363,10 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             rows: makeBluetoothRows()
         ))
 
+        if shouldShowSibionics2DiscoverySearch {
+            sections.append(makeSibionics2DiscoverySection())
+        }
+
         guard bluetoothPeripheral != nil else {
             if let dexcomG6BluetoothSlotSection = makeDexcomG6BluetoothSlotSection() {
                 sections.append(dexcomG6BluetoothSlotSection)
@@ -303,6 +390,48 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         sections.append(contentsOf: makePeripheralSpecificSections())
 
         return sections
+    }
+
+    private func makeSibionics2DiscoverySection() -> BluetoothPeripheralDetailSection {
+        let devices = filteredSibionics2Devices
+        let rows: [BluetoothPeripheralDetailRow]
+        if devices.isEmpty {
+            rows = [row(
+                id: "sibionics2-discovery-empty",
+                title: sibionics2SearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? (expectedBluetoothPeripheralType == .Sibionics1Type ? Texts_BluetoothPeripheralView.sibionics1DiscoveryEmpty : Texts_BluetoothPeripheralView.sibionics2DiscoveryEmpty)
+                    : Texts_BluetoothPeripheralView.sibionics2DiscoveryNoMatches,
+                isEnabled: false
+            )]
+        } else {
+            rows = devices.map { device in
+                row(
+                    id: "sibionics2-device-\(device.identifier)",
+                    title: device.name,
+                    detail: "\(device.rssi) dBm",
+                    showsDisclosure: true,
+                    isEnabled: selectedSibionics2DeviceIdentifier == nil,
+                    action: { [weak self] in
+                        self?.selectSibionics2Device(device)
+                    }
+                )
+            }
+        }
+
+        return BluetoothPeripheralDetailSection(
+            id: "sibionics2-discovery",
+            title: expectedBluetoothPeripheralType == .Sibionics1Type ? Texts_BluetoothPeripheralView.sibionics1DiscoveryTitle : Texts_BluetoothPeripheralView.sibionics2DiscoveryTitle,
+            footer: Texts_BluetoothPeripheralView.sibionics2DiscoveryFooter,
+            rows: rows
+        )
+    }
+
+    private func selectSibionics2Device(_ device: BluetoothPeripheralScanResult) {
+        guard selectedSibionics2DeviceIdentifier == nil,
+              let transmitter = sibionics2DiscoveryTransmitter else { return }
+        selectedSibionics2DeviceIdentifier = device.identifier
+        transmitter.selectDiscoveredPeripheral(identifier: device.identifier)
+        refresh()
     }
 
     private func makeBluetoothRows() -> [BluetoothPeripheralDetailRow] {
@@ -543,6 +672,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             return makeBubbleSections(bluetoothPeripheral: bluetoothPeripheral)
         case .MedtrumTouchCareNanoType:
             return makeMedtrumTouchCareNanoSections(bluetoothPeripheral: bluetoothPeripheral)
+        case .Sibionics1Type, .Sibionics2Type:
+            return makeSibionics2Sections(bluetoothPeripheral: bluetoothPeripheral)
         case .M5StackType:
             return makeM5StackSections(bluetoothPeripheral: bluetoothPeripheral, includesSpecificM5StackSection: true)
         case .M5StickCType:
@@ -556,7 +687,135 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         }
     }
 
-    /// Keep the device choice simple; subscription details remain available in the trace.
+
+    private func makeSibionics2Sections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        let activeTransmitter = bluetoothPeripheralManager?.getCGMTransmitter() as? CGMSibionics2Transmitter
+        let activeAddress = activeTransmitter.flatMap {
+            bluetoothPeripheralManager?.getBluetoothPeripheral(for: $0)?.blePeripheral.address
+        }
+        if SibionicsReadingAge.matchesActivePeripheral(
+            viewedAddress: bluetoothPeripheral.blePeripheral.address, activeAddress: activeAddress
+        ), let activeSensor = sensorProvider?.activeSensor {
+            sibionicsLastReadingTimestamp = bgReadingsAccessor.lastSensorReadingTimestamp(for: activeSensor)
+        } else {
+            sibionicsLastReadingTimestamp = nil
+        }
+        let address = bluetoothPeripheral.blePeripheral.address
+        let savedAuthenticationAddress = Sibionics2AuthenticationAddress.override(for: address)
+            ?? Sibionics2AuthenticationAddress.detected(for: address)
+        let probeCode = Sibionics2Configuration.probeCode(for: address)
+        let sensitivity = Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: bluetoothPeripheral.blePeripheral.name,
+            probeCode: probeCode,
+            variant: (bluetoothPeripheral as? Sibionics2)?.variant ?? .sibionics2
+        )
+        let missingSibionics1Sensitivity = expectedBluetoothPeripheralType == .Sibionics1Type &&
+            Sibionics2FactorySensitivity.decodedSibionics1Sensitivity(
+                advertisedName: bluetoothPeripheral.blePeripheral.name, probeCode: probeCode) == nil
+        let probeDetail = missingSibionics1Sensitivity ? Texts_BluetoothPeripheralView.sibionics1SensitivityUnknown : probeCode.map { "\(sensitivity.stringWithoutTrailingZeroes) · \($0)" }
+            ?? "\(sensitivity.stringWithoutTrailingZeroes) · \(Texts_BluetoothPeripheralView.sibionics2ProbeCodeAutomatic)"
+        let connectionSection = BluetoothPeripheralDetailSection(
+            id: "sibionics2-authentication-address",
+            title: Texts_BluetoothPeripheralView.sibionics2ConnectionTitle,
+            footer: Texts_BluetoothPeripheralView.sibionics2BluetoothAddressFooter,
+            rows: [
+                row(
+                    id: "sibionics2-authentication-address-value",
+                    title: Texts_BluetoothPeripheralView.sibionics2BluetoothAddressTitle,
+                    detail: savedAuthenticationAddress.map {
+                        Sibionics2AuthenticationAddress.override(for: address) == nil
+                            ? "\($0) · \(Texts_BluetoothPeripheralView.sibionics2DetectedBluetoothAddress)"
+                            : $0
+                    } ?? Texts_BluetoothPeripheralView.sibionics2BluetoothAddressAutomatic,
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        self?.requestSibionics2AuthenticationAddress(for: bluetoothPeripheral)
+                    }
+                ),
+                row(
+                    id: "sibionics-last-reading-age",
+                    title: Texts_BluetoothPeripheralView.sibionicsReadingAgeTitle,
+                    detail: sibionicsLastReadingTimestamp.map {
+                        SibionicsReadingAge.detail(since: $0, now: Date())
+                    } ?? Texts_BluetoothPeripheralView.sibionicsReadingAgeWaiting
+                )
+            ]
+        )
+        let calibrationModes = Sibionics2CalibrationMode.allCases
+        let pollIntervals = Sibionics2PollInterval.allCases
+        let settingsSection = BluetoothPeripheralDetailSection(
+            id: "sibionics2-settings",
+            title: expectedBluetoothPeripheralType == .Sibionics1Type ? Texts_BluetoothPeripheralView.sibionics1SettingsTitle : Texts_BluetoothPeripheralView.sibionics2SettingsTitle,
+            footer: expectedBluetoothPeripheralType == .Sibionics1Type ? Texts_BluetoothPeripheralView.sibionics1SettingsFooter : Texts_BluetoothPeripheralView.sibionics2SettingsFooter,
+            rows: [
+                row(
+                    id: "sibionics2-probe-code",
+                    title: Texts_BluetoothPeripheralView.sibionics2ProbeCodeTitle,
+                    detail: probeDetail,
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        self?.requestSibionics2ProbeCode(for: bluetoothPeripheral)
+                    }
+                ),
+                row(
+                    id: "sibionics2-calibration-mode",
+                    title: Texts_BluetoothPeripheralView.sibionics2CalibrationTitle,
+                    detail: Sibionics2Configuration.calibrationMode(for: address).title,
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        self?.presentSelectionListView(BluetoothPeripheralSelectionList(
+                            title: Texts_BluetoothPeripheralView.sibionics2CalibrationTitle,
+                            explanation: Texts_BluetoothPeripheralView.sibionics2CalibrationFooter,
+                            data: calibrationModes.map(\.title),
+                            selectedRow: calibrationModes.firstIndex(of: Sibionics2Configuration.calibrationMode(for: address))
+                        ) { [weak self] index in
+                            guard calibrationModes.indices.contains(index) else { return }
+                            self?.saveSibionics2CalibrationMode(calibrationModes[index], for: bluetoothPeripheral)
+                        })
+                    }
+                ),
+                toggleRow(
+                    id: "sibionics2-auto-reset",
+                    title: Texts_BluetoothPeripheralView.sibionics2AutoResetTitle,
+                    isOn: Sibionics2Configuration.autoResetEnabled(for: address),
+                    setValue: { [weak self] isEnabled in
+                        self?.saveSibionics2AutoReset(isEnabled, for: bluetoothPeripheral)
+                    }
+                ),
+                row(
+                    id: "sibionics2-poll-interval",
+                    title: Texts_BluetoothPeripheralView.sibionics2PollTitle,
+                    detail: Sibionics2Configuration.pollInterval(for: address).title,
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        self?.presentSelectionListView(BluetoothPeripheralSelectionList(
+                            title: Texts_BluetoothPeripheralView.sibionics2PollTitle,
+                            explanation: Texts_BluetoothPeripheralView.sibionics2PollFooter,
+                            data: pollIntervals.map(\.title),
+                            selectedRow: pollIntervals.firstIndex(of: Sibionics2Configuration.pollInterval(for: address))
+                        ) { [weak self] index in
+                            guard pollIntervals.indices.contains(index) else { return }
+                            self?.saveSibionics2PollInterval(pollIntervals[index], for: bluetoothPeripheral)
+                        })
+                    }
+                ),
+                row(
+                    id: "sibionics2-reset",
+                    title: Texts_BluetoothPeripheralView.sibionics2ResetTitle,
+                    detail: nil,
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        self?.confirmSibionics2Reset(for: bluetoothPeripheral)
+                    }
+                )
+            ].filter { row in
+                expectedBluetoothPeripheralType != .Sibionics1Type ||
+                    (row.id != "sibionics2-auto-reset" && row.id != "sibionics2-reset")
+            }
+        )
+        return [connectionSection, settingsSection]
+    }
+
     private func makeGenericHeartbeatSettingsSections() -> [BluetoothPeripheralDetailSection] {
         guard let address = bluetoothPeripheral?.blePeripheral.address else { return [] }
         let settings = GenericHeartbeatSettings.load(address)
@@ -1245,6 +1504,12 @@ private extension BluetoothPeripheralDetailState {
         guard !type.needsTransmitterId() || transmitterIdTempValue != nil else { return }
 
         previousScanningResult = nil
+        if type.isSibionics {
+            discoveredSibionics2Devices.removeAll()
+            selectedSibionics2DeviceIdentifier = nil
+            sibionics2DiscoveryTransmitter = nil
+            sibionics2SearchText = ""
+        }
 
         // The button tap is the meaningful start of Add CGM. Lower-level scanning callbacks can fire
         // repeatedly as Bluetooth state changes, so they stay in developer tracing and are filtered
@@ -1286,6 +1551,9 @@ private extension BluetoothPeripheralDetailState {
         trace("in BluetoothPeripheralDetailState, callback. bluetoothPeripheral address = %{public}@, name = %{public}@", log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController, type: .info, bluetoothPeripheral.blePeripheral.address, bluetoothPeripheral.blePeripheral.name)
 
         isScanning = false
+        discoveredSibionics2Devices.removeAll()
+        selectedSibionics2DeviceIdentifier = nil
+        sibionics2DiscoveryTransmitter = nil
         UIApplication.shared.isIdleTimerDisabled = false
 
         self.bluetoothPeripheral = bluetoothPeripheral
@@ -1335,13 +1603,16 @@ private extension BluetoothPeripheralDetailState {
             isScanning = false
 
         case .poweredOff:
+            isScanning = false
             trace("in handleScanningResult, scanning not started. Bluetooth is not on", log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController, type: .error)
             pendingAlert = BluetoothPeripheralDetailAlert(title: Texts_Common.warning, message: Texts_HomeView.bluetoothIsNotOn)
 
         case .other(let reason):
+            isScanning = false
             trace("in handleScanningResult, scanning not started. Scanning result = %{public}@", log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController, type: .error, reason)
 
         case .unauthorized:
+            isScanning = false
             trace("in handleScanningResult, scanning not started. Scanning result = unauthorized", log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController, type: .error)
             pendingAlert = BluetoothPeripheralDetailAlert(title: Texts_Common.warning, message: Texts_HomeView.bluetoothIsNotAuthorized)
 
@@ -1638,6 +1909,146 @@ private extension BluetoothPeripheralDetailState {
 // MARK: - Algorithm and Calibration
 
 private extension BluetoothPeripheralDetailState {
+    func requestSibionics2AuthenticationAddress(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        presentTextEntryView(BluetoothPeripheralTextEntry(
+            title: Texts_BluetoothPeripheralView.sibionics2BluetoothAddressTitle,
+            message: Texts_BluetoothPeripheralView.sibionics2BluetoothAddressFooter,
+            keyboardType: .asciiCapable,
+            text: Sibionics2AuthenticationAddress.override(for: address),
+            placeholder: "AA:BB:CC:DD:EE:FF",
+            actionTitle: Texts_Common.Ok,
+            cancelTitle: Texts_Common.Cancel,
+            actionHandler: { [weak self] text in
+                self?.saveSibionics2AuthenticationAddress(text, for: bluetoothPeripheral)
+            },
+            actionIsEnabled: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty || Sibionics2AuthenticationAddress.normalize(trimmed) != nil
+            },
+            inputValidator: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, Sibionics2AuthenticationAddress.normalize(trimmed) == nil else {
+                    return nil
+                }
+                return Texts_BluetoothPeripheralView.sibionics2BluetoothAddressInvalid
+            }
+        ))
+    }
+
+    func saveSibionics2AuthenticationAddress(_ text: String, for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        let previousValue = Sibionics2AuthenticationAddress.override(for: address)
+        guard Sibionics2AuthenticationAddress.setOverride(text, for: address) else { return }
+        let updatedValue = Sibionics2AuthenticationAddress.override(for: address)
+        if previousValue != updatedValue {
+            (bluetoothPeripheralManager?.getBluetoothTransmitter(
+                for: bluetoothPeripheral,
+                createANewOneIfNecesssary: false
+            ) as? CGMSibionics2Transmitter)?.authenticationAddressDidChange(for: address)
+        }
+        refresh()
+    }
+
+    func requestSibionics2ProbeCode(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        presentTextEntryView(BluetoothPeripheralTextEntry(
+            title: Texts_BluetoothPeripheralView.sibionics2ProbeCodeTitle,
+            message: Texts_BluetoothPeripheralView.sibionics2ProbeCodeFooter,
+            keyboardType: .asciiCapable,
+            text: Sibionics2Configuration.probeCode(for: address),
+            placeholder: "EU2VCZUQPSHD5Q",
+            actionTitle: Texts_Common.Ok,
+            cancelTitle: Texts_Common.Cancel,
+            actionHandler: { [weak self] text in
+                self?.saveSibionics2ProbeCode(text, for: bluetoothPeripheral)
+            },
+            actionIsEnabled: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty || Sibionics2FactorySensitivity.decodeProbe(trimmed) != nil
+            },
+            inputValidator: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, Sibionics2FactorySensitivity.decodeProbe(trimmed) == nil else { return nil }
+                return Texts_BluetoothPeripheralView.sibionics2ProbeCodeInvalid
+            }
+        ))
+    }
+
+    func saveSibionics2ProbeCode(_ text: String, for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        let previousCode = Sibionics2Configuration.probeCode(for: address)
+        guard Sibionics2Configuration.setProbeCode(text, for: address) else { return }
+        let updatedCode = Sibionics2Configuration.probeCode(for: address)
+        guard previousCode != updatedCode else { refresh(); return }
+
+        (bluetoothPeripheralManager?.getBluetoothTransmitter(
+            for: bluetoothPeripheral,
+            createANewOneIfNecesssary: false
+        ) as? CGMSibionics2Transmitter)?.probeCodeDidChange(for: address)
+
+        trace(
+            "Sibionics 2 sensor probe code was %{public}@",
+            log: log,
+            category: ConstantsLog.categoryBluetoothPeripheralViewController,
+            type: .info,
+            updatedCode == nil ? "cleared; advertisement fallback restored" : "updated"
+        )
+        refresh()
+    }
+
+    func saveSibionics2CalibrationMode(_ mode: Sibionics2CalibrationMode, for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        guard mode != Sibionics2Configuration.calibrationMode(for: address),
+              Sibionics2Configuration.setCalibrationMode(mode, for: address) else { return }
+        bluetoothPeripheralManager?.cgmConfigurationDidChange(for: bluetoothPeripheral)
+        trace("Sibionics 2 calibration method changed to %{public}@",
+              log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController,
+              type: .info, mode.title)
+        refresh()
+    }
+
+    func saveSibionics2AutoReset(_ enabled: Bool, for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        guard enabled != Sibionics2Configuration.autoResetEnabled(for: address),
+              Sibionics2Configuration.setAutoResetEnabled(enabled, for: address) else { return }
+        (bluetoothPeripheralManager?.getBluetoothTransmitter(
+            for: bluetoothPeripheral,
+            createANewOneIfNecesssary: false
+        ) as? CGMSibionics2Transmitter)?.autoResetSettingDidChange(for: address)
+        refresh()
+    }
+
+    func saveSibionics2PollInterval(_ interval: Sibionics2PollInterval, for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        guard interval != Sibionics2Configuration.pollInterval(for: address),
+              Sibionics2Configuration.setPollInterval(interval, for: address) else { return }
+        (bluetoothPeripheralManager?.getBluetoothTransmitter(
+            for: bluetoothPeripheral,
+            createANewOneIfNecesssary: false
+        ) as? CGMSibionics2Transmitter)?.pollIntervalDidChange(for: address)
+        refresh()
+    }
+
+    func confirmSibionics2Reset(for bluetoothPeripheral: BluetoothPeripheral) {
+        pendingAlert = BluetoothPeripheralDetailAlert(
+            title: Texts_BluetoothPeripheralView.sibionics2ResetConfirmTitle,
+            message: Texts_BluetoothPeripheralView.sibionics2ResetConfirmMessage,
+            primaryButtonTitle: Texts_BluetoothPeripheralView.sibionics2ResetTitle,
+            primaryAction: { [weak self] in
+                (self?.bluetoothPeripheralManager?.getBluetoothTransmitter(
+                    for: bluetoothPeripheral,
+                    createANewOneIfNecesssary: true
+                ) as? CGMSibionics2Transmitter)?.requestSensorReset(
+                    for: bluetoothPeripheral.blePeripheral.address
+                )
+                self?.pendingAlert = nil
+                self?.refresh()
+            },
+            secondaryButtonTitle: Texts_Common.Cancel
+        )
+    }
+
     func requestAlgorithmType() {
         guard let bluetoothPeripheral = bluetoothPeripheral else { return }
 
@@ -3097,6 +3508,20 @@ extension BluetoothPeripheralDetailState: BluetoothTransmitterDelegate {
         // The manager persists the genuine reading against this peripheral. Then rebuild the rows so
         // the optional Battery section appears as soon as a supported device returns a value.
         refreshOnMain()
+    }
+
+    func didDiscoverBluetoothPeripheral(
+        _ result: BluetoothPeripheralScanResult,
+        bluetoothTransmitter: BluetoothTransmitter
+    ) {
+        guard expectedBluetoothPeripheralType.isSibionics,
+              let transmitter = bluetoothTransmitter as? CGMSibionics2Transmitter else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.bluetoothPeripheral == nil else { return }
+            self.sibionics2DiscoveryTransmitter = transmitter
+            self.discoveredSibionics2Devices[result.identifier] = result
+            self.refresh()
+        }
     }
 
     func didConnectTo(bluetoothTransmitter: BluetoothTransmitter) {

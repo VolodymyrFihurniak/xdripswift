@@ -41,6 +41,8 @@ enum TroubleshootingLogSource: String, Codable {
     case libre2EU
     case libre2PlusEU
     case medtrumNano
+    case sibionics1
+    case sibionics2
     case nightscout
     case libreLinkUp
     case libreLinkUpRussia
@@ -95,6 +97,8 @@ enum TroubleshootingLogSource: String, Codable {
             self = description == "Libre 2 Plus EU" ? .libre2PlusEU : .libre2EU
         case .medtrumTouchCareNano:
             self = .medtrumNano
+        case .sibionics2:
+            self = .sibionics2
         }
     }
 
@@ -130,6 +134,10 @@ enum TroubleshootingLogSource: String, Codable {
             self = .libre2
         case .MedtrumTouchCareNanoType:
             self = .medtrumNano
+        case .Sibionics1Type:
+            self = .sibionics1
+        case .Sibionics2Type:
+            self = .sibionics2
         case .M5StackType, .M5StickCType, .Libre3HeartBeatType,
              .DexcomG7HeartBeatType, .OmniPodHeartBeatType:
             return nil
@@ -152,6 +160,8 @@ enum TroubleshootingLogSource: String, Codable {
         case .libre2EU: return "Libre 2 EU"
         case .libre2PlusEU: return "Libre 2 Plus EU"
         case .medtrumNano: return "Medtrum Nano Pump CGM"
+        case .sibionics1: return "Sibionics 1"
+        case .sibionics2: return "Sibionics 2"
         case .nightscout: return "Nightscout"
         case .libreLinkUp: return "LibreLinkUp"
         case .libreLinkUpRussia: return "LibreLinkUp Russia"
@@ -171,7 +181,7 @@ enum TroubleshootingLogSource: String, Codable {
             return true
         case .dexcom, .dexcomG5, .dexcomG6, .dexcomOne, .dexcomG7, .dexcomOnePlus,
              .dexcomStelo, .miaoMiao, .bubble, .libre2, .libre2EU, .libre2PlusEU,
-             .medtrumNano:
+             .medtrumNano, .sibionics1, .sibionics2:
             return false
         }
     }
@@ -1282,9 +1292,14 @@ final class TroubleshootingLogStore {
 
             case let .bluetoothDevice(name, activity):
                 switch activity {
-                case .added, .reconnectedToExisting:
-                    // These are discrete outcomes of an explicit Add scan.
+                case .added:
+                    // This is a discrete outcome of an explicit Add scan.
                     result.append(entry)
+                case .reconnectedToExisting:
+                    // The cached entry may be replayed through this reducer on the next write.
+                    // Restore healthy state so a later healthy callback is not retained twice.
+                    result.append(entry)
+                    bluetoothHealth = .healthy
                 case .connectionRequested:
                     // A saved non-CGM device was explicitly enabled by the user. Retain the action
                     // and let the next matching healthy connection provide its decisive outcome.

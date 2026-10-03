@@ -307,6 +307,20 @@ class BgReadingsAccessor: ObservableObject {
         getLatestBgReadingSnapshots(limit: 1, fromDate: nil, forSensor: sensor, ignoreRawData: true, ignoreCalculatedValue: true, includingSuppressed: includingSuppressed).first
     }
 
+    /// The sensor filter is applied before the limit so another sensor's newer
+    /// reading cannot hide the last sample on this sensor's detail screen.
+    func lastSensorReadingTimestamp(for sensor: Sensor) -> Date? {
+        var timestamp: Date?
+        coreDataManager.mainManagedObjectContext.performAndWait {
+            let request: NSFetchRequest<BgReading> = BgReading.fetchRequest()
+            request.predicate = NSPredicate(format: "sensor == %@ AND rawData > 0 AND calibrationFlag == NO", sensor)
+            request.sortDescriptors = [NSSortDescriptor(key: #keyPath(BgReading.timeStamp), ascending: false)]
+            request.fetchLimit = 1
+            timestamp = (try? coreDataManager.mainManagedObjectContext.fetch(request))?.first?.timeStamp
+        }
+        return timestamp
+    }
+
     /// gets bgReadings, synchronously, in the managedObjectContext's thread
     /// - returns:
     ///        readings sorted by timestamp, ascending (ie first is oldest)

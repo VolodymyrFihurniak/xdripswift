@@ -221,6 +221,7 @@ import AppIntents
     /// Runs the refresh work previously triggered by RootViewController's viewWillAppear and viewDidAppear.
     /// RootHomeTabView calls this whenever the Home tab becomes visible.
     func homeDidBecomeVisible() {
+        repairStoredSibionicsReadings()
         
         // check if allowed to rotate to landscape view
         updateScreenRotationSettings()
@@ -352,6 +353,8 @@ import AppIntents
                     sensorProvider: self
                 )
             }
+
+            self.repairStoredSibionicsReadings()
 
             // housekeeper should be non nil here, kall housekeeper
             self.houseKeeper?.doAppStartUpHouseKeeping()
@@ -572,6 +575,7 @@ import AppIntents
             
             // Schedule a call to updateLabelsAndChart when the app comes to the foreground, with a delay of 0.5 seconds. Because the application state is not immediately to .active, as a result, updates may not happen - especially the synctreatments may not happen because this may depend on the application state - by making a call just half a second later, when the status is surely = .active, the UI updates will be done correctly.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.repairStoredSibionicsReadings()
                 self.updateLabelsAndChart(overrideApplicationState: true)
                 self.updateMiniChart()
                 self.updateDataSourceInfo()
@@ -1072,6 +1076,27 @@ import AppIntents
         sensorNoiseManager?.update(activeSensor: activeSensor)
     }
     
+    /// Repairs persisted factory readings independently of Bluetooth traffic.
+    /// Run after services are restored and when the user returns to Home.
+    private func repairStoredSibionicsReadings() {
+        guard let coreDataManager = coreDataManager,
+              let activeSensor = activeSensor,
+              let transmitter = bluetoothPeripheralManager?.getCGMTransmitter() as? CGMSibionics2Transmitter else { return }
+        guard Sibionics2ReadingRepair.repair(
+            in: coreDataManager.mainManagedObjectContext,
+            sensor: activeSensor, mode: transmitter.calibrationMode
+        ) > 0 else { return }
+        activeSensor.noiseHistoryIsComplete = false
+        coreDataManager.saveChanges()
+        _ = bgPostProcessingManager?.processLatestReadings()
+        statisticsManager?.invalidate()
+        rootHomeStateModel.invalidateCharts()
+        sensorNoiseManager?.update(activeSensor: activeSensor)
+        updateLabelsAndChart(overrideApplicationState: true)
+        updateMiniChart()
+        updateStatistics(animate: false, overrideApplicationState: true)
+    }
+
     /// process new glucose data received from transmitter.
     /// - parameters:
     ///     - glucoseData : array with new readings
@@ -1084,7 +1109,9 @@ import AppIntents
         }
         
         synchronizeDetectedSensorStartDate(sensorAge: sensorAge, glucoseData: glucoseData, cgmTransmitter: cgmTransmitter, coreDataManager: coreDataManager)
-        
+
+        repairStoredSibionicsReadings()
+
         guard glucoseData.count > 0 else {
             trace("in processNewGlucoseData, glucoseData.count = 0", log: log, category: ConstantsLog.categoryRootView, type: .info)
             return
@@ -1094,8 +1121,42 @@ import AppIntents
         if let activeSensor = activeSensor, let calibrator = calibrator, let bgReadingsAccessor = bgReadingsAccessor {
             trace("in processNewGlucoseData, calibrator = %{public}@", log: log, category: ConstantsLog.categoryRootView, type: .info, calibrator.description())
             
+            // Replay after a probe-code correction can change an already stored
+            // factory value. Reconcile before the broad cadence duplicate filter.
+            if let transmitter = cgmTransmitter as? CGMSibionics2Transmitter {
+                let replayed = Sibionics2PersistedReadingReplay.reconcile(
+                    in: coreDataManager.mainManagedObjectContext, sensor: activeSensor,
+                    glucoseData: glucoseData, mode: transmitter.calibrationMode
+                )
+                if let fromDate = replayed.first?.timeStamp {
+                    activeSensor.noiseHistoryIsComplete = false
+                    coreDataManager.saveChanges()
+                    let replacedDownstream = bgPostProcessingManager?.processBgReadings(
+                        processingStartDateOverride: fromDate, allowHistoricalDownstreamRewrite: true
+                    ) ?? false
+                    if !replacedDownstream {
+                        let visible = replayed.filter { !$0.isSuppressedByFiveMinuteCadence }
+                        nightscoutSyncManager?.replaceBgReadingsInNightscout(bgReadings: visible)
+                        healthKitManager?.replaceBgReadingsInHealthKit(bgReadings: visible)
+                    }
+                    statisticsManager?.invalidate()
+                    rootHomeStateModel.invalidateCharts()
+                    sensorNoiseManager?.update(activeSensor: activeSensor)
+                    updateLabelsAndChart(overrideApplicationState: true)
+                    updateMiniChart()
+                    updateStatistics(animate: false, overrideApplicationState: true)
+                    updateLiveActivityAndWidgets(forceRestart: false)
+                    watchManager?.updateWatchApp(forceComplicationUpdate: true)
+                }
+            }
+
             // initialize help variables
-            var lastCalibrationsForActiveSensorInLastXDays = calibrationsAccessor.getLatestCalibrations(howManyDays: 4, forSensor: activeSensor)
+            let calibrationMode = (cgmTransmitter as? CGMSibionics2Transmitter)?.calibrationMode ?? Sibionics2CalibrationMode.defaultMode
+            let calibrationHistoryDays = calibrationMode.calibrationHistoryDays
+            var lastCalibrationsForActiveSensorInLastXDays = calibrationsAccessor.getLatestCalibrations(
+                howManyDays: calibrationHistoryDays,
+                forSensor: activeSensor
+            )
             let firstCalibrationForActiveSensor = calibrationsAccessor.firstCalibrationForActiveSensor(withActivesensor: activeSensor)
             let lastCalibrationForActiveSensor = calibrationsAccessor.lastCalibrationForActiveSensor(withActivesensor: activeSensor)
             
@@ -1751,7 +1812,12 @@ import AppIntents
         )
 
         var latestReadings = bgReadingsAccessor.getLatestBgReadings(limit: 36, howOld: nil, forSensor: activeSensor, ignoreRawData: false, ignoreCalculatedValue: true, includingSuppressed: true)
-        var latestCalibrations = calibrationsAccessor.getLatestCalibrations(howManyDays: 4, forSensor: activeSensor)
+        let calibrationMode = (cgmTransmitter as? CGMSibionics2Transmitter)?.calibrationMode ?? Sibionics2CalibrationMode.defaultMode
+        let calibrationHistoryDays = calibrationMode.calibrationHistoryDays
+        var latestCalibrations = calibrationsAccessor.getLatestCalibrations(
+            howManyDays: calibrationHistoryDays,
+            forSensor: activeSensor
+        )
 
         guard let calibrator = self.calibrator else {
             return Texts_HomeView.sensorManagementCalibrationUnavailable
@@ -1861,6 +1927,16 @@ import AppIntents
             // Values arrive already calibrated to mg/dL. The transmitter applies the Medtrum per-sensor
             // calibration factor decoded from each packet, so xDrip should not run its own calibrator.
             calibrator = NoCalibrator()
+
+        case .sibionics2:
+            // The stock V116A correction produces mg/dL. Sibionics calibration
+            // profiles operate on that factory-corrected value, not Libre raw data.
+            if let sibionics2 = cgmTransmitter as? CGMSibionics2Transmitter,
+               sibionics2.calibrationMode == .jugglucoNG {
+                calibrator = Sibionics2JugglucoCalibrator()
+            } else {
+                calibrator = Sibionics2XDripCalibrator()
+            }
 
         }
         
@@ -2542,7 +2618,7 @@ import AppIntents
             }
             startDate = sensorStartDate ?? startDate
             switch transmitter?.cgmTransmitterType().sensorType() {
-            case .Libre:
+            case .Libre, .Sibionics2:
                 duration = ConstantsMaster.minimumSensorWarmUpRequiredInMinutes
             case .Dexcom:
                 if transmitter?.cgmTransmitterType() == .dexcomG7 {
@@ -2857,6 +2933,16 @@ extension RootApplicationCoordinator: @preconcurrency CGMTransmitterDelegate {
         trace("new sensor detected", log: log, category: ConstantsLog.categoryRootView, type: .info, troubleshooting: .standard(.sensor(.detected)))
 
         let transmitter = bluetoothPeripheralManager?.getCGMTransmitter()
+        // Replaying a stock processor snapshot is not a physical sensor change.
+        // Keep the existing rows and fingerstick history attached to this session.
+        if let transmitter = transmitter as? CGMSibionics2Transmitter,
+           let sensorStartDate, let activeSensor,
+           let previousReading = bgReadingsAccessor?.last(forSensor: activeSensor, includingSuppressed: true),
+           let name = transmitter.deviceName, !name.isEmpty,
+           previousReading.deviceName == name,
+           Sibionics2PersistedReadingReplay.matchesSession(activeSensor.startDate, sensorStartDate) {
+            return
+        }
         if transmitter?.needsSensorStartCode() == true,
            let sensorStartDate,
            let activeSensor,

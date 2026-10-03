@@ -41,17 +41,27 @@ enum ProportionalIntegerAllocator {
         var allocatedValues = scaledValues.map { Int(floor($0)) }
         let unitsStillToAllocate = total - allocatedValues.reduce(0, +)
 
-        // Stable index ordering makes exact fractional ties deterministic. In a TIR distribution
-        // this means identical input always produces identical display output on every surface.
-        let indicesByLargestRemainder = scaledValues.indices.sorted { leftIndex, rightIndex in
-            let leftRemainder = scaledValues[leftIndex] - floor(scaledValues[leftIndex])
-            let rightRemainder = scaledValues[rightIndex] - floor(scaledValues[rightIndex])
-
-            if leftRemainder == rightRemainder {
-                return leftIndex < rightIndex
+        // Sort exact remainders first, then group near-equal values. Normalization can
+        // perturb mathematical ties by a few ULPs (for example 3.6 and 87.6 out of 100).
+        // Sorting groups by input index preserves deterministic output without giving the
+        // sort comparator a non-transitive approximate-equality rule.
+        let remainders = scaledValues.indices.map { index in
+            scaledValues[index] - floor(scaledValues[index])
+        }
+        let remainderOrder = scaledValues.indices.sorted { leftIndex, rightIndex in
+            remainders[leftIndex] > remainders[rightIndex]
+        }
+        var indicesByLargestRemainder = [Int]()
+        var groupStart = 0
+        while groupStart < remainderOrder.count {
+            let groupRemainder = remainders[remainderOrder[groupStart]]
+            var groupEnd = groupStart + 1
+            while groupEnd < remainderOrder.count,
+                  abs(groupRemainder - remainders[remainderOrder[groupEnd]]) <= 1e-12 {
+                groupEnd += 1
             }
-
-            return leftRemainder > rightRemainder
+            indicesByLargestRemainder.append(contentsOf: remainderOrder[groupStart ..< groupEnd].sorted())
+            groupStart = groupEnd
         }
 
         for index in indicesByLargestRemainder.prefix(max(0, unitsStillToAllocate)) {

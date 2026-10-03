@@ -179,6 +179,13 @@ final class BluetoothPeripheralDisplayStatusTests: XCTestCase {
         XCTAssertFalse(BluetoothPeripheralType.M5StickCType.usesIntermittentConnection)
     }
 
+    func testSibionics2IsAvailableInTheDirectCGMAddFlow() {
+        XCTAssertEqual(BluetoothPeripheralType.Sibionics2Type.category(), .CGM)
+        XCTAssertTrue(
+            BluetoothPeripheralType.addFlowPreferredOrder[.CGM]?.contains(.Sibionics2Type) == true
+        )
+    }
+
     func testNewPeripheralPersistsFalseActivationSuccessByDefault() throws {
         let coreDataManager = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
         let dexcom = DexcomG5(
