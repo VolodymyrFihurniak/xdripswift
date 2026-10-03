@@ -68,6 +68,12 @@ enum Sibionics2PollInterval: Int, CaseIterable {
     }
 }
 
+/// Confirmed wire protocol for a Sibionics 1 peripheral, keyed by iOS BLE UUID.
+enum Sibionics1ProtocolMode: Int {
+    case chinese = 1
+    case v120 = 2
+}
+
 /// Retry, timeout, and cadence values for the Sibionics 2 BLE session lifecycle.
 enum Sibionics2ConnectionPolicy {
     static let minimumScheduledDelay: TimeInterval = 1
@@ -278,6 +284,27 @@ enum Sibionics2Configuration {
     private static let prefix = "sibionics2.configuration."
     private static let latestReadingPrefix = "sibionics2.latestReading."
     private static let previousReadingPrefix = "sibionics2.previousReading."
+
+    static func protocolMode(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics1ProtocolMode? {
+        guard let key = key("protocolMode", identifier: identifier),
+              userDefaults.object(forKey: key) != nil else { return nil }
+        return Sibionics1ProtocolMode(rawValue: userDefaults.integer(forKey: key))
+    }
+
+    @discardableResult
+    static func setProtocolMode(
+        _ mode: Sibionics1ProtocolMode?,
+        for identifier: String,
+        userDefaults: UserDefaults = .standard
+    ) -> Bool {
+        guard let key = key("protocolMode", identifier: identifier) else { return false }
+        if let mode {
+            userDefaults.set(mode.rawValue, forKey: key)
+        } else {
+            userDefaults.removeObject(forKey: key)
+        }
+        return true
+    }
 
     static func calibrationMode(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics2CalibrationMode {
         guard let key = key("calibrationMode", identifier: identifier),

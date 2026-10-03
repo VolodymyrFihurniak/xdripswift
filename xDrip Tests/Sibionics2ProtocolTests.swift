@@ -43,6 +43,119 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertEqual(Sibionics2ProtocolCodec.writeUUID.uuidString, "FF32")
     }
 
+    func testExplicitDeviceVariantsUseTheirOwnV120SessionKeys() {
+        XCTAssertEqual(SibionicsDeviceVariant.sibionics1.rawValue, 1)
+        XCTAssertEqual(SibionicsDeviceVariant.sibionics2.rawValue, 2)
+        XCTAssertEqual(codec.deriveSessionKey(variant: .sibionics1), Data("THE544U0TYITE461".utf8))
+        XCTAssertEqual(codec.deriveSessionKey(variant: .sibionics2), codec.deriveSessionKey())
+    }
+
+    func testChineseRequestIsPlaintextWithLittleEndianCursorAndReversedMAC() {
+        let chinese = Sibionics1ChineseProtocolCodec()
+        let request = chinese.buildDataRequestPacket(lastIndex: 0x1234, macAddress: testBluetoothAddressBytes)
+        XCTAssertEqual([UInt8](request), [
+            0xAA, 0x55, 0x07, 0x34, 0x12, 0x01, 0, 0, 0, 0, 0x02,
+            0, 0, 0, 0, 0, 0, 0, 0, 0xB1
+        ])
+        XCTAssertEqual(request.reduce(UInt8(0), { $0 &+ $1 }), 0)
+        let initial = [UInt8](chinese.buildDataRequestPacket(lastIndex: 0, macAddress: []))
+        XCTAssertEqual(initial[3], 1, "Chinese cursors start at one")
+        XCTAssertEqual(initial[4], 0)
+        XCTAssertEqual(Array(initial[5..<11]), [UInt8](repeating: 0, count: 6))
+        XCTAssertEqual(initial.reduce(UInt8(0), { $0 &+ $1 }), 0)
+    }
+
+    func testChineseResponseDecodesBigEndianMeasurementsAndRelativeHistoryTime() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        // Seven big-endian words per entry; status is not a V120 trend byte.
+        let frame = chineseFrame([
+            0xAA, 0x55, 0x09, 0x02,
+            0x12, 0x34, 0x01, 0x25, 0x01, 0xF4, 0x00, 0x53, 0x00, 0x20, 0x00, 0x02, 0x00, 0x0A,
+            0x12, 0x36, 0x01, 0x26, 0x01, 0xF5, 0x00, 0x54, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x05
+        ])
+        guard case .readings(let readings) = Sibionics1ChineseProtocolCodec().parse(frame, at: now) else {
+            return XCTFail("Expected two Chinese readings")
+        }
+        XCTAssertEqual(readings.count, 2)
+        XCTAssertEqual(readings[0].index, 0x1234)
+        XCTAssertEqual(readings[0].temperatureC, 29.3)
+        XCTAssertEqual(readings[0].impedance, 500)
+        XCTAssertEqual(readings[0].rawMmol, 8.3)
+        XCTAssertEqual(readings[0].trend, .notDetermined)
+        XCTAssertEqual(readings[0].reindex, 2)
+        XCTAssertEqual(readings[0].eventTime, now.addingTimeInterval(-110))
+        XCTAssertEqual(readings[1].index, 0x1236)
+        XCTAssertEqual(readings[1].reindex, 0)
+        XCTAssertEqual(readings[1].eventTime, now, "Positive firmware offsets cannot move readings into the future")
+    }
+
+    func testChineseParserDistinguishesChecksummedEchoAndExactV120Marker() {
+        let chinese = Sibionics1ChineseProtocolCodec()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let request = chinese.buildDataRequestPacket(lastIndex: 1, macAddress: testBluetoothAddressBytes)
+        guard case .requestEcho = chinese.parse(request, at: now) else {
+            return XCTFail("A request echo must not confirm Chinese data")
+        }
+        let marker = Data([0x23, 0xF7, 0x6F, 0xD9, 0xF4])
+        XCTAssertEqual(codec.decrypt(marker), Data([0x04, 0, 0, 0, 0xFC]))
+        guard case .v120AuthRequired = chinese.parse(marker, at: now) else {
+            return XCTFail("Expected encrypted V120 marker")
+        }
+        guard case .readings(let readings) = chinese.parse(chineseFrame([0xAA, 0x55, 0x09, 0]), at: now) else {
+            return XCTFail("A valid zero-entry response is a Chinese response")
+        }
+        XCTAssertTrue(readings.isEmpty)
+    }
+
+    func testChineseParserRejectsCorruptTruncatedAndExtraPayloads() {
+        let chinese = Sibionics1ChineseProtocolCodec()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let response = chineseFrame([0xAA, 0x55, 0x09, 1] + [UInt8](repeating: 0, count: 14))
+        var corrupt = response
+        corrupt[5] ^= 1
+        let echo = chinese.buildDataRequestPacket(lastIndex: 1, macAddress: [])
+        var corruptEcho = echo
+        corruptEcho[5] ^= 1
+        let malformed = [
+            Data(), Data([0xAA, 0x55, 0x09]), corrupt, Data(response.dropLast()),
+            chineseFrame([0xAA, 0x55, 0x09, 2] + [UInt8](repeating: 0, count: 14)),
+            chineseFrame([0xAA, 0x55, 0x09, 0, 0]),
+            chineseFrame([0xAA, 0x55, 0x08, 0]),
+            corruptEcho, Data(echo.dropLast()), Data([0xAA, 0x55, 0x07]),
+            Data([0x23, 0xF7, 0x6F, 0xD9, 0xF4, 0]), Data([0x23, 0xF7, 0x6F, 0xD9, 0xF5])
+        ]
+        for frame in malformed {
+            guard case .malformed = chinese.parse(frame, at: now) else {
+                XCTFail("Accepted malformed frame: \(frame as NSData)")
+                continue
+            }
+        }
+    }
+
+    func testConfirmedProtocolModePersistsPerPeripheralUUIDAndCanBeCleared() throws {
+        let suiteName = "Sibionics1ProtocolMode.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let identifier = UUID().uuidString
+        let other = UUID().uuidString
+        XCTAssertNil(Sibionics2Configuration.protocolMode(for: identifier, userDefaults: defaults))
+        XCTAssertTrue(Sibionics2Configuration.setProtocolMode(.chinese, for: identifier, userDefaults: defaults))
+        let reloaded = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        XCTAssertEqual(Sibionics2Configuration.protocolMode(for: identifier.lowercased(), userDefaults: reloaded), .chinese)
+        XCTAssertNil(Sibionics2Configuration.protocolMode(for: other, userDefaults: reloaded))
+        XCTAssertTrue(Sibionics2Configuration.setProtocolMode(.v120, for: identifier, userDefaults: reloaded))
+        XCTAssertEqual(Sibionics2Configuration.protocolMode(for: identifier, userDefaults: defaults), .v120)
+        XCTAssertFalse(Sibionics2Configuration.setProtocolMode(.chinese, for: "  ", userDefaults: defaults))
+        XCTAssertTrue(Sibionics2Configuration.setProtocolMode(nil, for: identifier, userDefaults: defaults))
+        XCTAssertNil(Sibionics2Configuration.protocolMode(for: identifier, userDefaults: defaults))
+        defaults.set(99, forKey: "sibionics2.configuration.protocolMode." + identifier.lowercased())
+        XCTAssertNil(Sibionics2Configuration.protocolMode(for: identifier, userDefaults: defaults))
+    }
+
+    private func chineseFrame(_ payload: [UInt8]) -> Data {
+        Data(payload + [0 &- payload.reduce(UInt8(0), { $0 &+ $1 })])
+    }
+
     func testPacketDecoderRejectsCorruptedChecksumAndTruncation() {
         let valid = encryptedFrame([0x04, 0x01, 0x00, 0x00])
         guard case .handshake(.authenticationAccepted) = codec.parseV120(valid) else {

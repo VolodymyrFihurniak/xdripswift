@@ -326,3 +326,106 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         )
     }
 }
+
+extension Sibionics2GlucoseProcessorTests {
+    private func v115gRows() throws -> [Row] {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(
+            forResource: "sibionics1_v115g_replay", withExtension: "csv"
+        ))
+        return try String(contentsOf: url, encoding: .utf8)
+            .split(whereSeparator: { $0.isNewline }).dropFirst().map { line in
+                let fields = line.split(separator: ",", omittingEmptySubsequences: false)
+                // Upstream tests use vendor_mmol (column 4), not the historical
+                // comparison in exact_mmol (column 5), for V115G conformance.
+                return Row(index: try XCTUnwrap(Int(fields[0])),
+                           rawMmol: try XCTUnwrap(Double(fields[1])),
+                           temperatureC: try XCTUnwrap(Double(fields[2])),
+                           exactMmol: try XCTUnwrap(Double(fields[3])))
+            }
+    }
+
+    func testV115GPublishesRawStartupThenCarriesStockDeltaEveryMinute() throws {
+        let rows = try v115gRows()
+        let selected: [Int: Double] = [25: 29.0, 30: 16.8, 31: 16.7, 35: 6.1, 36: 6.0]
+        for mode in [Sibionics2ProcessingMode.live, .replay] {
+            var processor = Sibionics2GlucoseProcessor(sensitivity: 1.4, stockFamily: .v115g)
+            var delta: Float?
+            for row in rows {
+                if row.index % 5 == 0 && row.exactMmol > 1 {
+                    delta = Float(row.exactMmol) - Float(row.rawMmol)
+                }
+                let expected = row.index % 5 == 0 && row.exactMmol > 1
+                    ? row.exactMmol
+                    : Double(Int((Float(row.rawMmol) + (delta ?? 0)) * 10 + 0.5)) / 10
+                let output = try XCTUnwrap(processor.process(row.reading(), mode: mode),
+                                          "Missing S1 minute \(row.index)")
+                XCTAssertEqual(output.glucoseMgDl, expected * 18, accuracy: 0.0002,
+                               "S1 minute \(row.index)")
+                if let value = selected[row.index] {
+                    XCTAssertEqual(output.glucoseMgDl, value * 18, accuracy: 0.0002)
+                }
+            }
+        }
+    }
+
+    func testV115GSnapshotContinuesAndRejectsOtherStockFamily() throws {
+        let rows = try v115gRows()
+        var source = Sibionics2GlucoseProcessor(sensitivity: 1.4, stockFamily: .v115g)
+        for row in rows.prefix(while: { $0.index < 7_500 }) {
+            _ = source.process(row.reading(), mode: .replay)
+        }
+        let snapshot = source.snapshot()
+        XCTAssertEqual(Array(snapshot.prefix(4)), Array("S1GP".utf8))
+        var restored = Sibionics2GlucoseProcessor(sensitivity: 1.4, stockFamily: .v115g)
+        XCTAssertTrue(restored.restore(from: snapshot))
+        var corrupted = snapshot
+        corrupted[28 + 24] ^= 1
+        XCTAssertFalse(restored.restore(from: corrupted))
+        XCTAssertEqual(restored.snapshot(), snapshot)
+        var v116a = Sibionics2GlucoseProcessor(sensitivity: 1.4)
+        let existingSnapshot = v116a.snapshot()
+        XCTAssertEqual(Array(existingSnapshot.prefix(6)), [0x53, 0x32, 0x47, 0x50, 0, 2])
+        XCTAssertFalse(v116a.restore(from: snapshot))
+        XCTAssertFalse(restored.restore(from: existingSnapshot))
+        for row in rows.drop(while: { $0.index < 7_500 }) {
+            let expected = try XCTUnwrap(source.process(row.reading(), mode: .live))
+            let actual = try XCTUnwrap(restored.process(row.reading(), mode: .live))
+            XCTAssertEqual(actual.glucoseMgDl, expected.glucoseMgDl)
+        }
+    }
+
+    func testV115GReplayRefreshesLiveDeltaAndValueCopiesRemainIndependent() throws {
+        let rows = try v115gRows()
+        var source = Sibionics2GlucoseProcessor(sensitivity: 1.4, stockFamily: .v115g)
+        for row in rows.prefix(while: { $0.index <= 31 }) {
+            _ = source.process(row.reading(), mode: .live)
+        }
+        var copy = source
+        for row in rows.filter({ (32...35).contains($0.index) }) {
+            _ = source.process(row.reading(), mode: .replay)
+        }
+        let next = try XCTUnwrap(rows.first { $0.index == 36 })
+        XCTAssertEqual(try XCTUnwrap(source.process(next.reading(), mode: .live)).glucoseMgDl,
+                       6.0 * 18, accuracy: 0.0001)
+        let old = try XCTUnwrap(rows.first { $0.index == 32 })
+        XCTAssertEqual(try XCTUnwrap(copy.process(old.reading(), mode: .live)).glucoseMgDl,
+                       16.6 * 18, accuracy: 0.0001)
+        copy.reset()
+        XCTAssertEqual(try XCTUnwrap(copy.process(rows[0].reading(), mode: .live)).glucoseMgDl,
+                       29 * 18, accuracy: 0.0001)
+        XCTAssertNil(copy.process(rows[1].reading(rawOverride: .nan), mode: .live))
+    }
+
+    func testV115GStartupFallbackRoundsAndRejectsInvalidRawValues() throws {
+        let row = try v115gRows()[1] // index 26 has no exact correction
+        for invalid in [Double.nan, .infinity, 0, -1, 51, 6553.6] {
+            var processor = Sibionics2GlucoseProcessor(sensitivity: 1.4, stockFamily: .v115g)
+            XCTAssertNil(processor.process(row.reading(rawOverride: invalid), mode: .live))
+        }
+        var processor = Sibionics2GlucoseProcessor(sensitivity: 1.4, stockFamily: .v115g)
+        XCTAssertEqual(try XCTUnwrap(processor.process(row.reading(rawOverride: 29.04), mode: .live))
+            .glucoseMgDl, 29 * 18, accuracy: 0.0001)
+        var invalidSensitivity = Sibionics2GlucoseProcessor(sensitivity: .nan, stockFamily: .v115g)
+        XCTAssertNil(invalidSensitivity.process(row.reading(), mode: .live))
+    }
+}

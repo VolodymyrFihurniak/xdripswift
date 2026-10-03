@@ -14,6 +14,9 @@ enum Sibionics2FactorySensitivity {
     private static let variantFallbackShortCode = "0316015A"
     /// Final fallback when the variant token also fails to decode.
     static let defaultSensitivity: Double = 1.27
+    /// Identity scaling when an S1 factory code is unavailable. This is not a
+    /// factory calibration borrowed from a different sensor.
+    static let neutralSensitivity: Double = 1.0
 
     static func isSupported(_ sensitivity: Double) -> Bool {
         sensitivity.isFinite && supportedSensitivityRange.contains(sensitivity)
@@ -21,9 +24,20 @@ enum Sibionics2FactorySensitivity {
 
     static func effectiveSensitivity(
         advertisedName: String?,
-        probeCode: String? = nil
+        probeCode: String? = nil,
+        variant: SibionicsDeviceVariant = .sibionics2
     ) -> Double {
-        resolve(probeCode: probeCode, shortCode: advertisedName)
+        guard variant == .sibionics1 else {
+            return resolve(probeCode: probeCode, shortCode: advertisedName)
+        }
+        return decodedSibionics1Sensitivity(advertisedName: advertisedName, probeCode: probeCode)
+            ?? neutralSensitivity
+    }
+
+    static func decodedSibionics1Sensitivity(advertisedName: String?, probeCode: String?) -> Double? {
+        let normalizedName = normalize(advertisedName)
+        let shortCode = normalizedName.count >= 8 ? String(normalizedName.prefix(8)) : normalizedName
+        return decodeProbe(probeCode) ?? decodeShortCode(shortCode)
     }
 
     static func decodeProbe(_ code: String?) -> Double? {

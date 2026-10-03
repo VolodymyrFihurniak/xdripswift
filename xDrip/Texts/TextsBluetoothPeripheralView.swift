@@ -4,12 +4,22 @@ class Texts_BluetoothPeripheralView {
     
     static private let filename = "BluetoothPeripheralView"
 
+    static let sibionics1SensitivityUnknown = NSLocalizedString("sibionics1.sensitivityUnknown", tableName: filename, bundle: .main, value: "Factory sensitivity unknown · neutral scaling", comment: "No sensor-specific factory sensitivity is available")
+    static let sibionics1DiscoveryTitle = NSLocalizedString("sibionics1.discoveryTitle", tableName: filename, bundle: .main, value: "Nearby Sibionics 1 sensors", comment: "Sibionics 1 sensor settings")
+    static let sibionics1DiscoveryEmpty = NSLocalizedString("sibionics1.discoveryEmpty", tableName: filename, bundle: .main, value: "Searching for Sibionics 1 sensors…", comment: "Sibionics 1 sensor settings")
+    static let sibionics1SettingsTitle = NSLocalizedString("sibionics1.settingsTitle", tableName: filename, bundle: .main, value: "Sibionics 1 settings", comment: "Sibionics 1 sensor settings")
+    static let sibionics1SettingsFooter = NSLocalizedString("sibionics1.settingsFooter", tableName: filename, bundle: .main, value: "The sensor protocol is detected automatically. Calibration adjusts readings using fingersticks. Polling controls how often xDripSwift requests the latest data.", comment: "Sibionics 1 sensor settings")
+
     static let sibionics2DiscoveryTitle = NSLocalizedString("sibionics2.discoveryTitle", tableName: filename, bundle: .main, value: "Nearby Sibionics 2 sensors", comment: "Heading for nearby Sibionics 2 scan results")
     static let sibionics2DiscoveryFooter = NSLocalizedString("sibionics2.discoveryFooter", tableName: filename, bundle: .main, value: "Keep this screen open and select your sensor when it appears.", comment: "Instructions for selecting a discovered Sibionics 2 sensor")
     static let sibionics2DiscoveryEmpty = NSLocalizedString("sibionics2.discoveryEmpty", tableName: filename, bundle: .main, value: "Searching for Sibionics 2 sensors…", comment: "Shown while no Sibionics 2 devices have appeared yet")
     static let sibionics2DiscoveryNoMatches = NSLocalizedString("sibionics2.discoveryNoMatches", tableName: filename, bundle: .main, value: "No matching sensors", comment: "Shown when a search filters all Sibionics 2 scan results")
     static let sibionics2DiscoverySearch = NSLocalizedString("sibionics2.discoverySearch", tableName: filename, bundle: .main, value: "Search sensors", comment: "Search prompt for Sibionics 2 scan results")
     static let sibionics2ConnectionTitle = NSLocalizedString("sibionics2.connectionTitle", tableName: filename, bundle: .main, value: "Sensor connection", comment: "Section heading for Sibionics 2 connection settings")
+    static let sibionicsReadingAgeTitle = NSLocalizedString("sibionics.readingAgeTitle", tableName: filename, bundle: .main, value: "Last reading", comment: "Age of the latest Sibionics sensor sample")
+    static let sibionicsReadingAgeWaiting = NSLocalizedString("sibionics.readingAgeWaiting", tableName: filename, bundle: .main, value: "Waiting for reading", comment: "Shown before a Sibionics sensor sample is stored")
+    static let sibionicsReadingAgeSecondsFormat = NSLocalizedString("sibionics.readingAgeSecondsFormat", tableName: filename, bundle: .main, value: "%d sec ago", comment: "Elapsed seconds since the last Sibionics sample")
+    static let sibionicsReadingAgeMinutesFormat = NSLocalizedString("sibionics.readingAgeMinutesFormat", tableName: filename, bundle: .main, value: "%d min ago", comment: "Elapsed whole minutes since the last Sibionics sample")
     static let sibionics2BluetoothAddressTitle = NSLocalizedString("sibionics2.bluetoothAddressTitle", tableName: filename, bundle: .main, value: "Bluetooth address", comment: "Optional BLE MAC address carried in the Sibionics authentication command")
     static let sibionics2BluetoothAddressFooter = NSLocalizedString("sibionics2.bluetoothAddressFooter", tableName: filename, bundle: .main, value: "If the sensor acknowledges the connection but sends no readings, enter its Bluetooth MAC address from a trusted Android device log. iOS does not expose this address. Leave blank for the automatic fallback.", comment: "Why and where to enter an optional Sibionics BLE address")
     static let sibionics2BluetoothAddressAutomatic = NSLocalizedString("sibionics2.bluetoothAddressAutomatic", tableName: filename, bundle: .main, value: "not detected; enter manually", comment: "Private Bluetooth address selectors did not provide a MAC")

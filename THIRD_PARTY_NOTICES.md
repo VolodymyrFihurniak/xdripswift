@@ -22,3 +22,14 @@ The startup fixture and native-state vectors are adapted from the same pinned re
 - `Common/src/test/java/tk/glucodata/drivers/sibionics/SibionicsExactV116ACoreTest.kt`
 
 `xDrip Tests/Fixtures/sibionics2_v116a_startup.csv` renames the CSV and adds attribution comments; all 130 numeric data rows are unchanged. Kotlin/JVM tests assert every exact-core row and selected state hashes/snapshot continuation. Swift XCTest specifies the xDrip wrapper behavior for every row in both live and replay modes, including the documented held-stock-delta rule. Timestamps, impedance, trend, and reindex are synthetic metadata because the source fixture does not contain them.
+
+## JugglucoNG Sibionics V115G stock algorithm and replay
+
+The Chinese Sibionics 1 V1.1.5G core and generated clip state machine are adapted from [ctqvva/JugglucoNG](https://github.com/ctqvva/JugglucoNG), pinned to commit `a2070a6b7af03cc255e0b32f124c3200b13da30f`, under GPL-3.0. See that revision's [LICENSE.txt](https://github.com/ctqvva/JugglucoNG/blob/a2070a6b7af03cc255e0b32f124c3200b13da30f/LICENSE.txt).
+
+Adapted source and test data:
+- `Common/src/main/java/tk/glucodata/drivers/sibionics/SibionicsExactV115GCore.kt` and `SibionicsExactV115GClip.kt` are preserved under `Sibionics2Core/src/commonMain/kotlin/tk/glucodata/drivers/sibionics/`.
+- `Common/src/test/java/tk/glucodata/drivers/sibionics/SibionicsExactV115GCoreTest.kt` supplies the replay and snapshot conformance cases.
+- `Common/src/test/resources/sibionics_exact_v115g_replay.csv` is copied byte-for-byte to `xDrip Tests/Fixtures/sibionics1_v115g_replay.csv`. As in the upstream tests, `vendor_mmol` is the proprietary conformance target (3,153 five-minute outputs); the CSV's `exact_mmol` column is an older comparison, not the expected output.
+
+Common Kotlin adaptations replace Java data streams with big-endian snapshot primitives (including Java's canonical NaN encoding), overlapping array shifts with `copyInto`, unsigned Int comparisons with sign-bit ordering, and unsigned Long decimal conversion with common Kotlin's ULong decimal conversion. Algorithm arithmetic, branches, constants, core snapshot versions, and serialized layout are preserved. `Sibionics1V115GFacade.kt` adds the primitive Kotlin/Native bridge. The Swift wrapper applies the upstream S1 startup raw-value and held-correction rules and uses a distinct `S1GP` snapshot envelope. Existing V116A uses its unchanged `S2GP` envelope. No iGlucco source code is included.

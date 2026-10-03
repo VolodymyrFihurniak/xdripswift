@@ -3,6 +3,7 @@ import Foundation
 /// Replays unique sensor history in ascending index order and returns only accepted values
 /// in the newest-first order expected by CGMTransmitterDelegate.
 struct Sibionics2ReadingBatchProcessor {
+    private let allowsHistoricalBootstrap: Bool
     private let deviceIdentifier: String
     private let stateStore: Sibionics2ReadingStateStore
     private var processor: Sibionics2GlucoseProcessor
@@ -16,8 +17,10 @@ struct Sibionics2ReadingBatchProcessor {
     init(
         deviceIdentifier: String,
         stateStore: Sibionics2ReadingStateStore,
-        processor: Sibionics2GlucoseProcessor
+        processor: Sibionics2GlucoseProcessor,
+        allowsHistoricalBootstrap: Bool = false
     ) {
+        self.allowsHistoricalBootstrap = allowsHistoricalBootstrap
         self.deviceIdentifier = deviceIdentifier
         self.stateStore = stateStore
         let savedState = stateStore.load(for: deviceIdentifier)
@@ -78,7 +81,13 @@ struct Sibionics2ReadingBatchProcessor {
         let waitingForHistoryReplay = readingState?.lastDeliveredIndex == nil &&
             readingState?.processorSnapshot != nil &&
             readingState?.sensorStartDate != nil
-        if (firstConnectionWithoutHistory || waitingForHistoryReplay), firstReading.index > 1 {
+        // Chinese history can begin after warmup (the V115G reference starts
+        // at index 25). Only a historical response can establish this baseline;
+        // an arbitrary current packet must still trigger a history request.
+        let canBootstrapHistory = allowsHistoricalBootstrap && firstReading.reindex > 0 &&
+            (firstConnectionWithoutHistory || waitingForHistoryReplay)
+        if (firstConnectionWithoutHistory || waitingForHistoryReplay), firstReading.index > 1,
+           !canBootstrapHistory {
             replayTargetIndex = max(replayTargetIndex ?? 0, uniqueReadings.last?.index ?? firstReading.index)
             requiresHistoryReplay = true
             if firstConnectionWithoutHistory {
@@ -93,7 +102,8 @@ struct Sibionics2ReadingBatchProcessor {
         }
 
         let sensorStartDate = readingState?.sensorStartDate ?? inferredStartDate
-        let lastIndex = readingState?.lastDeliveredIndex.map { Int($0) } ?? 0
+        let lastIndex = readingState?.lastDeliveredIndex.map { Int($0) } ??
+            (canBootstrapHistory ? firstReading.index - 1 : 0)
         let pendingReadings = uniqueReadings.filter { $0.index > lastIndex }
         guard !pendingReadings.isEmpty else { return [] }
 
@@ -111,7 +121,9 @@ struct Sibionics2ReadingBatchProcessor {
             newReadings.append(reading)
             expectedIndex += 1
         }
-        guard !newReadings.isEmpty else { return [] }
+        guard !newReadings.isEmpty else {
+            return []
+        }
 
         var processed: [Sibionics2ProcessedGlucose] = []
         for (position, reading) in newReadings.enumerated() {
@@ -143,13 +155,14 @@ struct Sibionics2ReadingBatchProcessor {
             return $0.eventTime < $1.eventTime
         }) else { return [] }
 
-        return processed
+        let corrected = processed
             .map { result in
-                GlucoseData(
+                let data = GlucoseData(
                     timeStamp: result.eventTime,
                     glucoseLevelRaw: result.glucoseMgDl,
                     backfilledAt: result.index == newest.index ? nil : receivedAt
                 )
+                return data
             }
             .sorted {
                 if $0.timeStamp == $1.timeStamp {
@@ -157,6 +170,7 @@ struct Sibionics2ReadingBatchProcessor {
                 }
                 return $0.timeStamp > $1.timeStamp
             }
+        return corrected
     }
 
     /// A missing page can be followed by an app restart before any new minute

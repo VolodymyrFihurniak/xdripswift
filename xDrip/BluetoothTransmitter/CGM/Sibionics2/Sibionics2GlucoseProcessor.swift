@@ -6,6 +6,25 @@
 import Foundation
 import Sibionics2Core
 
+/// V115G is the Chinese S1 stock family; S2 and EU S1 use V116A.
+enum Sibionics2StockFamily {
+    case v115g
+    case v116a
+}
+
+private protocol SibionicsStockCore: AnyObject {
+    func process(rawMmol: Float, temperatureC: Float, index: Int32) -> Float
+    func reset()
+    func snapshotByteCount() -> Int32
+    func snapshotHexChunk(offsetBytes: Int32, lengthBytes: Int32) -> String
+    func beginRestoreHex(characterCount: Int32) -> Bool
+    func appendRestoreHexChunk(chunk: String) -> Bool
+    func finishRestoreHex() -> Bool
+}
+
+extension Sibionics2V116AFacade: SibionicsStockCore {}
+extension Sibionics1V115GFacade: SibionicsStockCore {}
+
 enum Sibionics2ProcessingMode {
     case live
     case replay
@@ -18,10 +37,12 @@ struct Sibionics2ProcessedGlucose {
     let trend: Sibionics2Trend
 }
 
-/// Stateful xDrip wrapper for the stock V116A correction stream. Before its
-/// first exact correction there is deliberately no glucose result.
+/// Stateful xDrip wrapper for stock correction streams. V115G uses validated
+/// rounded raw glucose before its first correction; V116A emits no result then.
 struct Sibionics2GlucoseProcessor {
-    private static let snapshotMagic: [UInt8] = [0x53, 0x32, 0x47, 0x50] // S2GP
+    private var snapshotMagic: [UInt8] {
+        stockFamily == .v115g ? [0x53, 0x31, 0x47, 0x50] : [0x53, 0x32, 0x47, 0x50] // S1GP / S2GP
+    }
     private static let snapshotVersion: UInt16 = 2
     private static let maximumCoreHexLength = 16_384
     private static let coreSnapshotChunkByteCount = 256
@@ -35,10 +56,17 @@ struct Sibionics2GlucoseProcessor {
     }
 
     private final class CoreBox {
-        let value: Sibionics2V116AFacade
-        init(_ value: Sibionics2V116AFacade) { self.value = value }
+        let value: SibionicsStockCore
+
+        init(sensitivity: Float, stockFamily: Sibionics2StockFamily) {
+            switch stockFamily {
+            case .v115g: value = Sibionics1V115GFacade(sensitivity: sensitivity)
+            case .v116a: value = Sibionics2V116AFacade(sensitivity: sensitivity)
+            }
+        }
     }
 
+    private let stockFamily: Sibionics2StockFamily
     private let sensitivity: Float
     private let validSensitivity: Bool
     private var coreBox: CoreBox
@@ -46,13 +74,15 @@ struct Sibionics2GlucoseProcessor {
     private var replayDeltaMmol: Float?
     private var lastIndex: Int?
 
-    init(sensitivity: Double) {
+    init(sensitivity: Double, stockFamily: Sibionics2StockFamily = .v116a) {
         let valid = Sibionics2FactorySensitivity.isSupported(sensitivity)
+        self.stockFamily = stockFamily
         self.validSensitivity = valid
         self.sensitivity = Float(sensitivity)
-        self.coreBox = CoreBox(Sibionics2V116AFacade(
-            sensitivity: valid ? Float(sensitivity) : Float(Sibionics2FactorySensitivity.defaultSensitivity)
-        ))
+        self.coreBox = CoreBox(
+            sensitivity: valid ? Float(sensitivity) : Float(Sibionics2FactorySensitivity.defaultSensitivity),
+            stockFamily: stockFamily
+        )
     }
 
     mutating func process(
@@ -95,8 +125,19 @@ struct Sibionics2GlucoseProcessor {
             case .replay:
                 delta = replayDeltaMmol
             }
-            guard let delta, delta.isFinite, abs(delta) < Validation.maximumCorrectionDeltaMmol else { return nil }
-            let corrected = raw + delta
+            // Only Chinese S1 has a raw startup fallback. Once either stream has
+            // a correction, use that stock delta instead of returning to raw.
+            let effectiveDelta: Float?
+            if let delta {
+                effectiveDelta = delta
+            } else if stockFamily == .v115g {
+                effectiveDelta = liveDeltaMmol ?? replayDeltaMmol ?? 0
+            } else {
+                effectiveDelta = nil
+            }
+            guard let effectiveDelta, effectiveDelta.isFinite,
+                  abs(effectiveDelta) < Validation.maximumCorrectionDeltaMmol else { return nil }
+            let corrected = raw + effectiveDelta
             guard corrected.isFinite,
                   corrected > Validation.minimumCorrectedMmol,
                   corrected <= Validation.maximumCandidateMmol else { return nil }
@@ -132,7 +173,7 @@ struct Sibionics2GlucoseProcessor {
         if replayDeltaMmol != nil { flags |= 2 }
         if lastIndex != nil { flags |= 4 }
 
-        var data = Data(Self.snapshotMagic)
+        var data = Data(snapshotMagic)
         data.appendUInt16BE(Self.snapshotVersion)
         data.append(flags)
         // The reserved field is one byte; an untyped literal selects Data.append<Int>.
@@ -152,7 +193,7 @@ struct Sibionics2GlucoseProcessor {
         let headerSize = 28
         let checksumSize = 4
         guard validSensitivity, data.count >= headerSize + checksumSize,
-              Array(data.prefix(4)) == Self.snapshotMagic,
+              Array(data.prefix(4)) == snapshotMagic,
               data.uint16BE(at: 4) == Self.snapshotVersion,
               let flags = data.byte(at: 6), (flags & ~UInt8(7)) == 0,
               data.byte(at: 7) == 0,
@@ -189,16 +230,16 @@ struct Sibionics2GlucoseProcessor {
               ((flags & 2) == 0 ? replayBits == 0 : Self.isUsableDelta(replayDelta))
         else { return false }
 
-        let restored = Sibionics2V116AFacade(sensitivity: sensitivity)
-        guard Self.restoreCoreSnapshot(hexBytes: coreHexBytes, into: restored) else { return false }
-        coreBox = CoreBox(restored)
+        let restored = CoreBox(sensitivity: sensitivity, stockFamily: stockFamily)
+        guard Self.restoreCoreSnapshot(hexBytes: coreHexBytes, into: restored.value) else { return false }
+        coreBox = restored
         self.lastIndex = restoredIndex
         self.liveDeltaMmol = (flags & 1) == 0 ? nil : liveDelta
         self.replayDeltaMmol = (flags & 2) == 0 ? nil : replayDelta
         return true
     }
 
-    private static func snapshotCoreHexBytes(from core: Sibionics2V116AFacade) -> [UInt8]? {
+    private static func snapshotCoreHexBytes(from core: SibionicsStockCore) -> [UInt8]? {
         let byteCount = Int(core.snapshotByteCount())
         guard byteCount > 0, byteCount <= maximumCoreHexLength / 2,
               byteCount <= Int(Int32.max) else { return nil }
@@ -220,7 +261,7 @@ struct Sibionics2GlucoseProcessor {
         return hexBytes
     }
 
-    private static func restoreCoreSnapshot(hexBytes: [UInt8], into core: Sibionics2V116AFacade) -> Bool {
+    private static func restoreCoreSnapshot(hexBytes: [UInt8], into core: SibionicsStockCore) -> Bool {
         guard !hexBytes.isEmpty, hexBytes.count <= maximumCoreHexLength,
               hexBytes.count.isMultiple(of: 2),
               hexBytes.allSatisfy(isHexByte),
@@ -251,10 +292,10 @@ struct Sibionics2GlucoseProcessor {
 
     private mutating func ensureUniqueCore() {
         guard !isKnownUniquelyReferenced(&coreBox) else { return }
-        let copy = Sibionics2V116AFacade(sensitivity: sensitivity)
+        let copy = CoreBox(sensitivity: sensitivity, stockFamily: stockFamily)
         if let hexBytes = Self.snapshotCoreHexBytes(from: coreBox.value),
-           Self.restoreCoreSnapshot(hexBytes: hexBytes, into: copy) {
-            coreBox = CoreBox(copy)
+           Self.restoreCoreSnapshot(hexBytes: hexBytes, into: copy.value) {
+            coreBox = copy
         }
     }
 

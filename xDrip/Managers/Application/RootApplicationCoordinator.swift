@@ -221,6 +221,7 @@ import AppIntents
     /// Runs the refresh work previously triggered by RootViewController's viewWillAppear and viewDidAppear.
     /// RootHomeTabView calls this whenever the Home tab becomes visible.
     func homeDidBecomeVisible() {
+        repairStoredSibionicsReadings()
         
         // check if allowed to rotate to landscape view
         updateScreenRotationSettings()
@@ -352,6 +353,8 @@ import AppIntents
                     sensorProvider: self
                 )
             }
+
+            self.repairStoredSibionicsReadings()
 
             // housekeeper should be non nil here, kall housekeeper
             self.houseKeeper?.doAppStartUpHouseKeeping()
@@ -572,6 +575,7 @@ import AppIntents
             
             // Schedule a call to updateLabelsAndChart when the app comes to the foreground, with a delay of 0.5 seconds. Because the application state is not immediately to .active, as a result, updates may not happen - especially the synctreatments may not happen because this may depend on the application state - by making a call just half a second later, when the status is surely = .active, the UI updates will be done correctly.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.repairStoredSibionicsReadings()
                 self.updateLabelsAndChart(overrideApplicationState: true)
                 self.updateMiniChart()
                 self.updateDataSourceInfo()
@@ -1072,6 +1076,27 @@ import AppIntents
         sensorNoiseManager?.update(activeSensor: activeSensor)
     }
     
+    /// Repairs persisted factory readings independently of Bluetooth traffic.
+    /// Run after services are restored and when the user returns to Home.
+    private func repairStoredSibionicsReadings() {
+        guard let coreDataManager = coreDataManager,
+              let activeSensor = activeSensor,
+              let transmitter = bluetoothPeripheralManager?.getCGMTransmitter() as? CGMSibionics2Transmitter else { return }
+        guard Sibionics2ReadingRepair.repair(
+            in: coreDataManager.mainManagedObjectContext,
+            sensor: activeSensor, mode: transmitter.calibrationMode
+        ) > 0 else { return }
+        activeSensor.noiseHistoryIsComplete = false
+        coreDataManager.saveChanges()
+        _ = bgPostProcessingManager?.processLatestReadings()
+        statisticsManager?.invalidate()
+        rootHomeStateModel.invalidateCharts()
+        sensorNoiseManager?.update(activeSensor: activeSensor)
+        updateLabelsAndChart(overrideApplicationState: true)
+        updateMiniChart()
+        updateStatistics(animate: false, overrideApplicationState: true)
+    }
+
     /// process new glucose data received from transmitter.
     /// - parameters:
     ///     - glucoseData : array with new readings
@@ -1084,7 +1109,9 @@ import AppIntents
         }
         
         synchronizeDetectedSensorStartDate(sensorAge: sensorAge, glucoseData: glucoseData, cgmTransmitter: cgmTransmitter, coreDataManager: coreDataManager)
-        
+
+        repairStoredSibionicsReadings()
+
         guard glucoseData.count > 0 else {
             trace("in processNewGlucoseData, glucoseData.count = 0", log: log, category: ConstantsLog.categoryRootView, type: .info)
             return

@@ -831,6 +831,7 @@
 		51B210023102000100000001 /* Sibionics2GlucoseProcessorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51B210013102000100000001 /* Sibionics2GlucoseProcessorTests.swift */; };
 		D3E200013102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E200023102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift */; };
 		51B210043102000100000001 /* sibionics2_v116a_startup.csv in Resources */ = {isa = PBXBuildFile; fileRef = 51B210033102000100000001 /* sibionics2_v116a_startup.csv */; };
+		51B310043102000100000001 /* sibionics1_v115g_replay.csv in Resources */ = {isa = PBXBuildFile; fileRef = 51B310033102000100000001 /* sibionics1_v115g_replay.csv */; };
 		A1B200023102000100000001 /* Sibionics2GlucoseProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B200013102000100000001 /* Sibionics2GlucoseProcessor.swift */; };
 		A1B200043102000100000001 /* Sibionics2FactorySensitivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B200033102000100000001 /* Sibionics2FactorySensitivity.swift */; };
 		A1B200063102000100000001 /* Sibionics2Core.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B200053102000100000001 /* Sibionics2Core.xcframework */; };
@@ -2052,6 +2053,7 @@
 		51B210013102000100000001 /* Sibionics2GlucoseProcessorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2GlucoseProcessorTests.swift; sourceTree = "<group>"; };
 		D3E200023102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2RegistrationAndDeliveryTests.swift; sourceTree = "<group>"; };
 		51B210033102000100000001 /* sibionics2_v116a_startup.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = sibionics2_v116a_startup.csv; sourceTree = "<group>"; };
+		51B310033102000100000001 /* sibionics1_v115g_replay.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = sibionics1_v115g_replay.csv; sourceTree = "<group>"; };
 		A1B200013102000100000001 /* Sibionics2GlucoseProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2GlucoseProcessor.swift; sourceTree = "<group>"; };
 		A1B200033102000100000001 /* Sibionics2FactorySensitivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2FactorySensitivity.swift; sourceTree = "<group>"; };
 		A1B200053102000100000001 /* Sibionics2Core.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Sibionics2Core/build/XCFrameworks/release/Sibionics2Core.xcframework; sourceTree = SOURCE_ROOT; };
@@ -2062,6 +2064,7 @@
 		D3E3000A0000000000000001 /* Sibionics2ReadingStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sibionics2ReadingStateStore.swift"; sourceTree = "<group>"; };
 		D3E3000C0000000000000001 /* Sibionics2ReadingBatchProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sibionics2ReadingBatchProcessor.swift"; sourceTree = "<group>"; };
 		D3E3000D0000000000000001 /* xdrip v33.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v33.xcdatamodel"; sourceTree = "<group>"; };
+		D3E4000D0000000000000001 /* xdrip v34.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v34.xcdatamodel"; sourceTree = "<group>"; };
 		D3E400020000000000000001 /* Sibionics2Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Configuration.swift; sourceTree = "<group>"; };
 		D3E500020000000000000001 /* Sibionics2Calibrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Calibrator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -3918,6 +3921,7 @@
 			isa = PBXGroup;
 			children = (
 				51B210033102000100000001 /* sibionics2_v116a_startup.csv */,
+				51B310033102000100000001 /* sibionics1_v115g_replay.csv */,
 			);
 			path = Fixtures;
 			sourceTree = "<group>";
@@ -4179,6 +4183,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				51B210043102000100000001 /* sibionics2_v116a_startup.csv in Resources */,
+				51B310043102000100000001 /* sibionics1_v115g_replay.csv in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -6204,6 +6209,7 @@
 			isa = XCVersionGroup;
 			children = (
 				D3E3000D0000000000000001 /* xdrip v33.xcdatamodel */,
+				D3E4000D0000000000000001 /* xdrip v34.xcdatamodel */,
 				4F3200313008000100000001 /* xdrip v32.xcdatamodel */,
 				4F3100313007000100000001 /* xdrip v31.xcdatamodel */,
 				4F3000313006000100000001 /* xdrip v30.xcdatamodel */,
@@ -6226,7 +6232,7 @@
 				F85FF3CB252F9C9A004E6FF1 /* xdrip v13.xcdatamodel */,
 				F85FF3C3252D0C32004E6FF1 /* xdrip v12.xcdatamodel */,
 			);
-			currentVersion = D3E3000D0000000000000001 /* xdrip v33.xcdatamodel */;
+			currentVersion = D3E4000D0000000000000001 /* xdrip v34.xcdatamodel */;
 			path = xdrip.xcdatamodeld;
 			sourceTree = "<group>";
 			versionGroupType = wrapper.xcdatamodel;

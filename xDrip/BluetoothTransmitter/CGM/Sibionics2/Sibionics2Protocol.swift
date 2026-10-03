@@ -47,6 +47,71 @@ enum Sibionics2ParseResult {
     case malformed
 }
 
+/// Stable values persisted with each Sibionics peripheral.
+enum SibionicsDeviceVariant: Int16 {
+    case sibionics1 = 1
+    case sibionics2 = 2
+
+    var peripheralType: BluetoothPeripheralType {
+        self == .sibionics1 ? .Sibionics1Type : .Sibionics2Type
+    }
+    var supportsReset: Bool { self == .sibionics2 }
+}
+
+enum Sibionics1ChineseParseResult {
+    case readings([Sibionics2RawReading])
+    case requestEcho
+    case v120AuthRequired
+    case malformed
+}
+
+/// The original Chinese Sibionics 1 protocol has plaintext AA55 frames.
+struct Sibionics1ChineseProtocolCodec {
+    private static let v120Marker: [UInt8] = [0x23, 0xF7, 0x6F, 0xD9, 0xF4]
+
+    func buildDataRequestPacket(lastIndex: UInt16, macAddress: [UInt8]) -> Data {
+        let cursor = max(lastIndex, 1)
+        let mac = macAddress.count == 6 ? macAddress : [UInt8](repeating: 0, count: 6)
+        var packet: [UInt8] = [0xAA, 0x55, 0x07, UInt8(truncatingIfNeeded: cursor), UInt8(truncatingIfNeeded: cursor >> 8)]
+        packet.append(contentsOf: mac.reversed())
+        packet.append(contentsOf: repeatElement(UInt8(0), count: 8))
+        packet.append(0 &- packet.reduce(UInt8(0), { $0 &+ $1 }))
+        return Data(packet)
+    }
+
+    func parse(_ data: Data, at now: Date) -> Sibionics1ChineseParseResult {
+        let bytes = [UInt8](data)
+        if bytes == Self.v120Marker { return .v120AuthRequired }
+        guard bytes.count >= 5, bytes[0] == 0xAA, bytes[1] == 0x55,
+              bytes.reduce(UInt8(0), { $0 &+ $1 }) == 0 else { return .malformed }
+        if bytes[2] == 0x07 {
+            return bytes.count == 20 ? .requestEcho : .malformed
+        }
+        guard bytes[2] == 0x09, bytes.count == 5 + Int(bytes[3]) * 14 else { return .malformed }
+        var readings: [Sibionics2RawReading] = []
+        readings.reserveCapacity(Int(bytes[3]))
+        for i in 0..<Int(bytes[3]) {
+            let offset = 4 + i * 14
+            func word(_ field: Int) -> UInt16 {
+                (UInt16(bytes[offset + field]) << 8) | UInt16(bytes[offset + field + 1])
+            }
+            let index = Int(word(0))
+            let unreceived = Int(word(10))
+            let addtime = Int(word(12))
+            readings.append(Sibionics2RawReading(
+                index: index,
+                eventTime: now.addingTimeInterval(TimeInterval(min(0, addtime - unreceived * 60))),
+                temperatureC: Double(word(2)) / 10,
+                impedance: Int(word(4)),
+                rawMmol: Double(word(6)) / 10,
+                trend: .notDetermined,
+                reindex: unreceived
+            ))
+        }
+        return .readings(readings)
+    }
+}
+
 struct Sibionics2ProtocolCodec {
     static let serviceUUID = CBUUID(string: "FF30")
     static let notifyUUID = CBUUID(string: "FF31")
@@ -58,9 +123,12 @@ struct Sibionics2ProtocolCodec {
         0xCD, 0x9E, 0xC3, 0x99, 0x09, 0x37, 0xAA, 0xE8
     ]
     private static let ecoRegistration = "068449FA5C1B1F97EEC9C1475A8752D5C387D17A65B002D9132489C0BFDFC99F0CAC670E9AB10D62FDE0B2B1E7"
+    private static let sijoyRegistration = "56CE249349040C94F8B4B2375A8752D5CBE7A17814B502D9132489C0BFDFC99F0CAC670E8CBB085AF1C780B3D282E3"
 
-    func deriveSessionKey() -> Data? {
-        let characters = Array(Self.ecoRegistration.utf8)
+    func deriveSessionKey(variant: SibionicsDeviceVariant = .sibionics2) -> Data? {
+        let registrationHex = variant == .sibionics1 ? Self.sijoyRegistration : Self.ecoRegistration
+        let identity = variant == .sibionics1 ? "com.sisensing.sijoy" : "com.sisensing.eco"
+        let characters = Array(registrationHex.utf8)
         guard characters.count.isMultiple(of: 2) else { return nil }
         var registration = [UInt8]()
         registration.reserveCapacity(characters.count / 2)
@@ -70,9 +138,9 @@ struct Sibionics2ProtocolCodec {
             registration.append(byte)
         }
         let decoded = [UInt8](decrypt(Data(registration)))
-        guard decoded.count >= 22 + "com.sisensing.eco".utf8.count,
+        guard decoded.count >= 22 + identity.utf8.count,
               let identity = String(bytes: decoded[22...], encoding: .utf8),
-              identity.hasPrefix("com.sisensing.eco") else { return nil }
+              identity.hasPrefix(variant == .sibionics1 ? "com.sisensing.sijoy" : "com.sisensing.eco") else { return nil }
         return Data(decoded[6..<22])
     }
 

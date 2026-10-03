@@ -4,6 +4,10 @@ import os
 
 class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
+    let variant: SibionicsDeviceVariant
+    private let chineseCodec = Sibionics1ChineseProtocolCodec()
+    private var sibionics1Connection: Sibionics1ConnectionState?
+    private var probeGeneration = 0
     private weak var cgmTransmitterDelegate: CGMTransmitterDelegate?
     private let codec = Sibionics2ProtocolCodec()
     private let stateStore = Sibionics2ReadingStateStore()
@@ -31,6 +35,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     init(
         address: String?,
         name: String?,
+        variant: SibionicsDeviceVariant = .sibionics2,
         bluetoothTransmitterDelegate: BluetoothTransmitterDelegate,
         cGMTransmitterDelegate: CGMTransmitterDelegate
     ) {
@@ -40,6 +45,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         } else {
             addressAndName = .notYetConnected(expectedName: nil)
         }
+        self.variant = variant
         self.cgmTransmitterDelegate = cGMTransmitterDelegate
         self.advertisedName = name
         super.init(
@@ -57,11 +63,17 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     static func canAdoptPeripheral(
         advertisedName: String?,
         storedAddress: String?,
-        peripheralAddress: String
+        peripheralAddress: String,
+        variant: SibionicsDeviceVariant = .sibionics2,
+        advertisesSibionicsService: Bool = true,
+        discoveredWithSibionicsServiceFilter: Bool = false
     ) -> Bool {
         if let storedAddress, !storedAddress.isEmpty {
             return storedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
                 .caseInsensitiveCompare(peripheralAddress.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame
+        }
+        if variant == .sibionics1 {
+            return (advertisesSibionicsService || discoveredWithSibionicsServiceFilter) && !(advertisedName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
         }
         return Sibionics2DeviceIdentity.isSibionics2(name: advertisedName)
     }
@@ -79,7 +91,14 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         guard Self.canAdoptPeripheral(
             advertisedName: name,
             storedAddress: deviceAddress,
-            peripheralAddress: peripheral.identifier.uuidString
+            peripheralAddress: peripheral.identifier.uuidString,
+            variant: variant,
+            advertisesSibionicsService: ((advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? [])
+                + (advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID] ?? []))
+                .contains(Sibionics2ProtocolCodec.serviceUUID),
+            // This transmitter always passes FF30 to scanForPeripherals.
+            // Background discoveries may omit UUIDs in advertisementData.
+            discoveredWithSibionicsServiceFilter: true
         ) else { return }
 
         guard deviceAddress == nil else {
@@ -140,6 +159,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     override func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        probeGeneration += 1
+        sibionics1Connection = nil
         readingPollGeneration += 1
         resetDisconnectGeneration += 1
         handshakeAttempt += 1
@@ -164,7 +185,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
               characteristic.uuid == Sibionics2ProtocolCodec.notifyUUID,
               characteristic.isNotifying else { return }
         notificationEnabled = true
-        startHandshake()
+        startSession()
     }
 
     override func peripheral(
@@ -181,13 +202,45 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             return
         }
 
+        receiveNotification(value, at: Date())
+    }
+
+    private func receiveNotification(_ value: Data, at date: Date) {
+        if variant == .sibionics1, sibionics1Connection?.mode == .chinese {
+            switch chineseCodec.parse(value, at: date) {
+            case .readings(let readings):
+                sibionics1Connection?.confirm(.chinese)
+                probeGeneration += 1
+                if let address = deviceAddress {
+                    Sibionics2Configuration.setProtocolMode(.chinese, for: address)
+                    if !streamingReady { markStreamingReady(for: address) }
+                }
+                receivedNonEmptyReadingsPacket = !readings.isEmpty || receivedNonEmptyReadingsPacket
+                receiveReadings(readings, at: date)
+            case .requestEcho:
+                if sibionics1Connection?.confirmed == false && sibionics1Connection?.receivedEcho == false {
+                    sibionics1Connection?.receiveEcho()
+                    scheduleChineseProbeTimeout()
+                }
+            case .v120AuthRequired:
+                fallBackToV120()
+            case .malformed:
+                trace("Sibionics 1 rejected malformed probe/data notification", log: transmitterLog,
+                      category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+            }
+            return
+        }
         switch codec.parseV120(value) {
         case .malformed:
             trace("Sibionics 2 rejected V120 notification of %{public}@ bytes", log: transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
                   value.count.description)
         case .handshake(let response):
-            receiveHandshake(response, at: Date())
+            if variant == .sibionics1, let address = deviceAddress {
+                sibionics1Connection?.confirm(.v120)
+                Sibionics2Configuration.setProtocolMode(.v120, for: address)
+            }
+            receiveHandshake(response, at: date)
         case .readings(let readings):
             guard let first = readings.first, let last = readings.last else {
                 trace("Sibionics 2 FF31 data packet contained no glucose readings", log: transmitterLog,
@@ -211,12 +264,14 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             trace("Sibionics 2 FF31 readings=%{public}@ firstIndex=%{public}@ lastIndex=%{public}@",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info,
                   readings.count.description, first.index.description, last.index.description)
-            receiveReadings(readings, at: Date())
+            receiveReadings(readings, at: date)
         }
     }
 
     override func prepareForRelease() {
         runOnCentralQueue {
+            self.probeGeneration += 1
+            self.sibionics1Connection = nil
             self.readingPollGeneration += 1
             self.autoResetCheckGeneration += 1
             self.resetDisconnectGeneration += 1
@@ -282,6 +337,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     func requestSensorReset(for requestedAddress: String? = nil) {
+        guard variant.supportsReset else { return }
         guard let address = requestedAddress ?? deviceAddress else {
             trace("Sibionics 2 reset requested before a peripheral address was assigned",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
@@ -343,7 +399,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
     func maxSensorAgeInDays() -> Double? {
-        Double(Sibionics2SensorProfile.expectedLifeInDays)
+        variant == .sibionics1 ? 14 : Double(Sibionics2SensorProfile.expectedLifeInDays)
     }
 
     /// Sibionics accepts no transmitter-side calibration write. Calibrations live
@@ -376,7 +432,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                   self.streamingReady,
                   let currentAddress = self.deviceAddress,
                   currentAddress.caseInsensitiveCompare(address) == .orderedSame else { return }
-            if Sibionics2Configuration.resetRequested(for: currentAddress) {
+            if self.variant.supportsReset && Sibionics2Configuration.resetRequested(for: currentAddress) {
                 self.sendPendingResetIfReady(for: currentAddress)
             } else {
                 _ = self.sendDataRequest(for: currentAddress)
@@ -386,7 +442,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     private func sendPendingResetIfReady(for address: String) {
-        guard streamingReady,
+        guard variant.supportsReset, streamingReady,
               Sibionics2Configuration.resetRequested(for: address) else { return }
         guard writeCommand(codec.buildResetPacket(), label: "maintenance-reset") else {
             resetDisconnectGeneration += 1
@@ -420,6 +476,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     private func scheduleAutoResetCheck(for address: String) {
+        guard variant.supportsReset else { return }
         autoResetCheckGeneration += 1
         let generation = autoResetCheckGeneration
         guard !Sibionics2Configuration.awaitingResetRestart(for: address),
@@ -447,6 +504,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     private func evaluateAutoReset(for address: String) {
+        guard variant.supportsReset else { return }
         guard !Sibionics2Configuration.awaitingResetRestart(for: address) else { return }
         let decision = Sibionics2AutoResetPolicy.evaluate(
             now: Date(),
@@ -471,8 +529,55 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
 
+    private func startSession() {
+        probeGeneration += 1
+        guard variant == .sibionics1, let address = deviceAddress else {
+            startHandshake()
+            return
+        }
+        sibionics1Connection = Sibionics1ConnectionState(savedMode: Sibionics2Configuration.protocolMode(for: address))
+        if sibionics1Connection?.mode == .v120 {
+            startHandshake()
+        } else {
+            batchProcessor = makeBatchProcessor(for: address)
+            _ = sendChineseDataRequest(for: address)
+            scheduleChineseProbeTimeout()
+        }
+    }
+
+    @discardableResult
+    private func sendChineseDataRequest(for address: String) -> Bool {
+        let cursor = stateStore.load(for: address)?.lastDeliveredIndex ?? 0
+        return writeCommand(chineseCodec.buildDataRequestPacket(
+            lastIndex: cursor, macAddress: Sibionics2AuthenticationAddress.macBytes(for: address)
+        ), label: "Chinese data-request index=\(cursor)")
+    }
+
+    private func scheduleChineseProbeTimeout() {
+        guard let connection = sibionics1Connection, !connection.confirmed,
+              connection.mode == .chinese else { return }
+        probeGeneration += 1
+        let generation = probeGeneration
+        runOnCentralQueue(after: connection.probeDelay) { [weak self] in
+            guard let self, self.probeGeneration == generation,
+                  self.notificationEnabled else { return }
+            // An echo grants one longer data window. Its deadline is finite;
+            // repeated echoes must not keep a sensor indefinitely in probing.
+            self.fallBackToV120()
+        }
+    }
+
+    private func fallBackToV120() {
+        guard sibionics1Connection?.fallBackToV120() == true else { return }
+        probeGeneration += 1
+        // The factory algorithms have different serialized state and must not
+        // reuse a Chinese processor when the sensor requests EU authentication.
+        batchProcessor = nil
+        startHandshake()
+    }
+
     private func startHandshake() {
-        guard let address = deviceAddress, let sessionKey = codec.deriveSessionKey() else {
+        guard let address = deviceAddress, let sessionKey = codec.deriveSessionKey(variant: variant) else {
             trace("could not initialize Sibionics 2 authentication", log: transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
             return
@@ -493,7 +598,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
               type: .info,
               manualAddress != nil ? "manual override" : detectedAddress != nil ? "private selector" : "zero fallback")
-        let probeAfterReset = Sibionics2Configuration.resetProbePending(for: address)
+        let probeAfterReset = variant.supportsReset && Sibionics2Configuration.resetProbePending(for: address)
         var newHandshake = Sibionics2Handshake(
             macAddress: Sibionics2AuthenticationAddress.macBytes(for: address),
             sessionKey: sessionKey,
@@ -533,7 +638,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let probeCode = Sibionics2Configuration.probeCode(for: address)
         let sensitivity = Sibionics2FactorySensitivity.effectiveSensitivity(
             advertisedName: advertisedName,
-            probeCode: probeCode
+            probeCode: probeCode, variant: variant
         )
         trace("Sibionics 2 sensitivity=%{public}@ source=%{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
@@ -542,7 +647,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         return Sibionics2ReadingBatchProcessor(
             deviceIdentifier: address,
             stateStore: stateStore,
-            processor: Sibionics2GlucoseProcessor(sensitivity: sensitivity)
+            processor: Sibionics2GlucoseProcessor(sensitivity: sensitivity,
+                stockFamily: variant == .sibionics1 && sibionics1Connection?.mode == .chinese ? .v115g : .v116a),
+            allowsHistoricalBootstrap: variant == .sibionics1 && sibionics1Connection?.mode == .chinese
         )
     }
 
@@ -550,6 +657,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private func sendDataRequest(for address: String) -> Bool {
         guard streamingReady else { return false }
         let cursor = stateStore.load(for: address)?.lastDeliveredIndex ?? 0
+        if variant == .sibionics1 && sibionics1Connection?.mode == .chinese {
+            return sendChineseDataRequest(for: address)
+        }
         return writeCommand(codec.buildDataRequestPacket(lastIndex: cursor),
                             label: "data-request index=\(cursor)")
     }
@@ -680,13 +790,13 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
               readings.count.description, glucoseData.count.description,
               currentState?.lastDeliveredIndex.map { String($0) } ?? "waiting",
               requiresHistoryReplay.description)
-        guard !(requiresHistoryReplay && currentState?.lastDeliveredIndex == nil),
+        guard !(requiresHistoryReplay && currentState?.lastDeliveredIndex == nil && glucoseData.isEmpty),
               let sensorStartDate = currentState?.sensorStartDate else { return }
         let detectedNewSensor = previousStartDate.map {
             abs($0.timeIntervalSince(sensorStartDate)) > Sibionics2ConnectionPolicy.sessionStartDateTolerance
         } ?? true
         let sensorAge = max(0, receivedAt.timeIntervalSince(sensorStartDate))
-        if detectedNewSensor, Sibionics2Configuration.awaitingResetRestart(for: address) {
+        if variant.supportsReset, detectedNewSensor, Sibionics2Configuration.awaitingResetRestart(for: address) {
             Sibionics2Configuration.clearResetRestart(for: address)
             resetDisconnectGeneration += 1
             autoResetCheckGeneration += 1
@@ -747,5 +857,29 @@ enum Sibionics2DelegateDelivery {
             transmitterBatteryInfo: nil,
             sensorAge: sensorAge
         )
+    }
+}
+
+/// Negotiation state is kept separate from CoreBluetooth so timeout and
+/// reconnect behavior can be checked without an attached sensor.
+struct Sibionics1ConnectionState {
+    private(set) var mode: Sibionics1ProtocolMode
+    private(set) var confirmed = false
+    private(set) var receivedEcho = false
+    var probeDelay: TimeInterval { receivedEcho ? 30 : 5 }
+
+    init(savedMode: Sibionics1ProtocolMode?) {
+        mode = savedMode ?? .chinese
+    }
+
+    mutating func receiveEcho() { receivedEcho = true }
+    mutating func confirm(_ mode: Sibionics1ProtocolMode) {
+        self.mode = mode
+        confirmed = true
+    }
+    mutating func fallBackToV120() -> Bool {
+        guard mode == .chinese, !confirmed else { return false }
+        mode = .v120
+        return true
     }
 }

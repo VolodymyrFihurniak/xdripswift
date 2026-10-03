@@ -181,6 +181,69 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(reading.calculatedValue, 150)
     }
 
+    func testXDripReadingWithoutFingerstickKeepsFactoryValue() throws {
+        let context = try inMemoryContext(model: managedObjectModel())
+        let sensor = Sensor(startDate: sensorStartDate, nsManagedObjectContext: context)
+        var readings: [BgReading] = []
+        var calibrations: [Calibration] = []
+        let reading = Sibionics2XDripCalibrator().createNewBgReading(
+            rawData: 150, timeStamp: sensorStartDate.addingTimeInterval(3600), sensor: sensor,
+            last3Readings: &readings, lastCalibrationsForActiveSensorInLastXDays: &calibrations,
+            firstCalibration: nil, lastCalibration: nil, deviceName: nil,
+            nsManagedObjectContext: context
+        )
+        XCTAssertEqual(reading.rawData, 150)
+        XCTAssertEqual(reading.ageAdjustedRawValue, 150)
+        XCTAssertEqual(reading.calculatedValue, 150)
+    }
+
+    func testXDripReadingWithCalibrationButNoPriorReadingsUsesCorrectedValue() throws {
+        let context = try inMemoryContext(model: managedObjectModel())
+        let sensor = Sensor(startDate: sensorStartDate, nsManagedObjectContext: context)
+        let at = sensorStartDate.addingTimeInterval(3600)
+        let calibration = Calibration(timeStamp: at, sensor: sensor, bg: 150,
+            rawValue: 100, adjustedRawValue: 100, sensorConfidence: 1, rawTimeStamp: at,
+            slope: 1.2, intercept: 30, distanceFromEstimate: 0,
+            estimateRawAtTimeOfCalibration: 100, slopeConfidence: 1,
+            deviceName: nil, nsManagedObjectContext: context)
+        var readings: [BgReading] = []
+        var calibrations = [calibration]
+        let reading = Sibionics2XDripCalibrator().createNewBgReading(
+            rawData: 125, timeStamp: at.addingTimeInterval(60), sensor: sensor,
+            last3Readings: &readings, lastCalibrationsForActiveSensorInLastXDays: &calibrations,
+            firstCalibration: calibration, lastCalibration: calibration, deviceName: nil,
+            nsManagedObjectContext: context
+        )
+        XCTAssertEqual(reading.rawData, 125)
+        XCTAssertEqual(reading.ageAdjustedRawValue, 125)
+        XCTAssertEqual(reading.calculatedValue, 180, accuracy: 0.00001)
+        XCTAssertEqual(reading.c, 180, accuracy: 0.00001)
+    }
+
+    func testXDripNonzeroCalibratedPathKeepsSharedClamp() throws {
+        let context = try inMemoryContext(model: managedObjectModel())
+        let sensor = Sensor(startDate: sensorStartDate, nsManagedObjectContext: context)
+        let at = sensorStartDate.addingTimeInterval(3600)
+        let calibration = Calibration(timeStamp: at, sensor: sensor, bg: 150,
+            rawValue: 100, adjustedRawValue: 100, sensorConfidence: 1, rawTimeStamp: at,
+            slope: 1.2, intercept: 30, distanceFromEstimate: 0,
+            estimateRawAtTimeOfCalibration: 100, slopeConfidence: 1,
+            deviceName: nil, nsManagedObjectContext: context)
+        let previous = BgReading(timeStamp: at, sensor: sensor, calibration: calibration,
+            rawData: 100, deviceName: nil, nsManagedObjectContext: context)
+        previous.calculatedValue = 150
+        previous.ageAdjustedRawValue = 100
+        var readings = [previous]
+        var calibrations = [calibration]
+        let reading = Sibionics2XDripCalibrator().createNewBgReading(
+            rawData: 400, timeStamp: at.addingTimeInterval(300), sensor: sensor,
+            last3Readings: &readings, lastCalibrationsForActiveSensorInLastXDays: &calibrations,
+            firstCalibration: calibration, lastCalibration: calibration, deviceName: nil,
+            nsManagedObjectContext: context
+        )
+        XCTAssertEqual(reading.calculatedValue, ConstantsCalibrationAlgorithms.maximumBgReadingCalculatedValue)
+    }
+
     func testJugglucoNewCalibrationMatchesReloadedUniqueAnchors() throws {
         let context = try inMemoryContext(model: managedObjectModel())
         let now = Date()
@@ -228,6 +291,290 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
             nsManagedObjectContext: context
         )
         XCTAssertEqual(immediateValue, reloadedReading.calculatedValue, accuracy: 0.00001)
+    }
+
+    func testReadingRepairUsesOnlyPastAnchorsAndPreservesUnrelatedValues() throws {
+        let context = try inMemoryContext(model: managedObjectModel())
+        let sensor = Sensor(startDate: sensorStartDate, nsManagedObjectContext: context)
+        let otherSensor = Sensor(startDate: sensorStartDate.addingTimeInterval(10), nsManagedObjectContext: context)
+        let base = sensorStartDate.addingTimeInterval(3600)
+        func reading(_ raw: Double, at offset: TimeInterval, sensor owner: Sensor? = nil) -> BgReading {
+            BgReading(timeStamp: base.addingTimeInterval(offset), sensor: owner ?? sensor,
+                      calibration: nil, rawData: raw, deviceName: nil,
+                      nsManagedObjectContext: context)
+        }
+        func anchor(_ raw: Double, _ bg: Double, at offset: TimeInterval) -> Calibration {
+            let date = base.addingTimeInterval(offset)
+            return Calibration(timeStamp: date, sensor: sensor, bg: bg, rawValue: raw,
+                               adjustedRawValue: raw, sensorConfidence: 1, rawTimeStamp: date,
+                               slope: 1, intercept: bg - raw, distanceFromEstimate: 0,
+                               estimateRawAtTimeOfCalibration: raw, slopeConfidence: 1,
+                               deviceName: nil, nsManagedObjectContext: context)
+        }
+
+        let before = reading(120, at: 0)
+        let after = reading(120, at: 120)
+        let future = anchor(120, 145, at: 60)
+        let later = anchor(120, 160, at: 180)
+        let manual = reading(130, at: 240)
+        manual.calibrationFlag = true
+        let alreadyCalculated = reading(140, at: 300)
+        alreadyCalculated.calculatedValue = 170
+        let invalidRaw = reading(0, at: 360)
+        let other = reading(150, at: 420, sensor: otherSensor)
+        try context.save()
+
+        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: .jugglucoNG), 2)
+        XCTAssertEqual(before.calculatedValue, 120)
+        XCTAssertEqual(after.calculatedValue, 145)
+        XCTAssertEqual(manual.calculatedValue, 0)
+        XCTAssertEqual(alreadyCalculated.calculatedValue, 170)
+        XCTAssertEqual(invalidRaw.calculatedValue, 0)
+        XCTAssertEqual(other.calculatedValue, 0)
+        XCTAssertEqual(future.bg, 145)
+        XCTAssertEqual(later.bg, 160)
+        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: .jugglucoNG), 0)
+        try context.save()
+        context.reset()
+        let stored = try context.fetch(NSFetchRequest<BgReading>(entityName: "BgReading"))
+        XCTAssertEqual(stored.filter { $0.calculatedValue > 0 }.count, 3)
+    }
+
+    func testReadingRepairUsesXDripCalibrationAtReadingTime() throws {
+        let context = try inMemoryContext(model: managedObjectModel())
+        let sensor = Sensor(startDate: sensorStartDate, nsManagedObjectContext: context)
+        let at = sensorStartDate.addingTimeInterval(3600)
+        let calibration = Calibration(timeStamp: at, sensor: sensor, bg: 150,
+            rawValue: 100, adjustedRawValue: 100, sensorConfidence: 1, rawTimeStamp: at,
+            slope: 1.2, intercept: 30, distanceFromEstimate: 0,
+            estimateRawAtTimeOfCalibration: 100, slopeConfidence: 1,
+            deviceName: nil, nsManagedObjectContext: context)
+        let before = BgReading(timeStamp: at.addingTimeInterval(-60), sensor: sensor,
+            calibration: nil, rawData: 125, deviceName: nil, nsManagedObjectContext: context)
+        let reading = BgReading(timeStamp: at.addingTimeInterval(60), sensor: sensor,
+            calibration: nil, rawData: 125, deviceName: nil, nsManagedObjectContext: context)
+        try context.save()
+
+        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: .xDripPlus), 2)
+        XCTAssertEqual(before.calculatedValue, 125)
+        XCTAssertEqual(reading.calculatedValue, 180, accuracy: 0.00001)
+        XCTAssertEqual(reading.ageAdjustedRawValue, 125)
+        XCTAssertEqual(calibration.bg, 150)
+    }
+
+    func testReadingRepairKeepsZeroConfidenceCalibrationAnchorsInBothModes() throws {
+        for mode in Sibionics2CalibrationMode.allCases {
+            let context = try inMemoryContext(model: managedObjectModel())
+            let sensor = Sensor(startDate: sensorStartDate, nsManagedObjectContext: context)
+            let at = sensorStartDate.addingTimeInterval(3600)
+            _ = Calibration(timeStamp: at, sensor: sensor, bg: 155,
+                rawValue: 100, adjustedRawValue: 100, sensorConfidence: 0, rawTimeStamp: at,
+                slope: 1.2, intercept: 30, distanceFromEstimate: 0,
+                estimateRawAtTimeOfCalibration: 100, slopeConfidence: 0,
+                deviceName: nil, nsManagedObjectContext: context)
+            let reading = BgReading(timeStamp: at.addingTimeInterval(60), sensor: sensor,
+                calibration: nil, rawData: 125, deviceName: nil, nsManagedObjectContext: context)
+            try context.save()
+
+            XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: mode), 1)
+            XCTAssertEqual(reading.calculatedValue, 180, accuracy: 0.00001, "Mode: \(mode)")
+        }
+    }
+
+    func testReadingAgeOnlyMatchesSelectedSibionicsPeripheral() {
+        XCTAssertTrue(SibionicsReadingAge.matchesActivePeripheral(
+            viewedAddress: "AA:BB:CC:DD:EE:FF", activeAddress: "aa:bb:cc:dd:ee:ff"
+        ))
+        XCTAssertFalse(SibionicsReadingAge.matchesActivePeripheral(
+            viewedAddress: "AA:BB:CC:DD:EE:FF", activeAddress: "11:22:33:44:55:66"
+        ))
+        XCTAssertFalse(SibionicsReadingAge.matchesActivePeripheral(
+            viewedAddress: "AA:BB:CC:DD:EE:FF", activeAddress: nil
+        ))
+    }
+
+    func testReadingAgeChangesFromSecondsToMinutesAtBoundaries() {
+        let now = Date(timeIntervalSince1970: 1000)
+        XCTAssertEqual(SibionicsReadingAge.detail(since: now.addingTimeInterval(-42), now: now),
+                       String(format: Texts_BluetoothPeripheralView.sibionicsReadingAgeSecondsFormat, 42))
+        XCTAssertEqual(SibionicsReadingAge.detail(since: now.addingTimeInterval(-60), now: now),
+                       String(format: Texts_BluetoothPeripheralView.sibionicsReadingAgeMinutesFormat, 1))
+        XCTAssertEqual(SibionicsReadingAge.detail(since: now.addingTimeInterval(-119), now: now),
+                       String(format: Texts_BluetoothPeripheralView.sibionicsReadingAgeMinutesFormat, 1))
+        XCTAssertEqual(SibionicsReadingAge.nextRefreshInterval(since: now.addingTimeInterval(-42.25), now: now), 0.75, accuracy: 0.001)
+        XCTAssertEqual(SibionicsReadingAge.nextRefreshInterval(since: now.addingTimeInterval(-119.25), now: now), 0.75, accuracy: 0.001)
+    }
+
+    func testSibionics1SensitivityUsesOnlyOwnCodeOrNeutralScaling() {
+        XCTAssertNil(Sibionics2FactorySensitivity.decodedSibionics1Sensitivity(
+            advertisedName: nil, probeCode: nil))
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: nil, variant: .sibionics1), 1.0)
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: "ABCD1270SERIAL", variant: .sibionics1), 1.27)
+    }
+
+    func testSibionics1PeripheralFactoryPersistsExplicitVariant() throws {
+        let context = try inMemoryContext(model: managedObjectModel())
+        let peripheral = BluetoothPeripheralType.Sibionics1Type.createNewBluetoothPeripheral(
+            withAddress: "s1-device", withName: "GS1", nsManagedObjectContext: context
+        )
+        let sensor = try XCTUnwrap(peripheral as? Sibionics2)
+        try context.save()
+        context.refresh(sensor, mergeChanges: false)
+        XCTAssertEqual(sensor.variant, .sibionics1)
+        XCTAssertEqual(sensor.bluetoothPeripheralType(), .Sibionics1Type)
+        XCTAssertEqual(BluetoothPeripheralType.Sibionics1Type.category(), .CGM)
+        XCTAssertFalse(sensor.variant.supportsReset)
+        XCTAssertTrue(SibionicsDeviceVariant.sibionics2.supportsReset)
+    }
+
+    func testSibionics1DiscoveryRequiresServiceAndName() {
+        XCTAssertTrue(CGMSibionics2Transmitter.canAdoptPeripheral(
+            advertisedName: "GS1ECO", storedAddress: nil, peripheralAddress: "s1",
+            variant: .sibionics1, advertisesSibionicsService: true))
+        XCTAssertFalse(CGMSibionics2Transmitter.canAdoptPeripheral(
+            advertisedName: "GS1ECO", storedAddress: nil, peripheralAddress: "s1",
+            variant: .sibionics1, advertisesSibionicsService: false))
+        XCTAssertTrue(CGMSibionics2Transmitter.canAdoptPeripheral(
+            advertisedName: "GS1ECO", storedAddress: nil, peripheralAddress: "s1",
+            variant: .sibionics1, advertisesSibionicsService: false,
+            discoveredWithSibionicsServiceFilter: true))
+        XCTAssertFalse(CGMSibionics2Transmitter.canAdoptPeripheral(
+            advertisedName: "  ", storedAddress: nil, peripheralAddress: "s1",
+            variant: .sibionics1, advertisesSibionicsService: true))
+    }
+
+    func testSibionics1ConfirmedProtocolPersistsAcrossSessions() throws {
+        let (suite, defaults, _) = try isolatedStateStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for mode in [Sibionics1ProtocolMode.chinese, .v120] {
+            var first = Sibionics1ConnectionState(savedMode: nil)
+            first.confirm(mode)
+            Sibionics2Configuration.setProtocolMode(first.mode, for: "sensor-uuid", userDefaults: defaults)
+            let reconnect = Sibionics1ConnectionState(savedMode:
+                Sibionics2Configuration.protocolMode(for: "SENSOR-UUID", userDefaults: defaults))
+            XCTAssertEqual(reconnect.mode, mode)
+        }
+    }
+
+    func testSibionics1ProbeFallbackAndEchoWait() {
+        var session = Sibionics1ConnectionState(savedMode: nil)
+        XCTAssertEqual(session.mode, .chinese)
+        XCTAssertEqual(session.probeDelay, 5)
+        session.receiveEcho()
+        XCTAssertEqual(session.probeDelay, 30)
+        XCTAssertFalse(session.confirmed)
+        XCTAssertTrue(session.fallBackToV120())
+        XCTAssertEqual(session.mode, .v120)
+        XCTAssertFalse(session.fallBackToV120())
+        var chinese = Sibionics1ConnectionState(savedMode: .chinese)
+        XCTAssertFalse(chinese.confirmed)
+        chinese.confirm(.chinese)
+        XCTAssertFalse(chinese.fallBackToV120())
+        XCTAssertEqual(Sibionics1ConnectionState(savedMode: .v120).mode, .v120)
+    }
+
+    func testSibionics1ChineseReadingsUseExistingDeliveryPipeline() throws {
+        let (suite, defaults, store) = try isolatedStateStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var processor = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: "s1", stateStore: store,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.0, stockFamily: .v115g)
+        )
+        let reading = Sibionics2RawReading(index: 1, eventTime: sensorStartDate.addingTimeInterval(60),
+            temperatureC: 33, impedance: 0, rawMmol: 6, trend: .notDetermined, reindex: 0)
+        let data = processor.process([reading], receivedAt: reading.eventTime)
+        let delegate = CGMTransmitterDelegateSpy()
+        Sibionics2DelegateDelivery.deliver(data, detectedNewSensor: true,
+            sensorStartDate: processor.state?.sensorStartDate, sensorAge: 60, to: delegate)
+        XCTAssertEqual(delegate.receivedGlucoseData.first?.count, 1)
+        XCTAssertGreaterThan(try XCTUnwrap(delegate.receivedGlucoseData.first?.first?.glucoseLevelRaw), 0)
+        XCTAssertEqual(processor.process([reading], receivedAt: reading.eventTime).count, 0)
+    }
+
+    func testChineseGapWaitsForExactReplayBeforeCGMDelivery() throws {
+        let (suite, defaults, store) = try isolatedStateStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        func makeProcessor() -> Sibionics2ReadingBatchProcessor {
+            Sibionics2ReadingBatchProcessor(deviceIdentifier: "s1", stateStore: store,
+                processor: Sibionics2GlucoseProcessor(sensitivity: 1, stockFamily: .v115g),
+                allowsHistoricalBootstrap: true)
+        }
+        func reading(_ index: Int, age: Int = 0) -> Sibionics2RawReading {
+            Sibionics2RawReading(index: index,
+                eventTime: sensorStartDate.addingTimeInterval(Double(index * 60)),
+                temperatureC: 33, impedance: 0, rawMmol: 6, trend: .notDetermined, reindex: age)
+        }
+        var firstConnection = makeProcessor()
+        let live = reading(10)
+        // Raw current samples must not reach the normal CGM/AID pipeline
+        // while exact algorithm history is incomplete.
+        XCTAssertTrue(firstConnection.process([live], receivedAt: live.eventTime).isEmpty)
+        XCTAssertNil(firstConnection.state?.lastDeliveredIndex)
+        XCTAssertTrue(firstConnection.requiresHistoryReplay)
+
+        var reconnected = makeProcessor()
+        XCTAssertTrue(reconnected.process([live], receivedAt: live.eventTime).isEmpty)
+        let history = (1...10).map { reading($0, age: 10 - $0) }
+        let corrected = reconnected.process(history, receivedAt: live.eventTime)
+        var uninterrupted = Sibionics2ReadingBatchProcessor(
+            deviceIdentifier: "s1-reference", stateStore: store,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1, stockFamily: .v115g))
+        let expected = uninterrupted.process(history, receivedAt: live.eventTime)
+        XCTAssertEqual(corrected.map { $0.timeStamp }, expected.map { $0.timeStamp })
+        XCTAssertEqual(corrected.map { $0.glucoseLevelRaw }, expected.map { $0.glucoseLevelRaw })
+        XCTAssertFalse(corrected.isEmpty)
+        XCTAssertTrue(corrected.allSatisfy { $0.glucoseLevelRaw > 0 })
+        XCTAssertEqual(reconnected.state?.lastDeliveredIndex, 10)
+        XCTAssertFalse(reconnected.requiresHistoryReplay)
+        XCTAssertTrue(reconnected.process([live], receivedAt: live.eventTime).isEmpty)
+
+        // A later gap also keeps uncorrected raw values out of CGM/AID.
+        let later = reading(100)
+        let laterData = reconnected.process([later], receivedAt: later.eventTime)
+        XCTAssertTrue(laterData.isEmpty)
+        XCTAssertTrue(reconnected.requiresHistoryReplay)
+        XCTAssertEqual(reconnected.state?.lastDeliveredIndex, 10)
+    }
+
+    func testChineseHistoryCanBootstrapAtFirstAvailableHistoricalIndex() throws {
+        let (suite, defaults, store) = try isolatedStateStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(
+            forResource: "sibionics1_v115g_replay", withExtension: "csv"))
+        let lines = try String(contentsOf: url, encoding: .utf8)
+            .split(whereSeparator: { $0.isNewline }).dropFirst()
+        let rows = try lines.map { line -> (reading: Sibionics2RawReading, expected: Double) in
+            let fields = line.split(separator: ",", omittingEmptySubsequences: false)
+            let index = try XCTUnwrap(Int(fields[0]))
+            return (Sibionics2RawReading(index: index,
+                eventTime: sensorStartDate.addingTimeInterval(Double(index * 60)),
+                temperatureC: try XCTUnwrap(Double(fields[2])), impedance: 0,
+                rawMmol: try XCTUnwrap(Double(fields[1])), trend: .notDetermined, reindex: 1),
+                try XCTUnwrap(Double(fields[3])))
+        }
+        XCTAssertEqual(rows.first?.reading.index, 25)
+        var processor = Sibionics2ReadingBatchProcessor(deviceIdentifier: "s1-fixture", stateStore: store,
+            processor: Sibionics2GlucoseProcessor(sensitivity: 1.4, stockFamily: .v115g),
+            allowsHistoricalBootstrap: true)
+        let receivedAt = try XCTUnwrap(rows.last?.reading.eventTime).addingTimeInterval(60)
+        let current = try XCTUnwrap(rows.last?.reading)
+        let live = Sibionics2RawReading(index: current.index, eventTime: current.eventTime,
+            temperatureC: current.temperatureC, impedance: current.impedance,
+            rawMmol: current.rawMmol, trend: .notDetermined, reindex: 0)
+        XCTAssertTrue(processor.process([live], receivedAt: receivedAt).isEmpty)
+        XCTAssertTrue(processor.requiresHistoryReplay)
+        let data = processor.process(rows.map { $0.reading }, receivedAt: receivedAt)
+        let byTimestamp = Dictionary(uniqueKeysWithValues: data.map { ($0.timeStamp, $0) })
+        XCTAssertEqual(data.count, rows.count)
+        for row in rows where row.expected > 1 && row.reading.index % 5 == 0 {
+            let result = try XCTUnwrap(byTimestamp[row.reading.eventTime])
+            XCTAssertEqual(result.glucoseLevelRaw, row.expected * 18, accuracy: 0.0002)
+        }
+        XCTAssertFalse(processor.requiresHistoryReplay)
+        XCTAssertEqual(Int(try XCTUnwrap(processor.state?.lastDeliveredIndex)), rows.last?.reading.index)
+        XCTAssertTrue(processor.process(rows.map { $0.reading }, receivedAt: receivedAt).isEmpty)
     }
 
     func testSibionics2PeripheralFactoryAndCGMTypeMapping() throws {
@@ -307,6 +654,72 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(migrated.value(forKey: "name") as? String, "Legacy peripheral")
         XCTAssertEqual(migrated.value(forKey: "shouldconnect") as? Bool, true)
         XCTAssertNil(migrated.value(forKey: "sibionics2"))
+    }
+
+    func testV33PersistentStoreDefaultsExistingSibionicsToVariantTwo() throws {
+        let bundle = Bundle(for: BLEPeripheral.self)
+        let momdURL = try XCTUnwrap(
+            bundle.url(forResource: "xdrip", withExtension: "momd")
+                ?? Bundle.main.url(forResource: "xdrip", withExtension: "momd")
+        )
+        let v33URL = momdURL.appendingPathComponent("xdrip v33.mom")
+        let v33Model = try XCTUnwrap(NSManagedObjectModel(contentsOf: v33URL))
+        let currentModel = try managedObjectModel()
+        XCTAssertNil(v33Model.entitiesByName["Sibionics2"]?.attributesByName["sensorVariant"])
+        XCTAssertNotNil(currentModel.entitiesByName["Sibionics2"])
+
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Sibionics2Migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("v33.sqlite")
+
+        let oldCoordinator = NSPersistentStoreCoordinator(managedObjectModel: v33Model)
+        let oldStore = try oldCoordinator.addPersistentStore(
+            ofType: NSSQLiteStoreType,
+            configurationName: nil,
+            at: storeURL,
+            options: nil
+        )
+        let oldContext = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        oldContext.persistentStoreCoordinator = oldCoordinator
+        let oldPeripheral = NSEntityDescription.insertNewObject(
+            forEntityName: "BLEPeripheral",
+            into: oldContext
+        )
+        oldPeripheral.setValue("legacy-v33-address", forKey: "address")
+        oldPeripheral.setValue("Legacy peripheral", forKey: "name")
+        oldPeripheral.setValue(true, forKey: "shouldconnect")
+        oldPeripheral.setValue(true, forKey: "webOOPEnabled")
+        oldPeripheral.setValue(false, forKey: "parameterUpdateNeededAtNextConnect")
+        let oldSensor = NSEntityDescription.insertNewObject(forEntityName: "Sibionics2", into: oldContext)
+        oldSensor.setValue(oldPeripheral, forKey: "blePeripheral")
+        try oldContext.save()
+        oldContext.reset()
+        try oldCoordinator.remove(oldStore)
+
+        let migratedCoordinator = NSPersistentStoreCoordinator(managedObjectModel: currentModel)
+        try migratedCoordinator.addPersistentStore(
+            ofType: NSSQLiteStoreType,
+            configurationName: nil,
+            at: storeURL,
+            options: [
+                NSMigratePersistentStoresAutomaticallyOption: true,
+                NSInferMappingModelAutomaticallyOption: true
+            ]
+        )
+        let migratedContext = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        migratedContext.persistentStoreCoordinator = migratedCoordinator
+        let request = NSFetchRequest<NSManagedObject>(entityName: "BLEPeripheral")
+        let records = try migratedContext.fetch(request)
+        let migrated = try XCTUnwrap(records.first)
+        XCTAssertEqual(migrated.value(forKey: "address") as? String, "legacy-v33-address")
+        XCTAssertEqual(migrated.value(forKey: "name") as? String, "Legacy peripheral")
+        XCTAssertEqual(migrated.value(forKey: "shouldconnect") as? Bool, true)
+        let migratedSensor = try XCTUnwrap(migrated.value(forKey: "sibionics2") as? Sibionics2)
+        XCTAssertEqual(migratedSensor.sensorVariant, 2)
+        XCTAssertEqual(migratedSensor.variant, .sibionics2)
+        XCTAssertEqual(migratedSensor.bluetoothPeripheralType(), .Sibionics2Type)
     }
 
     func testFirstConnectUsesOnlySibionics2AdvertisedName() {

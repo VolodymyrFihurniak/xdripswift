@@ -745,7 +745,7 @@ class Trace {
                             )
                         }
 
-                    case .Sibionics2Type:
+                    case .Sibionics1Type, .Sibionics2Type:
                         if blePeripheral.sibionics2 != nil {
                             traceInfo.appendStringAndNewLine("        Type: " + bluetoothPeripheralType.rawValue)
                             traceInfo.appendStringAndNewLine("        Sensor serial: " + (blePeripheral.sensorSerialNumber ?? "nil"))
