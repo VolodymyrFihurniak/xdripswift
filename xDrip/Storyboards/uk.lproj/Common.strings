@@ -177,3 +177,11 @@
 "common_sensorWarmupUntilFormat" = "До %@";
 "common_sensorWarmupComplete" = "Прогрів завершено";
 "common_sensorWaitingForReading" = "Очікування першого показника…";
+
+// Adaptive Status widget
+"adaptive_normal" = "Норма";
+"adaptive_warning" = "Тенденція / поза нормою";
+"adaptive_critical" = "Критично";
+"adaptive_stale" = "Застарілі дані";
+"adaptive_unavailable" = "Немає даних";
+"adaptive_description" = "Глюкоза, тенденція та вік показника з адаптивним скляним оформленням.";

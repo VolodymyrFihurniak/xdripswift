@@ -13,6 +13,9 @@ import SwiftUI
 struct XDripWidgetBundle: WidgetBundle {
     var body: some Widget {
         XDripWidget()
+        if #available(iOSApplicationExtension 17.0, *) {
+            AdaptiveStatusWidget()
+        }
         XDripWidgetLiveActivity()
     }
 }
