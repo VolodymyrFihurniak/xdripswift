@@ -243,6 +243,34 @@ extension Calibrator {
         
     }
     
+    /// Refit existing anchors after the underlying Sibionics factory values change.
+    /// Use the same weighted calibration implementation as new fingersticks.
+    func recalculateStoredCalibrationCurves(_ calibrations: [Calibration], historyDays: Int) {
+        let ordered = calibrations.filter {
+            $0.rawValue.isFinite && $0.rawValue > 0 &&
+                $0.estimateRawAtTimeOfCalibration.isFinite && $0.estimateRawAtTimeOfCalibration > 0
+        }.sorted { $0.timeStamp < $1.timeStamp }
+        guard let first = ordered.first else { return }
+        for calibration in ordered {
+            var history = ordered.filter {
+                $0.timeStamp <= calibration.timeStamp &&
+                    $0.timeStamp >= calibration.timeStamp.addingTimeInterval(-Double(historyDays) * 24 * 3600)
+            }.sorted { $0.timeStamp > $1.timeStamp }
+            calculateWLS(for: calibration, lastCalibrationsForActiveSensorInLastXDays: &history,
+                         firstCalibration: first, lastCalibration: calibration)
+            // Identical sensor values or timestamps can make a weighted fit singular.
+            if !calibration.slope.isFinite || !calibration.intercept.isFinite || calibration.slope <= 0 {
+                calibration.slope = 1
+                calibration.intercept = calibration.bg - calibration.estimateRawAtTimeOfCalibration
+            }
+        }
+    }
+
+    /// Refresh curve coefficients in place without inserting another Core Data row.
+    func refreshStoredReadingCalculations(for reading: BgReading, last3Readings: inout [BgReading]) {
+        performCalculations(for: reading, last3Readings: &last3Readings)
+    }
+
     /// from xdripplus
     /// forCalibration will get changed
     /// - parameters:
@@ -569,7 +597,6 @@ extension Calibrator {
         }
     }
 }
-
 
 
 

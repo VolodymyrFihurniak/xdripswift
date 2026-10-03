@@ -1121,6 +1121,35 @@ import AppIntents
         if let activeSensor = activeSensor, let calibrator = calibrator, let bgReadingsAccessor = bgReadingsAccessor {
             trace("in processNewGlucoseData, calibrator = %{public}@", log: log, category: ConstantsLog.categoryRootView, type: .info, calibrator.description())
             
+            // Replay after a probe-code correction can change an already stored
+            // factory value. Reconcile before the broad cadence duplicate filter.
+            if let transmitter = cgmTransmitter as? CGMSibionics2Transmitter {
+                let replayed = Sibionics2PersistedReadingReplay.reconcile(
+                    in: coreDataManager.mainManagedObjectContext, sensor: activeSensor,
+                    glucoseData: glucoseData, mode: transmitter.calibrationMode
+                )
+                if let fromDate = replayed.first?.timeStamp {
+                    activeSensor.noiseHistoryIsComplete = false
+                    coreDataManager.saveChanges()
+                    let replacedDownstream = bgPostProcessingManager?.processBgReadings(
+                        processingStartDateOverride: fromDate, allowHistoricalDownstreamRewrite: true
+                    ) ?? false
+                    if !replacedDownstream {
+                        let visible = replayed.filter { !$0.isSuppressedByFiveMinuteCadence }
+                        nightscoutSyncManager?.replaceBgReadingsInNightscout(bgReadings: visible)
+                        healthKitManager?.replaceBgReadingsInHealthKit(bgReadings: visible)
+                    }
+                    statisticsManager?.invalidate()
+                    rootHomeStateModel.invalidateCharts()
+                    sensorNoiseManager?.update(activeSensor: activeSensor)
+                    updateLabelsAndChart(overrideApplicationState: true)
+                    updateMiniChart()
+                    updateStatistics(animate: false, overrideApplicationState: true)
+                    updateLiveActivityAndWidgets(forceRestart: false)
+                    watchManager?.updateWatchApp(forceComplicationUpdate: true)
+                }
+            }
+
             // initialize help variables
             let calibrationMode = (cgmTransmitter as? CGMSibionics2Transmitter)?.calibrationMode ?? Sibionics2CalibrationMode.defaultMode
             let calibrationHistoryDays = calibrationMode.calibrationHistoryDays
@@ -2904,6 +2933,16 @@ extension RootApplicationCoordinator: @preconcurrency CGMTransmitterDelegate {
         trace("new sensor detected", log: log, category: ConstantsLog.categoryRootView, type: .info, troubleshooting: .standard(.sensor(.detected)))
 
         let transmitter = bluetoothPeripheralManager?.getCGMTransmitter()
+        // Replaying a stock processor snapshot is not a physical sensor change.
+        // Keep the existing rows and fingerstick history attached to this session.
+        if let transmitter = transmitter as? CGMSibionics2Transmitter,
+           let sensorStartDate, let activeSensor,
+           let previousReading = bgReadingsAccessor?.last(forSensor: activeSensor, includingSuppressed: true),
+           let name = transmitter.deviceName, !name.isEmpty,
+           previousReading.deviceName == name,
+           Sibionics2PersistedReadingReplay.matchesSession(activeSensor.startDate, sensorStartDate) {
+            return
+        }
         if transmitter?.needsSensorStartCode() == true,
            let sensorStartDate,
            let activeSensor,

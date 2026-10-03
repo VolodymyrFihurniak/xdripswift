@@ -14,6 +14,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var discoveredPeripherals = [String: CBPeripheral]()
     private var discoveredPeripheralNames = [String: String]()
     private var batchProcessor: Sibionics2ReadingBatchProcessor?
+    private var probeReplaySessionStartDate: Date?
     private var handshake: Sibionics2Handshake?
     private var advertisedName: String?
     private var characteristicWriteType: CBCharacteristicWriteType?
@@ -277,6 +278,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             self.resetDisconnectGeneration += 1
             self.handshake = nil
             self.batchProcessor = nil
+            self.probeReplaySessionStartDate = nil
             self.streamingReady = false
             self.notificationEnabled = false
             self.characteristicWriteType = nil
@@ -289,7 +291,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
     /// Rebuilds the stock correction after a probe code is changed. The
     /// processor snapshot contains the sensitivity, so replay from the sensor
-    /// is required before corrected values are published again.
+    /// is required before corrected values are published again. Delivery also
+    /// reconciles previously stored samples before the CGM cadence filter runs.
     func probeCodeDidChange(for address: String) {
         runOnCentralQueue { [weak self] in
             guard let self,
@@ -298,6 +301,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                     == address.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             else { return }
 
+            self.probeReplaySessionStartDate = self.batchProcessor?.state?.sensorStartDate
+                ?? self.stateStore.load(for: address)?.sensorStartDate
             self.stateStore.clear(for: address)
             self.batchProcessor = nil
             self.historyRequest.reset()
@@ -767,7 +772,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private func receiveReadings(_ readings: [Sibionics2RawReading], at receivedAt: Date) {
         guard let address = deviceAddress else { return }
         var currentProcessor = batchProcessor ?? makeBatchProcessor(for: address)
-        let previousStartDate = currentProcessor.state?.sensorStartDate
+        let previousStartDate = currentProcessor.state?.sensorStartDate ?? probeReplaySessionStartDate
         let glucoseData = currentProcessor.process(readings, receivedAt: receivedAt)
         let requiresHistoryReplay = currentProcessor.requiresHistoryReplay
         let currentState = currentProcessor.state
@@ -792,6 +797,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
               requiresHistoryReplay.description)
         guard !(requiresHistoryReplay && currentState?.lastDeliveredIndex == nil && glucoseData.isEmpty),
               let sensorStartDate = currentState?.sensorStartDate else { return }
+        probeReplaySessionStartDate = nil
         let detectedNewSensor = previousStartDate.map {
             abs($0.timeIntervalSince(sensorStartDate)) > Sibionics2ConnectionPolicy.sessionStartDateTolerance
         } ?? true

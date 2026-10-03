@@ -122,6 +122,114 @@ enum Sibionics2ReadingRepair {
     }
 }
 
+/// Reconciles stock algorithm replay with rows already accepted by the five-minute
+/// pipeline. The broad duplicate window is for cadence, not sample identity.
+enum Sibionics2PersistedReadingReplay {
+    static let sampleTimestampTolerance = Sibionics2Time.secondsPerMinute / 2
+
+    static func matchesSession(_ storedStart: Date, _ detectedStart: Date) -> Bool {
+        abs(storedStart.timeIntervalSince(detectedStart)) <= Sibionics2ConnectionPolicy.sessionStartDateTolerance
+    }
+
+    static func reconcile(in context: NSManagedObjectContext, sensor: Sensor,
+                          glucoseData: [GlucoseData], mode: Sibionics2CalibrationMode) -> [BgReading] {
+        var result = [BgReading]()
+        context.performAndWait {
+            let valid = glucoseData.filter {
+                $0.timeStamp.timeIntervalSince1970.isFinite && $0.glucoseLevelRaw.isFinite &&
+                    $0.glucoseLevelRaw > 0 && $0.glucoseLevelRaw <= Sibionics2SensorProfile.maximumReportableGlucoseMgDl
+            }
+            guard let first = valid.map({ $0.timeStamp }).min(),
+                  let last = valid.map({ $0.timeStamp }).max() else { return }
+            let request: NSFetchRequest<BgReading> = BgReading.fetchRequest()
+            request.predicate = NSPredicate(format: "sensor == %@ AND timeStamp >= %@ AND timeStamp <= %@", sensor,
+                first.addingTimeInterval(-sampleTimestampTolerance) as NSDate,
+                last.addingTimeInterval(sampleTimestampTolerance) as NSDate)
+            request.sortDescriptors = [NSSortDescriptor(key: "timeStamp", ascending: true)]
+            guard let candidates = try? context.fetch(request) else { return }
+            var replacements = [(reading: BgReading, raw: Double)]()
+            for reading in candidates {
+                guard let sample = valid.min(by: {
+                    abs($0.timeStamp.timeIntervalSince(reading.timeStamp)) < abs($1.timeStamp.timeIntervalSince(reading.timeStamp))
+                }), abs(sample.timeStamp.timeIntervalSince(reading.timeStamp)) < sampleTimestampTolerance,
+                      abs(sample.glucoseLevelRaw - reading.rawData) > 0.000001 else { continue }
+                replacements.append((reading, sample.glucoseLevelRaw))
+            }
+            guard !replacements.isEmpty else { return }
+            // Ordinary live packets fetch only their timestamp range. Full session
+            // recalculation is needed only when an existing factory sample changes.
+            request.predicate = NSPredicate(format: "sensor == %@", sensor)
+            let calibrationRequest: NSFetchRequest<Calibration> = Calibration.fetchRequest()
+            calibrationRequest.predicate = NSPredicate(format: "sensor == %@", sensor)
+            calibrationRequest.sortDescriptors = [NSSortDescriptor(key: "timeStamp", ascending: true)]
+            guard let readings = try? context.fetch(request),
+                  let calibrations = try? context.fetch(calibrationRequest) else { return }
+            var previousRawValues = [NSManagedObjectID: Double]()
+            for replacement in replacements {
+                previousRawValues[replacement.reading.objectID] = replacement.reading.rawData
+                replacement.reading.rawData = replacement.raw
+                replacement.reading.ageAdjustedRawValue = replacement.raw
+            }
+
+            // Fingerstick values, IDs and dates remain intact. Rebase the sensor-space
+            // inputs using the corrected sample, retaining the original interpolation.
+            for calibration in calibrations {
+                let reference = readings.first { $0.calibrationFlag && $0.calibration == calibration }
+                    ?? calibration.rawTimeStamp.flatMap { date in
+                    readings.min { abs($0.timeStamp.timeIntervalSince(date)) < abs($1.timeStamp.timeIntervalSince(date)) }
+                        .flatMap { abs($0.timeStamp.timeIntervalSince(date)) < sampleTimestampTolerance ? $0 : nil }
+                }
+                guard let reference, let oldRaw = previousRawValues[reference.objectID],
+                      oldRaw.isFinite, oldRaw > 0 else { continue }
+                let ratio = reference.rawData / oldRaw
+                calibration.rawValue *= ratio
+                calibration.adjustedRawValue *= ratio
+                calibration.estimateRawAtTimeOfCalibration *= ratio
+            }
+            let calibrator = Sibionics2XDripCalibrator()
+            calibrator.recalculateStoredCalibrationCurves(calibrations, historyDays: mode.calibrationHistoryDays)
+
+            var older = [BgReading]()
+            for reading in readings where reading.rawData.isFinite && reading.rawData > 0 {
+                let eligible = calibrations.filter {
+                    $0.timeStamp <= reading.timeStamp &&
+                        $0.timeStamp >= reading.timeStamp.addingTimeInterval(-Double(mode.calibrationHistoryDays) * 24 * 3600)
+                }
+                if !reading.calibrationFlag {
+                    let value: Double
+                    switch mode {
+                    case .jugglucoNG:
+                        let anchors = eligible.map {
+                            Sibionics2CalibrationAnchor(sensorMgDl: $0.estimateRawAtTimeOfCalibration > 0
+                                ? $0.estimateRawAtTimeOfCalibration : $0.adjustedRawValue,
+                                fingerstickMgDl: $0.bg, timeStamp: $0.timeStamp)
+                        }
+                        value = Sibionics2JugglucoCalibrationMath.calibratedValue(reading.rawData, at: reading.timeStamp, anchors: anchors)
+                    case .xDripPlus:
+                        if let latest = eligible.last, latest.slope.isFinite, latest.intercept.isFinite, latest.slope > 0 {
+                            value = latest.slope * reading.rawData + latest.intercept
+                        } else {
+                            value = reading.rawData
+                        }
+                    }
+                    let corrected = value.isFinite && value > 0 ? value : reading.rawData
+                    reading.calculatedValue = min(ConstantsCalibrationAlgorithms.maximumBgReadingCalculatedValueLimit,
+                                                  max(ConstantsCalibrationAlgorithms.minimumBgReadingCalculatedValue, corrected))
+                    reading.calibration = eligible.last
+                }
+                reading.ageAdjustedRawValue = reading.rawData
+                reading.adjustedValue = nil
+                reading.smoothedValue = nil
+                calibrator.refreshStoredReadingCalculations(for: reading, last3Readings: &older)
+                older.insert(reading, at: 0)
+                older = Array(older.prefix(3))
+                result.append(reading)
+            }
+        }
+        return result
+    }
+}
+
 /// JugglucoNG's default calibration profile: single-point offset, then fresh
 /// weighted OLS with a bounded slope and a small local anchor blend.
 final class Sibionics2JugglucoCalibrator: Calibrator {

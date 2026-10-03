@@ -381,6 +381,129 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         }
     }
 
+    func testProbeReplayUpdatesStoredRowsWithoutAddingCadenceDuplicates() throws {
+        let context = try inMemoryContext(model: managedObjectModel())
+        let sensor = Sensor(startDate: sensorStartDate, nsManagedObjectContext: context)
+        let other = Sensor(startDate: sensorStartDate.addingTimeInterval(-3600), nsManagedObjectContext: context)
+        let at = sensorStartDate.addingTimeInterval(3600)
+        let row = BgReading(timeStamp: at, sensor: sensor, calibration: nil, rawData: 100,
+                            deviceName: nil, nsManagedObjectContext: context)
+        row.calculatedValue = 100
+        row.adjustedValue = 105
+        row.smoothedValue = 108
+        let neighbor = BgReading(timeStamp: at.addingTimeInterval(60), sensor: sensor, calibration: nil,
+                                 rawData: 120, deviceName: nil, nsManagedObjectContext: context)
+        neighbor.calculatedValue = 120
+        let unrelated = BgReading(timeStamp: at, sensor: other, calibration: nil, rawData: 90,
+                                  deviceName: nil, nsManagedObjectContext: context)
+        unrelated.calculatedValue = 90
+        try context.save()
+        let id = row.objectID
+        let stableID = row.id
+        let data = [GlucoseData(timeStamp: at.addingTimeInterval(5), glucoseLevelRaw: 150)]
+        XCTAssertFalse(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
+                         glucoseData: data, mode: .xDripPlus).isEmpty)
+        XCTAssertEqual(row.rawData, 150)
+        XCTAssertEqual(row.ageAdjustedRawValue, 150)
+        XCTAssertEqual(row.calculatedValue, 150)
+        XCTAssertEqual(row.objectID, id)
+        XCTAssertEqual(row.id, stableID)
+        XCTAssertEqual(row.timeStamp, at)
+        XCTAssertNil(row.adjustedValue)
+        XCTAssertNil(row.smoothedValue)
+        XCTAssertEqual(neighbor.rawData, 120, "A neighboring minute is not the same sample")
+        XCTAssertEqual(unrelated.calculatedValue, 90)
+        XCTAssertTrue(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
+                         glucoseData: data, mode: .xDripPlus).isEmpty)
+        try context.save()
+        context.reset()
+        let stored = try context.fetch(NSFetchRequest<BgReading>(entityName: "BgReading"))
+        XCTAssertEqual(stored.count, 3)
+        XCTAssertEqual(try XCTUnwrap(stored.first { $0.id == stableID }).calculatedValue, 150)
+    }
+
+    func testProbeReplayRebasesBothCalibrationModesAndPreservesFingerstick() throws {
+        for mode in Sibionics2CalibrationMode.allCases {
+            let context = try inMemoryContext(model: managedObjectModel())
+            let sensor = Sensor(startDate: sensorStartDate, nsManagedObjectContext: context)
+            let at = sensorStartDate.addingTimeInterval(3600)
+            let anchor = Calibration(timeStamp: at, sensor: sensor, bg: 150,
+                rawValue: 100, adjustedRawValue: 100, sensorConfidence: 1, rawTimeStamp: at,
+                slope: 1, intercept: 50, distanceFromEstimate: 0, estimateRawAtTimeOfCalibration: 100,
+                slopeConfidence: 1, deviceName: nil, nsManagedObjectContext: context)
+            let manual = BgReading(timeStamp: at, sensor: sensor, calibration: anchor, rawData: 100,
+                                   deviceName: nil, nsManagedObjectContext: context)
+            manual.calibrationFlag = true
+            manual.calculatedValue = 150
+            let after = BgReading(timeStamp: at.addingTimeInterval(300), sensor: sensor, calibration: anchor,
+                                  rawData: 120, deviceName: nil, nsManagedObjectContext: context)
+            after.calculatedValue = 170
+            let anchorID = anchor.id
+            let corrected = [GlucoseData(timeStamp: at, glucoseLevelRaw: 120),
+                             GlucoseData(timeStamp: after.timeStamp, glucoseLevelRaw: 144)]
+            XCTAssertFalse(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
+                              glucoseData: corrected, mode: mode).isEmpty)
+            XCTAssertEqual(anchor.rawValue, 120, accuracy: 0.00001)
+            XCTAssertEqual(anchor.estimateRawAtTimeOfCalibration, 120, accuracy: 0.00001)
+            XCTAssertEqual(anchor.bg, 150)
+            XCTAssertEqual(anchor.id, anchorID)
+            XCTAssertTrue(manual.calibrationFlag)
+            XCTAssertEqual(manual.calculatedValue, 150)
+            XCTAssertEqual(after.calculatedValue, 174, accuracy: 0.00001)
+            // Clearing/restoring the code follows the same path, with no persistent replay flag.
+            let restored = [GlucoseData(timeStamp: at, glucoseLevelRaw: 100),
+                            GlucoseData(timeStamp: after.timeStamp, glucoseLevelRaw: 120)]
+            _ = Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
+                    glucoseData: restored, mode: mode)
+            XCTAssertEqual(anchor.rawValue, 100, accuracy: 0.00001)
+            XCTAssertEqual(after.calculatedValue, 170, accuracy: 0.00001)
+            XCTAssertEqual(manual.calculatedValue, 150)
+        }
+    }
+
+    func testProbeReplayRejectsCadenceNeighborsAndInvalidSamples() throws {
+        let context = try inMemoryContext(model: managedObjectModel())
+        let sensor = Sensor(startDate: sensorStartDate, nsManagedObjectContext: context)
+        let at = sensorStartDate.addingTimeInterval(3600)
+        let row = BgReading(timeStamp: at, sensor: sensor, calibration: nil, rawData: 100,
+                            deviceName: nil, nsManagedObjectContext: context)
+        row.calculatedValue = 100
+        for data in [[GlucoseData(timeStamp: at.addingTimeInterval(60), glucoseLevelRaw: 180)],
+                     [GlucoseData(timeStamp: at.addingTimeInterval(30), glucoseLevelRaw: 180)],
+                     [GlucoseData(timeStamp: at, glucoseLevelRaw: .nan)],
+                     [GlucoseData(timeStamp: at, glucoseLevelRaw: 0)]] {
+            XCTAssertTrue(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
+                              glucoseData: data, mode: .jugglucoNG).isEmpty)
+        }
+        XCTAssertEqual(row.calculatedValue, 100)
+    }
+
+    func testProbeReplayDoesNotApplyFutureFingerstickToOlderReading() throws {
+        let context = try inMemoryContext(model: managedObjectModel())
+        let sensor = Sensor(startDate: sensorStartDate, nsManagedObjectContext: context)
+        let at = sensorStartDate.addingTimeInterval(3600)
+        _ = Calibration(timeStamp: at.addingTimeInterval(600), sensor: sensor, bg: 180,
+            rawValue: 100, adjustedRawValue: 100, sensorConfidence: 1, rawTimeStamp: at.addingTimeInterval(600),
+            slope: 1, intercept: 80, distanceFromEstimate: 0, estimateRawAtTimeOfCalibration: 100,
+            slopeConfidence: 1, deviceName: nil, nsManagedObjectContext: context)
+        let row = BgReading(timeStamp: at, sensor: sensor, calibration: nil, rawData: 100,
+                            deviceName: nil, nsManagedObjectContext: context)
+        row.calculatedValue = 100
+        for mode in Sibionics2CalibrationMode.allCases {
+            let value = mode == .xDripPlus ? 110.0 : 120.0
+            _ = Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
+                    glucoseData: [GlucoseData(timeStamp: at, glucoseLevelRaw: value)], mode: mode)
+            XCTAssertEqual(row.calculatedValue, value)
+        }
+    }
+
+    func testProbeReplayPreservesSessionButAllowsPhysicalSensorRestart() {
+        XCTAssertTrue(Sibionics2PersistedReadingReplay.matchesSession(sensorStartDate,
+                       sensorStartDate.addingTimeInterval(30)))
+        XCTAssertFalse(Sibionics2PersistedReadingReplay.matchesSession(sensorStartDate,
+                       sensorStartDate.addingTimeInterval(3600)))
+    }
+
     func testReadingAgeOnlyMatchesSelectedSibionicsPeripheral() {
         XCTAssertTrue(SibionicsReadingAge.matchesActivePeripheral(
             viewedAddress: "AA:BB:CC:DD:EE:FF", activeAddress: "aa:bb:cc:dd:ee:ff"
