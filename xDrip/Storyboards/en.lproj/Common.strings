@@ -141,3 +141,11 @@
 "common_sensorWarmupUntilFormat" = "Until %@";
 "common_sensorWarmupComplete" = "Warm-up complete";
 "common_sensorWaitingForReading" = "Waiting for first reading…";
+
+// Adaptive Status widget
+"adaptive_normal" = "In range";
+"adaptive_warning" = "Trend / out of range";
+"adaptive_critical" = "Critical";
+"adaptive_stale" = "Stale reading";
+"adaptive_unavailable" = "No data";
+"adaptive_description" = "Glucose, trend and reading age with an adaptive glass appearance.";
