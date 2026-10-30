@@ -324,7 +324,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         let other = reading(150, at: 420, sensor: otherSensor)
         try context.save()
 
-        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: .jugglucoNG), 2)
+        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, profile: Sibionics2CalibrationProfile(mode: .jugglucoNG)), 2)
         XCTAssertEqual(before.calculatedValue, 120)
         XCTAssertEqual(after.calculatedValue, 145)
         XCTAssertEqual(manual.calculatedValue, 0)
@@ -333,7 +333,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(other.calculatedValue, 0)
         XCTAssertEqual(future.bg, 145)
         XCTAssertEqual(later.bg, 160)
-        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: .jugglucoNG), 0)
+        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, profile: Sibionics2CalibrationProfile(mode: .jugglucoNG)), 0)
         try context.save()
         context.reset()
         let stored = try context.fetch(NSFetchRequest<BgReading>(entityName: "BgReading"))
@@ -355,7 +355,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
             calibration: nil, rawData: 125, deviceName: nil, nsManagedObjectContext: context)
         try context.save()
 
-        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: .xDripPlus), 2)
+        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, profile: Sibionics2CalibrationProfile(mode: .xDripPlus)), 2)
         XCTAssertEqual(before.calculatedValue, 125)
         XCTAssertEqual(reading.calculatedValue, 180, accuracy: 0.00001)
         XCTAssertEqual(reading.ageAdjustedRawValue, 125)
@@ -376,7 +376,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
                 calibration: nil, rawData: 125, deviceName: nil, nsManagedObjectContext: context)
             try context.save()
 
-            XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: mode), 1)
+            XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, profile: Sibionics2CalibrationProfile(mode: mode)), 1)
             XCTAssertEqual(reading.calculatedValue, 180, accuracy: 0.00001, "Mode: \(mode)")
         }
     }
@@ -402,7 +402,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         let stableID = row.id
         let data = [GlucoseData(timeStamp: at.addingTimeInterval(5), glucoseLevelRaw: 150)]
         XCTAssertFalse(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                         glucoseData: data, mode: .xDripPlus).isEmpty)
+                         glucoseData: data, profile: Sibionics2CalibrationProfile(mode: .xDripPlus)).isEmpty)
         XCTAssertEqual(row.rawData, 150)
         XCTAssertEqual(row.ageAdjustedRawValue, 150)
         XCTAssertEqual(row.calculatedValue, 150)
@@ -414,7 +414,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(neighbor.rawData, 120, "A neighboring minute is not the same sample")
         XCTAssertEqual(unrelated.calculatedValue, 90)
         XCTAssertTrue(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                         glucoseData: data, mode: .xDripPlus).isEmpty)
+                         glucoseData: data, profile: Sibionics2CalibrationProfile(mode: .xDripPlus)).isEmpty)
         try context.save()
         context.reset()
         let stored = try context.fetch(NSFetchRequest<BgReading>(entityName: "BgReading"))
@@ -442,7 +442,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
             let corrected = [GlucoseData(timeStamp: at, glucoseLevelRaw: 120),
                              GlucoseData(timeStamp: after.timeStamp, glucoseLevelRaw: 144)]
             XCTAssertFalse(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                              glucoseData: corrected, mode: mode).isEmpty)
+                              glucoseData: corrected, profile: Sibionics2CalibrationProfile(mode: mode)).isEmpty)
             XCTAssertEqual(anchor.rawValue, 120, accuracy: 0.00001)
             XCTAssertEqual(anchor.estimateRawAtTimeOfCalibration, 120, accuracy: 0.00001)
             XCTAssertEqual(anchor.bg, 150)
@@ -454,7 +454,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
             let restored = [GlucoseData(timeStamp: at, glucoseLevelRaw: 100),
                             GlucoseData(timeStamp: after.timeStamp, glucoseLevelRaw: 120)]
             _ = Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                    glucoseData: restored, mode: mode)
+                    glucoseData: restored, profile: Sibionics2CalibrationProfile(mode: mode))
             XCTAssertEqual(anchor.rawValue, 100, accuracy: 0.00001)
             XCTAssertEqual(after.calculatedValue, 170, accuracy: 0.00001)
             XCTAssertEqual(manual.calculatedValue, 150)
@@ -473,7 +473,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
                      [GlucoseData(timeStamp: at, glucoseLevelRaw: .nan)],
                      [GlucoseData(timeStamp: at, glucoseLevelRaw: 0)]] {
             XCTAssertTrue(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                              glucoseData: data, mode: .jugglucoNG).isEmpty)
+                              glucoseData: data, profile: Sibionics2CalibrationProfile(mode: .jugglucoNG)).isEmpty)
         }
         XCTAssertEqual(row.calculatedValue, 100)
     }
@@ -492,7 +492,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         for mode in Sibionics2CalibrationMode.allCases {
             let value = mode == .xDripPlus ? 110.0 : 120.0
             _ = Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                    glucoseData: [GlucoseData(timeStamp: at, glucoseLevelRaw: value)], mode: mode)
+                    glucoseData: [GlucoseData(timeStamp: at, glucoseLevelRaw: value)], profile: Sibionics2CalibrationProfile(mode: mode))
             XCTAssertEqual(row.calculatedValue, value)
         }
     }
@@ -528,13 +528,93 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(SibionicsReadingAge.nextRefreshInterval(since: now.addingTimeInterval(-119.25), now: now), 0.75, accuracy: 0.001)
     }
 
-    func testSibionics1SensitivityUsesOnlyOwnCodeOrNeutralScaling() {
-        XCTAssertNil(Sibionics2FactorySensitivity.decodedSibionics1Sensitivity(
-            advertisedName: nil, probeCode: nil))
+    func testSibionics1SensitivityFollowsJugglucoShortCodeThenVariantFallback() {
+        // Variant fallback tokens: EU YMWD016F, Hematonix YEZ1450H, Chinese GEPD802J.
         XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
-            advertisedName: nil, variant: .sibionics1), 1.0)
+            advertisedName: nil, variant: .sibionics1, sibionics1Family: .eu), 1.58, accuracy: 0.0001)
         XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
-            advertisedName: "ABCD1270SERIAL", variant: .sibionics1), 1.27)
+            advertisedName: nil, variant: .sibionics1, sibionics1Family: .hematonix), 1.47, accuracy: 0.0001)
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: nil, variant: .sibionics1, sibionics1Family: .chinese), 1.27, accuracy: 0.0001)
+        XCTAssertNil(Sibionics2FactorySensitivity.sibionics1ShortCodeSensitivity(advertisedName: nil, family: .eu))
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: "ABCD1270SERIAL", variant: .sibionics1), 1.27, accuracy: 0.0001)
+        XCTAssertEqual(Sibionics2FactorySensitivity.sibionics1ShortCodeSensitivity(
+            advertisedName: "ABCD1270SERIAL", family: .eu) ?? 0, 1.27, accuracy: 0.0001)
+        // JugglucoNG decodes the probe code only for Sibionics 2.
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: nil, probeCode: "ANY14CHARACTER", variant: .sibionics1, sibionics1Family: .eu),
+            1.58, accuracy: 0.0001)
+        XCTAssertEqual(Sibionics2FactorySensitivity.deriveShortCode("ABCDEF", fallback: "YMWD016F"), "00000ABC")
+        XCTAssertEqual(Sibionics2FactorySensitivity.deriveShortCode("", fallback: "YMWD016F"), "YMWD016F")
+        XCTAssertEqual(Sibionics1Family.resolve(protocolMode: .chinese, keyGroup: .hematonix), .chinese)
+        XCTAssertEqual(Sibionics1Family.resolve(protocolMode: .v120, keyGroup: .hematonix), .hematonix)
+        XCTAssertEqual(Sibionics1Family.resolve(protocolMode: nil, keyGroup: nil), .eu)
+    }
+
+    func testSibionics1LabelYieldsJugglucoShortCodeAndRejectsOtherCodes() {
+        let gtin = "06972831640011"
+        // Without separators the 59-character payload uses JugglucoNG's split identity window.
+        let label = "01\(gtin)1125010117270101102501010121ABCDEFGH1270XYZ"
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: label, variant: .sibionics1), .success(.shortCode("7FGH1270")))
+        XCTAssertEqual(Sibionics2FactorySensitivity.sibionics1ShortCodeSensitivity(
+            advertisedName: nil, family: .eu, labelShortCode: "7FGH1270") ?? 0, 1.27, accuracy: 0.0001)
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: nil, variant: .sibionics1, sibionics1Family: .eu, labelShortCode: "7FGH1270"),
+            1.27, accuracy: 0.0001)
+
+        // The GS1 Data Matrix prefix and FNC1 group separators are accepted.
+        let framed = "]d201\(gtin)11250101172701011025010101\u{1D}21LT2501ABC1270"
+        XCTAssertEqual(try SibionicsSensorLabel.sibionics1ShortCode(fromLabel: framed).get(), "7001ABC1")
+        XCTAssertEqual(SibionicsSensorLabel.cleanPayload("]d2ab^]cd"), "AB\u{1D}CD")
+
+        XCTAssertEqual(SibionicsSensorLabel.sibionics1ShortCode(fromLabel: "01\(gtin)1125010117270101102501010121P123456789012"),
+                       .failure(.otherSensorType))
+        // Wrong GTIN check digit, foreign GTIN and arbitrary text are not Sibionics labels.
+        for payload in ["0106972831640012" + "1125010117270101102501010121ABCDEFGH1270XYZ",
+                        "0104012345678901" + "1125010117270101102501010121ABCDEFGH1270XYZ",
+                        "EU2VCZUQPSHD5Q", ""] {
+            XCTAssertEqual(SibionicsSensorLabel.sibionics1ShortCode(fromLabel: payload), .failure(.notSibionicsLabel), payload)
+        }
+    }
+
+    func testSibionics2LabelYieldsProbeCodeOrStructuredSerialShortCode() {
+        let gtin = "06972831640011"
+        let prefix = "01\(gtin)11250101172701011025010101\u{1D}21"
+        // XPT form: the serial is itself a decodable 14-character probe code (1.91).
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: prefix + "XPT4T6HJTZLK87", variant: .sibionics2),
+                       .success(.probeCode("XPT4T6HJTZLK87")))
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: "P225044UHA", probeCode: "XPT4T6HJTZLK87"), 1.91, accuracy: 0.0001)
+
+        // P form: "1" + first 15 serial characters, last 11, first 8 -> "04411520" (1.52).
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: prefix + "P22504411520ABCD", variant: .sibionics2),
+                       .success(.shortCode("04411520")))
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: "P225044UHA", labelShortCode: "04411520"), 1.52, accuracy: 0.0001)
+        // The probe code still outranks a label short code.
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: "P225044UHA", probeCode: "XPT4T6HJTZLK87", labelShortCode: "04411520"),
+            1.91, accuracy: 0.0001)
+
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: prefix + "P22504411ZZZABCD", variant: .sibionics2),
+                       .failure(.noFactoryCode))
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: prefix + "LT2501ABC1270", variant: .sibionics2),
+                       .failure(.otherSensorType))
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: "EU2VCZUQPSHD5Q", variant: .sibionics2),
+                       .failure(.notSibionicsLabel))
+    }
+
+    func testSibionics1ResetUsesItsProtocolsDirectCommandAndConfirmedKeyLeads() {
+        XCTAssertEqual([UInt8](Sibionics1ChineseProtocolCodec().buildResetPacket()), [0xAA, 0x55, 0x10, 0xF1])
+        XCTAssertEqual([UInt8](Sibionics2ProtocolCodec().buildGS1ResetPacket()), [0x24, 0xE7, 0x6F, 0x34])
+        XCTAssertTrue(SibionicsDeviceVariant.sibionics1.supportsManualReset)
+        XCTAssertFalse(SibionicsDeviceVariant.sibionics1.supportsAutoReset)
+        XCTAssertTrue(SibionicsDeviceVariant.sibionics2.supportsAutoReset)
+        XCTAssertEqual(Sibionics2KeyGroup.authenticationOrder(for: .sibionics1, preferred: .hematonix),
+                       [.hematonix, .sijoy, .eco])
+        XCTAssertEqual(Sibionics2KeyGroup.authenticationOrder(for: .sibionics2, preferred: .eco),
+                       [.eco, .sijoy, .hematonix])
     }
 
     func testSibionics1PeripheralFactoryPersistsExplicitVariant() throws {
@@ -595,6 +675,9 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertFalse(chinese.confirmed)
         chinese.confirm(.chinese)
         XCTAssertFalse(chinese.fallBackToV120())
+        XCTAssertTrue(chinese.requireV120(), "The V120 marker overrides a confirmed Chinese session")
+        XCTAssertEqual(chinese.mode, .v120)
+        XCTAssertFalse(chinese.requireV120())
         XCTAssertEqual(Sibionics1ConnectionState(savedMode: .v120).mode, .v120)
     }
 
@@ -1263,14 +1346,10 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         )
 
         let invalidRaw = rows[129].reading(index: 131, rawMmol: .nan, sensorStartDate: sensorStartDate)
-        let invalidTemperature = rows[129].reading(
-            index: 132,
-            temperatureC: 99,
-            sensorStartDate: sensorStartDate
-        )
+        let nonPositiveRaw = rows[129].reading(index: 132, rawMmol: 0, sensorStartDate: sensorStartDate)
         let delivered = batchProcessor.process([
             invalidRaw,
-            invalidTemperature,
+            nonPositiveRaw,
             rows[129].reading(sensorStartDate: sensorStartDate)
         ], receivedAt: sensorStartDate.addingTimeInterval(20_000))
 
@@ -1279,7 +1358,10 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertTrue(delivered.allSatisfy {
             $0.glucoseLevelRaw.isFinite && $0.glucoseLevelRaw > 0 && $0.glucoseLevelRaw <= 900
         })
-        XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 130)
+        // Unusable minutes are skipped, not treated as missing history: the cursor
+        // moves past them so the next page is accepted instead of stalling forever.
+        XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 132)
+        XCTAssertFalse(batchProcessor.requiresHistoryReplay)
     }
     func testDelegateDeliverySeamForwardsOnlyProcessedGlucoseAndSensorAge() throws {
         let rows = try fixtureRows()

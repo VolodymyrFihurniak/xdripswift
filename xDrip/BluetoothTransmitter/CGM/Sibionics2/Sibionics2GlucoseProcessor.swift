@@ -286,8 +286,8 @@ struct Sibionics2GlucoseProcessor {
             reading.index <= Sibionics2ReadingValidationPolicy.maximumIndex &&
             reading.rawMmol.isFinite && reading.rawMmol > 0 &&
             reading.rawMmol <= Sibionics2ReadingValidationPolicy.maximumRawGlucoseMmol &&
-            reading.temperatureC.isFinite && reading.temperatureC > 0 &&
-            reading.temperatureC <= Sibionics2ReadingValidationPolicy.maximumTemperatureCelsius
+            // JugglucoNG passes every finite sensor temperature to the stock core.
+            reading.temperatureC.isFinite
     }
 
     private mutating func ensureUniqueCore() {

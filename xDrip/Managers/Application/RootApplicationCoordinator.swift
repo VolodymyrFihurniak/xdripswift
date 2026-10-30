@@ -1084,7 +1084,7 @@ import AppIntents
               let transmitter = bluetoothPeripheralManager?.getCGMTransmitter() as? CGMSibionics2Transmitter else { return }
         guard Sibionics2ReadingRepair.repair(
             in: coreDataManager.mainManagedObjectContext,
-            sensor: activeSensor, mode: transmitter.calibrationMode
+            sensor: activeSensor, profile: transmitter.calibrationProfile
         ) > 0 else { return }
         activeSensor.noiseHistoryIsComplete = false
         coreDataManager.saveChanges()
@@ -1126,7 +1126,7 @@ import AppIntents
             if let transmitter = cgmTransmitter as? CGMSibionics2Transmitter {
                 let replayed = Sibionics2PersistedReadingReplay.reconcile(
                     in: coreDataManager.mainManagedObjectContext, sensor: activeSensor,
-                    glucoseData: glucoseData, mode: transmitter.calibrationMode
+                    glucoseData: glucoseData, profile: transmitter.calibrationProfile
                 )
                 if let fromDate = replayed.first?.timeStamp {
                     activeSensor.noiseHistoryIsComplete = false
@@ -1932,8 +1932,8 @@ import AppIntents
             // The stock V116A correction produces mg/dL. Sibionics calibration
             // profiles operate on that factory-corrected value, not Libre raw data.
             if let sibionics2 = cgmTransmitter as? CGMSibionics2Transmitter,
-               sibionics2.calibrationMode == .jugglucoNG {
-                calibrator = Sibionics2JugglucoCalibrator()
+               sibionics2.calibrationMode.jugglucoAlgorithm != nil {
+                calibrator = Sibionics2JugglucoCalibrator(profile: sibionics2.calibrationProfile)
             } else {
                 calibrator = Sibionics2XDripCalibrator()
             }

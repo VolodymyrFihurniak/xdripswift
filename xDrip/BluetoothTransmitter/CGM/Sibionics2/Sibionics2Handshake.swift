@@ -61,12 +61,17 @@ private enum Sibionics2BluetoothAddressFormat {
 }
 
 /// Resolves the Bluetooth address carried by the V120 authentication packet.
-/// iOS does not publish a public MAC API; some CoreBluetooth versions expose
-/// private selectors used by the reference apps, so the explicit address field
-/// remains available as a fallback when those selectors are absent.
+/// iOS has no public MAC API, so the address comes from what the sensor
+/// publishes (Device Information, advertisement) or from a manual entry.
 enum Sibionics2AuthenticationAddress {
     private static let keyPrefix = "sibionics2.authenticationAddress."
     private static let detectedKeyPrefix = "sibionics2.detectedBluetoothAddress."
+    private static let candidatesKeyPrefix = "sibionics2.bluetoothAddressCandidates."
+    private static let maximumStoredCandidates = 6
+    /// Device Information characteristics that commonly carry the BLE address.
+    static let deviceInformationServiceUUID = CBUUID(string: "180A")
+    static let systemIDCharacteristicUUID = CBUUID(string: "2A23")
+    static let serialNumberCharacteristicUUID = CBUUID(string: "2A25")
 
     static func normalize(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
@@ -105,7 +110,8 @@ enum Sibionics2AuthenticationAddress {
             return UInt8(compact[start..<end], radix: 16)
         }
         guard bytes.count == Sibionics2BluetoothAddressFormat.byteCount,
-              bytes.contains(where: { $0 != 0 }) else { return nil }
+              bytes.contains(where: { $0 != 0 }),
+              bytes.contains(where: { $0 != 0xFF }) else { return nil }
         return bytes.map { String(format: "%02X", Int($0)) }
             .joined(separator: String(Sibionics2BluetoothAddressFormat.separator))
     }
@@ -133,21 +139,94 @@ enum Sibionics2AuthenticationAddress {
         return nil
     }
 
-    static func automaticAddress(for peripheral: CBPeripheral, centralManager: CBCentralManager) -> String? {
-        let peripheralSelector = NSSelectorFromString("BDAddress")
-        if peripheral.responds(to: peripheralSelector),
-           let result = peripheral.perform(peripheralSelector)?.takeUnretainedValue(),
-           let address = address(from: result) {
-            return address
+    /// Addresses a manufacturer-data payload may carry after its 2-byte company
+    /// identifier. Byte order is not standardized, so both orders are offered and
+    /// only an address that later produces glucose readings is kept as detected.
+    static func advertisementCandidates(manufacturerData: Data?) -> [String] {
+        guard let manufacturerData else { return [] }
+        let bytes = [UInt8](manufacturerData)
+        let byteCount = Sibionics2BluetoothAddressFormat.byteCount
+        let companyIdentifierLength = 2
+        var windows = [[UInt8]]()
+        if bytes.count == byteCount {
+            windows.append(bytes)
         }
+        if bytes.count >= companyIdentifierLength + byteCount {
+            windows.append(Array(bytes[companyIdentifierLength..<(companyIdentifierLength + byteCount)]))
+            if bytes.count > companyIdentifierLength + byteCount {
+                windows.append(Array(bytes.suffix(byteCount)))
+            }
+        }
+        return unique(windows.flatMap { [address(from: Data($0)), address(from: Data($0.reversed()))] }
+            .compactMap { $0 })
+    }
 
-        let centralSelector = NSSelectorFromString("retrieveAddressForPeripheral:")
-        if centralManager.responds(to: centralSelector),
-           let result = centralManager.perform(centralSelector, with: peripheral)?.takeUnretainedValue(),
-           let address = address(from: result) {
-            return address
+    /// Decodes a Device Information System ID built from the BLE address, where
+    /// FFFE is inserted between its OUI and device-specific bytes (EUI-64 style).
+    static func systemIDAddress(_ data: Data) -> String? {
+        let bytes = [UInt8](data)
+        guard bytes.count == 8,
+              (bytes[3] == 0xFE && bytes[4] == 0xFF) || (bytes[3] == 0xFF && bytes[4] == 0xFE) else { return nil }
+        // System ID is little endian; the printed address is most significant byte first.
+        return address(from: Data([bytes[7], bytes[6], bytes[5], bytes[2], bytes[1], bytes[0]]))
+    }
+
+    /// A Device Information serial number that carries the BLE address. Sibionics 2
+    /// publishes the six raw address bytes least significant first (a sensor with
+    /// address C7:71:B0:D1:5B:32 reports 32 5B D1 B0 71 C7); a printable serial is
+    /// accepted when it is itself an address.
+    static func serialNumberAddresses(_ data: Data) -> [String] {
+        if data.count == Sibionics2BluetoothAddressFormat.byteCount {
+            return unique([address(from: Data(data.reversed())), address(from: data)].compactMap { $0 })
         }
-        return nil
+        guard let text = String(data: data, encoding: .utf8) else { return [] }
+        return normalize(text.trimmingCharacters(in: .controlCharacters)).map { [$0] } ?? []
+    }
+
+    static func candidates(for identifier: String, userDefaults: UserDefaults = .standard) -> [String] {
+        guard let key = candidatesKey(for: identifier) else { return [] }
+        return (userDefaults.stringArray(forKey: key) ?? []).compactMap(normalize)
+    }
+
+    /// Stores unverified addresses, keeping the newest first.
+    @discardableResult
+    static func addCandidates(_ values: [String], for identifier: String, userDefaults: UserDefaults = .standard) -> Bool {
+        guard let key = candidatesKey(for: identifier) else { return false }
+        let existing = candidates(for: identifier, userDefaults: userDefaults)
+        let updated = Array(unique(values.compactMap(normalize) + existing).prefix(maximumStoredCandidates))
+        guard updated != existing else { return false }
+        userDefaults.set(updated, forKey: key)
+        return true
+    }
+
+    /// Addresses to try in authentication, one per connection. A manual address
+    /// is used alone; otherwise the detected address leads, unverified candidates
+    /// follow, and `nil` (the zero address) is the final fallback.
+    static func authenticationCandidates(for identifier: String, userDefaults: UserDefaults = .standard) -> [String?] {
+        if let manual = override(for: identifier, userDefaults: userDefaults) { return [manual] }
+        let automatic = unique([detected(for: identifier, userDefaults: userDefaults)].compactMap { $0 }
+            + candidates(for: identifier, userDefaults: userDefaults))
+        return automatic.map { Optional($0) } + [nil]
+    }
+
+    /// Removes everything learned automatically for a peripheral.
+    static func clearAutomatic(for identifier: String, userDefaults: UserDefaults = .standard) {
+        if let key = detectedKey(for: identifier) { userDefaults.removeObject(forKey: key) }
+        if let key = candidatesKey(for: identifier) { userDefaults.removeObject(forKey: key) }
+    }
+
+    static func macBytes(address: String?) -> [UInt8] {
+        guard let address = address.flatMap(normalize) else {
+            return [UInt8](repeating: 0, count: Sibionics2BluetoothAddressFormat.byteCount)
+        }
+        return address
+            .split(separator: Sibionics2BluetoothAddressFormat.separator)
+            .compactMap { UInt8($0, radix: 16) }
+    }
+
+    private static func unique(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values.filter { seen.insert($0).inserted }
     }
 
     static func override(for identifier: String, userDefaults: UserDefaults = .standard) -> String? {
@@ -180,12 +259,7 @@ enum Sibionics2AuthenticationAddress {
     }
 
     static func macBytes(for identifier: String, userDefaults: UserDefaults = .standard) -> [UInt8] {
-        guard let address = effectiveAddress(for: identifier, userDefaults: userDefaults) else {
-            return [UInt8](repeating: 0, count: Sibionics2BluetoothAddressFormat.byteCount)
-        }
-        return address
-            .split(separator: Sibionics2BluetoothAddressFormat.separator)
-            .compactMap { UInt8($0, radix: 16) }
+        macBytes(address: effectiveAddress(for: identifier, userDefaults: userDefaults))
     }
 
     @discardableResult
@@ -209,6 +283,12 @@ enum Sibionics2AuthenticationAddress {
         let normalized = identifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalized.isEmpty else { return nil }
         return keyPrefix + normalized
+    }
+
+    private static func candidatesKey(for identifier: String) -> String? {
+        let normalized = identifier.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+        return candidatesKeyPrefix + normalized
     }
 
     private static func detectedKey(for identifier: String) -> String? {
@@ -246,6 +326,11 @@ struct Sibionics2Handshake {
         return false
     }
 
+    var isAwaitingAuthentication: Bool {
+        if case .awaitingAuthentication = phase { return true }
+        return false
+    }
+
     /// A valid data frame itself establishes streaming on V120; some firmware
     /// does not send a separate streaming-ready acknowledgement.
     mutating func receiveReadings() -> Bool {
@@ -271,7 +356,12 @@ struct Sibionics2Handshake {
         case (.awaitingTimeSync, .dataRequested), (.awaitingDataRequest, .dataRequested):
             phase = .awaitingStreaming
             return codec.buildDataRequestPacket(lastIndex: lastDeliveredIndex ?? 0)
-        case (.awaitingStreaming, .streamingReady):
+        case (.awaitingStreaming, .dataRequested):
+            // The sensor repeats the request when the previous write did not arrive.
+            return codec.buildDataRequestPacket(lastIndex: lastDeliveredIndex ?? 0)
+        case (.awaitingTimeSync, .streamingReady), (.awaitingDataRequest, .streamingReady),
+             (.awaitingStreaming, .streamingReady):
+            // Some firmware acknowledges streaming without asking for a data request.
             phase = .streaming
             return nil
         default:

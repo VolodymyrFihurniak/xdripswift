@@ -20,3 +20,66 @@ Sensitivity is inferred from a short code when the BLE name contains one. If the
 A V120 `FF31 response=8` confirms the command exchange, not glucose delivery. If the link drops and repeats without any `FF31 readings` log entry, open the saved Sibionics 2 device and enter its **Bluetooth address** from a trusted Android device log. This is the six-byte BLE MAC (for example `C7:71:B0:D1:5B:32`), not the sensor serial, the iPhone peripheral UUID, or the factory sensitivity. Saving the address reconnects automatically and uses it in the next authentication packet; clearing it restores the zero-address fallback. The address is specific to that device and is removed when the device is deleted.
 
 For a controlled comparison, pause the Android app's sensor connection while the iPhone connects. Export a trace that includes `authentication address source`, `FF31 response`, and the first `FF31 readings` or the next disconnect. The sensor session and calibration screen remain empty until valid readings reach the CGM pipeline. If readings arrive but the exact stock algorithm still requests early history, let the history replay continue; the factory sensitivity setting is separate from Bluetooth authentication.
+
+## Authentication retries
+
+FF32 commands use acknowledged writes whenever the characteristic supports them. The 26-byte V120 authentication packet is longer than the default 20-byte BLE payload, and iOS only splits acknowledged writes, so an unacknowledged auth packet can be lost without an error.
+
+If authentication draws no response within 5 seconds, the next registration key group is tried, as in JugglucoNG: Sibionics 2 tries the Eco key first, then the EU (Sijoy) and Hematonix keys; Sibionics 1 starts with the EU key. The trace logs the key group with `authentication address source`. A later handshake step that is not answered within 15 seconds restarts authentication, up to twice per connection. When the sensor sends the plain V120 authentication marker, a new handshake is started.
+
+## Automatic Bluetooth address
+
+iOS does not expose a peripheral's BLE MAC address, and the private CoreBluetooth selectors used earlier are absent on current iOS versions, so detection always fell back to the zero address. The address is now collected from sources a sensor can publish:
+
+- the advertisement manufacturer data, after its 2-byte company identifier, in both byte orders;
+- the Device Information System ID (`2A23`) when it is built from the address with an inserted `FFFE`;
+- the Device Information serial number (`2A25`). Sibionics 2 publishes the six raw address bytes there, least significant first: `32 5B D1 B0 71 C7` is address `C7:71:B0:D1:5B:32`.
+
+Authentication waits up to 3 seconds for Device Information so the published address is used in the first session.
+
+The sensor accepts any address at authentication, so these values are unverified candidates. Each connection tries one: the detected address first, then the candidates, then the zero address. A connection that ends without glucose readings moves to the next candidate; the first one that produces readings is saved as the detected address and shown as such on the device screen. A manual **Bluetooth address** always takes priority and is never rotated.
+
+If detection still fails, export a trace and look for `advertisement manufacturer data`, `device information 2A23`/`2A25` and `authentication address source`. Those lines show what the sensor publishes, which is needed to add another source.
+
+## Readings cadence
+
+There is no polling setting. V120 sensors (Sibionics 2 and EU Sibionics 1) stream on their own after the handshake, as in JugglucoNG. Chinese Sibionics 1 firmware only answers requests, so it is asked once a minute while connected and every 30 seconds until its first page. A session that stays connected but delivers no readings for 3 minutes is reconnected.
+
+The standard Battery Service level is read at each connection and every 6 hours while streaming.
+
+## Calibration methods
+
+xDrip+ uses xDrip's own weighted calibration. The JugglucoNG methods are ports of JugglucoNG's `CalibrationMath`, which its Sibionics driver applies to the stock value through the integrated calibration lane:
+
+- **Weighted OLS** (JugglucoNG default): recency-weighted regression, slope 0.65–1.35, with a small pull towards the nearest fingerstick.
+- **Median slope**: Theil-Sen style median over the twelve fingersticks nearest in time.
+- **Robust regression**: Huber-style reweighting that discounts outlying fingersticks.
+- **Elastic interpolation**: a local fit weighted by glucose proximity, blended with the robust trend.
+- **Adaptive ensemble**: a weighted blend of the four above.
+
+One fingerstick is always a plain offset. **Calibration weighting** (Fresh, the JugglucoNG default; Balanced; Stable) sets how quickly older fingersticks lose influence. JugglucoNG evaluates the fit in the user's display unit, so the calculation follows xDrip's mg/dL or mmol/L setting. Only fingersticks taken at or before a reading affect it.
+
+## Sibionics 1 specifics
+
+Sibionics 1 covers three JugglucoNG product lines, told apart at runtime:
+
+| Line | Protocol | Stock algorithm | Fallback sensitivity |
+|---|---|---|---|
+| EU (Sijoy key) | V120 | V116A | `YMWD016F` → 1.58 |
+| Hematonix | V120 | V116A | `YEZ1450H` → 1.47 |
+| Chinese GS1 CN | AA55 | V115G | `GEPD802J` → 1.27 |
+
+- The protocol is probed on first connection: an AA55 echo or data confirms Chinese; no answer, or the V120 marker, switches to V120. The result is saved per sensor.
+- V120 authentication tries the Sijoy, Hematonix and Eco keys. The group that produces readings is saved and leads later connections; it also selects the Hematonix fallback sensitivity.
+- Factory sensitivity follows JugglucoNG: the short code from a scanned sensor label, else the one derived from the Bluetooth name, then the line's fallback token, then 1.27. The 14-character probe decoder is Sibionics 2 only.
+- **Scan the label**: open the Sibionics 1 device, tap **Factory sensitivity** and point the camera at the GS1 code on the package (QR or Data Matrix). The code must carry a Sibionics GTIN (`0697283164…`) with a valid check digit and the dates, batch and serial fields; a Sibionics 2 serial (`P…`/`XPT…`) is refused. The short code is taken from JugglucoNG's 16-character identity window, and changing it replays history with the new sensitivity. **Remove scanned label code** returns to the name or fallback.
+- Manual reset sends the line's direct command (`24 E7 6F 34` for V120, `AA 55 10 F1` for Chinese). Automatic reset is Sibionics 2 only, as in JugglucoNG. The first request after a reset asks for index 1; if the existing session answers, the reset did not take and the saved cursor is used again.
+
+## Scanning a Sibionics 2 label (optional)
+
+Instead of typing the probe code, open the Sibionics 2 device and tap **Scan sensor label**. As in JugglucoNG, the GS1 label (QR or Data Matrix) must carry a Sibionics GTIN and a V120 serial:
+
+- an `XPT…` serial that decodes as a 14-character probe code is saved as the **Sensor QR code**;
+- a `P…` serial yields the short code of its structured identity (`"1"` + first 15 characters, last 11, first 8), used when no probe code is set.
+
+Sensitivity order for Sibionics 2: probe code, label short code, Bluetooth name, then the `0316015A` fallback (1.44). A Sibionics 1 label is refused, and a label without a decodable code leaves the current setting unchanged.

@@ -66,10 +66,36 @@ private struct Sibionics2WeightedCalibrator: Calibrator {
     func description() -> String { "Sibionics2WeightedCalibrator" }
 }
 
+/// The stored-reading value for either calibration family, evaluated at the reading's own time.
+enum Sibionics2CalibrationValue {
+    static func anchor(_ calibration: Calibration) -> Sibionics2CalibrationAnchor {
+        Sibionics2CalibrationAnchor(
+            sensorMgDl: calibration.estimateRawAtTimeOfCalibration > 0
+                ? calibration.estimateRawAtTimeOfCalibration
+                : calibration.adjustedRawValue,
+            fingerstickMgDl: calibration.bg,
+            timeStamp: calibration.timeStamp
+        )
+    }
+
+    static func calibrated(
+        _ raw: Double, at timeStamp: Date, eligible: [Calibration], profile: Sibionics2CalibrationProfile
+    ) -> Double {
+        if let value = profile.jugglucoValue(raw, at: timeStamp, anchors: eligible.map(anchor)) {
+            return value
+        }
+        if let latest = eligible.last, latest.slope.isFinite, latest.intercept.isFinite, latest.slope > 0 {
+            return latest.slope * raw + latest.intercept
+        }
+        return raw
+    }
+}
+
 /// Recovers the factory readings left at zero by an older Sibionics calibration path.
 /// Each row is evaluated at its own timestamp, so a later fingerstick cannot rewrite history.
 enum Sibionics2ReadingRepair {
-    static func repair(in context: NSManagedObjectContext, sensor: Sensor, mode: Sibionics2CalibrationMode) -> Int {
+    static func repair(in context: NSManagedObjectContext, sensor: Sensor, profile: Sibionics2CalibrationProfile) -> Int {
+        let mode = profile.mode
         var repaired = 0
         context.performAndWait {
             let request: NSFetchRequest<BgReading> = BgReading.fetchRequest()
@@ -88,27 +114,9 @@ enum Sibionics2ReadingRepair {
                     $0.timeStamp <= reading.timeStamp &&
                         $0.timeStamp >= reading.timeStamp.addingTimeInterval(-TimeInterval(mode.calibrationHistoryDays * 24 * 3600))
                 }
-                let value: Double
-                switch mode {
-                case .jugglucoNG:
-                    let anchors = eligible.map {
-                        Sibionics2CalibrationAnchor(
-                            sensorMgDl: $0.estimateRawAtTimeOfCalibration > 0
-                                ? $0.estimateRawAtTimeOfCalibration : $0.adjustedRawValue,
-                            fingerstickMgDl: $0.bg, timeStamp: $0.timeStamp
-                        )
-                    }
-                    value = Sibionics2JugglucoCalibrationMath.calibratedValue(
-                        reading.rawData, at: reading.timeStamp, anchors: anchors
-                    )
-                case .xDripPlus:
-                    if let latest = eligible.last, latest.slope.isFinite, latest.intercept.isFinite,
-                       latest.slope > 0 {
-                        value = latest.slope * reading.rawData + latest.intercept
-                    } else {
-                        value = reading.rawData
-                    }
-                }
+                let value = Sibionics2CalibrationValue.calibrated(
+                    reading.rawData, at: reading.timeStamp, eligible: eligible, profile: profile
+                )
                 guard value.isFinite, value > 0 else { continue }
                 reading.ageAdjustedRawValue = reading.rawData
                 reading.calculatedValue = min(
@@ -132,7 +140,8 @@ enum Sibionics2PersistedReadingReplay {
     }
 
     static func reconcile(in context: NSManagedObjectContext, sensor: Sensor,
-                          glucoseData: [GlucoseData], mode: Sibionics2CalibrationMode) -> [BgReading] {
+                          glucoseData: [GlucoseData], profile: Sibionics2CalibrationProfile) -> [BgReading] {
+        let mode = profile.mode
         var result = [BgReading]()
         context.performAndWait {
             let valid = glucoseData.filter {
@@ -196,22 +205,9 @@ enum Sibionics2PersistedReadingReplay {
                         $0.timeStamp >= reading.timeStamp.addingTimeInterval(-Double(mode.calibrationHistoryDays) * 24 * 3600)
                 }
                 if !reading.calibrationFlag {
-                    let value: Double
-                    switch mode {
-                    case .jugglucoNG:
-                        let anchors = eligible.map {
-                            Sibionics2CalibrationAnchor(sensorMgDl: $0.estimateRawAtTimeOfCalibration > 0
-                                ? $0.estimateRawAtTimeOfCalibration : $0.adjustedRawValue,
-                                fingerstickMgDl: $0.bg, timeStamp: $0.timeStamp)
-                        }
-                        value = Sibionics2JugglucoCalibrationMath.calibratedValue(reading.rawData, at: reading.timeStamp, anchors: anchors)
-                    case .xDripPlus:
-                        if let latest = eligible.last, latest.slope.isFinite, latest.intercept.isFinite, latest.slope > 0 {
-                            value = latest.slope * reading.rawData + latest.intercept
-                        } else {
-                            value = reading.rawData
-                        }
-                    }
+                    let value = Sibionics2CalibrationValue.calibrated(
+                        reading.rawData, at: reading.timeStamp, eligible: eligible, profile: profile
+                    )
                     let corrected = value.isFinite && value > 0 ? value : reading.rawData
                     reading.calculatedValue = min(ConstantsCalibrationAlgorithms.maximumBgReadingCalculatedValueLimit,
                                                   max(ConstantsCalibrationAlgorithms.minimumBgReadingCalculatedValue, corrected))
@@ -230,9 +226,22 @@ enum Sibionics2PersistedReadingReplay {
     }
 }
 
-/// JugglucoNG's default calibration profile: single-point offset, then fresh
-/// weighted OLS with a bounded slope and a small local anchor blend.
+/// JugglucoNG's CalibrationMath applied to the factory-corrected value: a single
+/// fingerstick is an offset; more use the selected algorithm and weight profile.
 final class Sibionics2JugglucoCalibrator: Calibrator {
+    private let profile: Sibionics2CalibrationProfile
+
+    init(profile: Sibionics2CalibrationProfile = Sibionics2CalibrationProfile(mode: .jugglucoNG)) {
+        self.profile = profile.mode.jugglucoAlgorithm == nil
+            ? Sibionics2CalibrationProfile(mode: .jugglucoNG, weighting: profile.weighting,
+                                           mgDlPerDisplayUnit: profile.mgDlPerDisplayUnit)
+            : profile
+    }
+
+    private func calibratedValue(_ value: Double, at timeStamp: Date, anchors: [Sibionics2CalibrationAnchor]) -> Double {
+        profile.jugglucoValue(value, at: timeStamp, anchors: anchors) ?? value
+    }
+
     let rawValueDivider = 1.0
     let ageAdjustMentNeeded = false
     let sParams = SlopeParameters(
@@ -272,7 +281,7 @@ final class Sibionics2JugglucoCalibrator: Calibrator {
         let anchors = Self.uniqueAnchors(
             lastCalibrationsForActiveSensorInLastXDays + [firstCalibration].compactMap { $0 }
         )
-        let corrected = Sibionics2JugglucoCalibrationMath.calibratedValue(
+        let corrected = calibratedValue(
             rawData,
             at: timeStamp ?? Date(),
             anchors: anchors
@@ -311,7 +320,7 @@ final class Sibionics2JugglucoCalibrator: Calibrator {
         for index in lastBgReadingsWithCalculatedValue0AndForSensor.indices {
             let reading = lastBgReadingsWithCalculatedValue0AndForSensor[index]
             reading.calculatedValue = Self.clampedValue(
-                Sibionics2JugglucoCalibrationMath.calibratedValue(
+                calibratedValue(
                     reading.ageAdjustedRawValue,
                     at: max(reading.timeStamp, result.secondCalibration?.timeStamp ?? firstCalibrationTimeStamp),
                     anchors: anchors
@@ -350,7 +359,7 @@ final class Sibionics2JugglucoCalibrator: Calibrator {
             lastCalibrationsForActiveSensorInLastXDays + [firstCalibration, calibration]
         )
         lastBgReading.calculatedValue = Self.clampedValue(
-            Sibionics2JugglucoCalibrationMath.calibratedValue(
+            calibratedValue(
                 lastBgReading.ageAdjustedRawValue,
                 at: max(lastBgReading.timeStamp, calibration.timeStamp),
                 anchors: anchors
@@ -361,17 +370,7 @@ final class Sibionics2JugglucoCalibrator: Calibrator {
 
     private static func uniqueAnchors(_ calibrations: [Calibration]) -> [Sibionics2CalibrationAnchor] {
         var seen = Set<NSManagedObjectID>()
-        return calibrations.filter { seen.insert($0.objectID).inserted }.map { anchor($0) }
-    }
-
-    private static func anchor(_ calibration: Calibration) -> Sibionics2CalibrationAnchor {
-        Sibionics2CalibrationAnchor(
-            sensorMgDl: calibration.estimateRawAtTimeOfCalibration > 0
-                ? calibration.estimateRawAtTimeOfCalibration
-                : calibration.adjustedRawValue,
-            fingerstickMgDl: calibration.bg,
-            timeStamp: calibration.timeStamp
-        )
+        return calibrations.filter { seen.insert($0.objectID).inserted }.map(Sibionics2CalibrationValue.anchor)
     }
 
     private static func clampedValue(_ value: Double) -> Double {

@@ -746,7 +746,8 @@ class Trace {
                         }
 
                     case .Sibionics1Type, .Sibionics2Type:
-                        if blePeripheral.sibionics2 != nil {
+                        // Both types share one entity; report it once, under its own variant.
+                        if let sibionics = blePeripheral.sibionics2, sibionics.variant.peripheralType == bluetoothPeripheralType {
                             traceInfo.appendStringAndNewLine("        Type: " + bluetoothPeripheralType.rawValue)
                             traceInfo.appendStringAndNewLine("        Sensor serial: " + (blePeripheral.sensorSerialNumber ?? "nil"))
                         }

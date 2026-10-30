@@ -50,6 +50,49 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertEqual(codec.deriveSessionKey(variant: .sibionics2), codec.deriveSessionKey())
     }
 
+    func testAuthenticationKeyGroupsLeadWithTheConfiguredVariant() {
+        XCTAssertEqual(codec.deriveSessionKey(group: .eco), Data("GKSHGDU0TYA456G4".utf8))
+        XCTAssertEqual(codec.deriveSessionKey(group: .sijoy), Data("THE544U0TYITE461".utf8))
+        XCTAssertEqual(codec.deriveSessionKey(group: .hematonix), Data("LQSS54U0RURUA99J".utf8))
+        XCTAssertEqual(Sibionics2KeyGroup.authenticationOrder(for: .sibionics2), [.eco, .sijoy, .hematonix])
+        XCTAssertEqual(Sibionics2KeyGroup.authenticationOrder(for: .sibionics1), [.sijoy, .hematonix, .eco])
+        for variant in [SibionicsDeviceVariant.sibionics1, .sibionics2] {
+            XCTAssertEqual(Set(Sibionics2KeyGroup.authenticationOrder(for: variant)), Set(Sibionics2KeyGroup.allCases))
+        }
+    }
+
+    func testV120ParserRecognizesPlainAuthenticationRequiredMarker() {
+        guard case .authenticationRequired = codec.parseV120(Data([0x23, 0xF7, 0x6F, 0xD9, 0xF4])) else {
+            return XCTFail("Expected the plain V120 authentication marker")
+        }
+    }
+
+    func testHandshakeAnswersRepeatedDataRequestAndEarlyStreamingReady() {
+        let now = Date(timeIntervalSince1970: 0x6553F100)
+        var repeated = Sibionics2Handshake(macAddress: [UInt8](repeating: 0, count: 6),
+                                           sessionKey: Data("GKSHGDU0TYA456G4".utf8),
+                                           lastDeliveredIndex: 0x1234)
+        _ = repeated.start(at: now)
+        XCTAssertTrue(repeated.isAwaitingAuthentication)
+        _ = repeated.receive(.authenticationAccepted, at: now)
+        XCTAssertFalse(repeated.isAwaitingAuthentication)
+        assertCommand(repeated.receive(.dataRequested, at: now), equals: [0x06, 0x08, 0x34, 0x12, 0, 0])
+        assertCommand(repeated.receive(.dataRequested, at: now), equals: [0x06, 0x08, 0x34, 0x12, 0, 0])
+        XCTAssertNil(repeated.receive(.streamingReady, at: now))
+        XCTAssertTrue(repeated.isStreaming)
+        XCTAssertNil(repeated.receive(.dataRequested, at: now))
+
+        var earlyReady = Sibionics2Handshake(macAddress: [UInt8](repeating: 0, count: 6),
+                                             sessionKey: Data("GKSHGDU0TYA456G4".utf8),
+                                             lastDeliveredIndex: nil)
+        _ = earlyReady.start(at: now)
+        XCTAssertNil(earlyReady.receive(.streamingReady, at: now), "Ready before auth must be ignored")
+        XCTAssertFalse(earlyReady.isStreaming)
+        _ = earlyReady.receive(.authenticationAccepted, at: now)
+        XCTAssertNil(earlyReady.receive(.streamingReady, at: now))
+        XCTAssertTrue(earlyReady.isStreaming)
+    }
+
     func testChineseRequestIsPlaintextWithLittleEndianCursorAndReversedMAC() {
         let chinese = Sibionics1ChineseProtocolCodec()
         let request = chinese.buildDataRequestPacket(lastIndex: 0x1234, macAddress: testBluetoothAddressBytes)
@@ -107,21 +150,16 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertTrue(readings.isEmpty)
     }
 
-    func testChineseParserRejectsCorruptTruncatedAndExtraPayloads() {
+    func testChineseParserRejectsCorruptAndTruncatedPayloadsLikeJuggluco() {
         let chinese = Sibionics1ChineseProtocolCodec()
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let response = chineseFrame([0xAA, 0x55, 0x09, 1] + [UInt8](repeating: 0, count: 14))
         var corrupt = response
         corrupt[5] ^= 1
-        let echo = chinese.buildDataRequestPacket(lastIndex: 1, macAddress: [])
-        var corruptEcho = echo
-        corruptEcho[5] ^= 1
         let malformed = [
             Data(), Data([0xAA, 0x55, 0x09]), corrupt, Data(response.dropLast()),
             chineseFrame([0xAA, 0x55, 0x09, 2] + [UInt8](repeating: 0, count: 14)),
-            chineseFrame([0xAA, 0x55, 0x09, 0, 0]),
             chineseFrame([0xAA, 0x55, 0x08, 0]),
-            corruptEcho, Data(echo.dropLast()), Data([0xAA, 0x55, 0x07]),
             Data([0x23, 0xF7, 0x6F, 0xD9, 0xF4, 0]), Data([0x23, 0xF7, 0x6F, 0xD9, 0xF5])
         ]
         for frame in malformed {
@@ -130,6 +168,21 @@ final class Sibionics2ProtocolTests: XCTestCase {
                 continue
             }
         }
+        // JugglucoNG treats any AA55 07 frame as the echo and accepts trailing bytes after
+        // the declared entries, provided the frame checksum holds.
+        let echo = chinese.buildDataRequestPacket(lastIndex: 1, macAddress: [])
+        var corruptEcho = echo
+        corruptEcho[5] ^= 1
+        for frame in [corruptEcho, Data(echo.dropLast()), Data([0xAA, 0x55, 0x07])] {
+            guard case .requestEcho = chinese.parse(frame, at: now) else {
+                XCTFail("Echo not recognized: \(frame as NSData)")
+                continue
+            }
+        }
+        guard case .readings(let padded) = chinese.parse(chineseFrame([0xAA, 0x55, 0x09, 0, 0]), at: now) else {
+            return XCTFail("A checksummed frame with trailing bytes is a Chinese response")
+        }
+        XCTAssertTrue(padded.isEmpty)
     }
 
     func testConfirmedProtocolModePersistsPerPeripheralUUIDAndCanBeCleared() throws {
@@ -347,8 +400,9 @@ final class Sibionics2ProtocolTests: XCTestCase {
             for: [.writeWithoutResponse]), .withoutResponse)
         XCTAssertEqual(CGMSibionics2Transmitter.writeType(
             for: [.write]), .withResponse)
+        // The 26-byte auth packet needs an acknowledged (long) write on a 20-byte ATT payload.
         XCTAssertEqual(CGMSibionics2Transmitter.writeType(
-            for: [.write, .writeWithoutResponse]), .withoutResponse)
+            for: [.write, .writeWithoutResponse]), .withResponse)
         XCTAssertNil(CGMSibionics2Transmitter.writeType(for: [.read]))
     }
 
@@ -386,6 +440,65 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertNil(Sibionics2AuthenticationAddress.address(from: Data(repeating: 0, count: 6)))
     }
 
+    func testAuthenticationAddressCandidatesComeFromAdvertisementAndDeviceInformation() {
+        // Company identifier followed by the address in either byte order.
+        let manufacturerData = Data([0x4C, 0x05, 0xC7, 0x71, 0xB0, 0xD1, 0x5B, 0x32])
+        XCTAssertEqual(Sibionics2AuthenticationAddress.advertisementCandidates(manufacturerData: manufacturerData),
+                       ["C7:71:B0:D1:5B:32", "32:5B:D1:B0:71:C7"])
+        XCTAssertEqual(Sibionics2AuthenticationAddress.advertisementCandidates(
+            manufacturerData: Data([0x4C, 0x05, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0xAA])
+        ), ["01:02:03:04:05:06", "06:05:04:03:02:01", "02:03:04:05:06:AA", "AA:06:05:04:03:02"])
+        XCTAssertTrue(Sibionics2AuthenticationAddress.advertisementCandidates(manufacturerData: nil).isEmpty)
+        XCTAssertTrue(Sibionics2AuthenticationAddress.advertisementCandidates(
+            manufacturerData: Data([0x4C, 0x05, 0x01])
+        ).isEmpty)
+        XCTAssertTrue(Sibionics2AuthenticationAddress.advertisementCandidates(
+            manufacturerData: Data([0x4C, 0x05] + [UInt8](repeating: 0xFF, count: 6))
+        ).isEmpty, "An all-FF field is padding, not an address")
+
+        // System ID: device bytes, FFFE, then OUI, all least significant byte first.
+        XCTAssertEqual(Sibionics2AuthenticationAddress.systemIDAddress(
+            Data([0x32, 0x5B, 0xD1, 0xFE, 0xFF, 0xB0, 0x71, 0xC7])
+        ), "C7:71:B0:D1:5B:32")
+        XCTAssertNil(Sibionics2AuthenticationAddress.systemIDAddress(Data([1, 2, 3, 4, 5, 6, 7, 8])))
+        // Captured from P225044UHA: 2A25 = 32 5B D1 B0 71 C7 for address C7:71:B0:D1:5B:32.
+        XCTAssertEqual(Sibionics2AuthenticationAddress.serialNumberAddresses(
+            Data([0x32, 0x5B, 0xD1, 0xB0, 0x71, 0xC7])
+        ), ["C7:71:B0:D1:5B:32", "32:5B:D1:B0:71:C7"])
+        XCTAssertEqual(Sibionics2AuthenticationAddress.serialNumberAddresses(Data("C771B0D15B32".utf8)),
+                       ["C7:71:B0:D1:5B:32"])
+        XCTAssertTrue(Sibionics2AuthenticationAddress.serialNumberAddresses(Data("P123ABCD".utf8)).isEmpty)
+    }
+
+    func testAuthenticationCandidatesTryDetectedThenUnverifiedThenZero() throws {
+        let suiteName = "Sibionics2AuthAddress.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let identifier = "DE1815CA-590A-1AAF-9C98-34082E80A191"
+
+        XCTAssertEqual(Sibionics2AuthenticationAddress.authenticationCandidates(for: identifier, userDefaults: defaults),
+                       [nil])
+        XCTAssertTrue(Sibionics2AuthenticationAddress.addCandidates(
+            ["C7:71:B0:D1:5B:32", "invalid", "32:5B:D1:B0:71:C7"], for: identifier, userDefaults: defaults))
+        XCTAssertFalse(Sibionics2AuthenticationAddress.addCandidates(
+            ["c771b0d15b32"], for: identifier, userDefaults: defaults), "Duplicates are not stored twice")
+        XCTAssertTrue(Sibionics2AuthenticationAddress.setDetected("32:5B:D1:B0:71:C7", for: identifier, userDefaults: defaults))
+        XCTAssertEqual(Sibionics2AuthenticationAddress.authenticationCandidates(for: identifier, userDefaults: defaults),
+                       ["32:5B:D1:B0:71:C7", "C7:71:B0:D1:5B:32", nil])
+        XCTAssertEqual(Sibionics2AuthenticationAddress.macBytes(address: "C7:71:B0:D1:5B:32"),
+                       [0xC7, 0x71, 0xB0, 0xD1, 0x5B, 0x32])
+        XCTAssertEqual(Sibionics2AuthenticationAddress.macBytes(address: nil), [UInt8](repeating: 0, count: 6))
+
+        XCTAssertTrue(Sibionics2AuthenticationAddress.setOverride(testBluetoothAddress, for: identifier, userDefaults: defaults))
+        XCTAssertEqual(Sibionics2AuthenticationAddress.authenticationCandidates(for: identifier, userDefaults: defaults),
+                       [testBluetoothAddress], "A manual address is never rotated away")
+
+        Sibionics2AuthenticationAddress.clearAutomatic(for: identifier, userDefaults: defaults)
+        XCTAssertNil(Sibionics2AuthenticationAddress.detected(for: identifier, userDefaults: defaults))
+        XCTAssertTrue(Sibionics2AuthenticationAddress.candidates(for: identifier, userDefaults: defaults).isEmpty)
+        XCTAssertEqual(Sibionics2AuthenticationAddress.override(for: identifier, userDefaults: defaults), testBluetoothAddress)
+    }
+
     func testFactorySensitivityUsesJugglucoVariantFallbackWhenFactoryCodeIsMissing() {
         // JugglucoNG retries the Sibionics 2 variant token after invalid QR and BLE codes.
         XCTAssertEqual(
@@ -415,21 +528,21 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertEqual(plaintext.reduce(UInt8(0), { $0 &+ $1 }), 0)
     }
 
-    func testSibionics2PollIntervalAndCalibrationModePersistPerPeripheral() throws {
+    func testBatteryLevelAcceptsOnlyOneBytePercentage() {
+        XCTAssertEqual(Sibionics2Battery.percentage(from: Data([87])), 87)
+        XCTAssertEqual(Sibionics2Battery.percentage(from: Data([100])), 100)
+        XCTAssertNil(Sibionics2Battery.percentage(from: Data([101])))
+        XCTAssertNil(Sibionics2Battery.percentage(from: Data()))
+        XCTAssertNil(Sibionics2Battery.percentage(from: Data([50, 0])))
+    }
+
+    func testSibionics2CalibrationModeAndResetSettingsPersistPerPeripheral() throws {
         let suiteName = "Sibionics2ConfigurationTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-A", userDefaults: defaults), .oneMinute)
-        XCTAssertEqual(Sibionics2PollInterval.allCases.map(\.rawValue), [1, 5, 10, 15])
-        for interval in Sibionics2PollInterval.allCases {
-            XCTAssertTrue(Sibionics2Configuration.setPollInterval(interval, for: "sensor-A", userDefaults: defaults))
-            XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-A", userDefaults: defaults), interval)
-        }
         XCTAssertTrue(Sibionics2Configuration.setCalibrationMode(.jugglucoNG, for: "sensor-A", userDefaults: defaults))
-        XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-A", userDefaults: defaults), .fifteenMinutes)
         XCTAssertEqual(Sibionics2Configuration.calibrationMode(for: "sensor-A", userDefaults: defaults), .jugglucoNG)
-        XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-B", userDefaults: defaults), .oneMinute)
         XCTAssertEqual(Sibionics2Configuration.calibrationMode(for: "sensor-B", userDefaults: defaults), .xDripPlus)
         XCTAssertEqual(Sibionics2CalibrationMode.xDripPlus.calibrationHistoryDays, 4)
         XCTAssertEqual(Sibionics2CalibrationMode.jugglucoNG.calibrationHistoryDays, 23)
@@ -472,6 +585,65 @@ final class Sibionics2ProtocolTests: XCTestCase {
             220,
             accuracy: 0.00001
         )
+    }
+
+    func testEveryJugglucoAlgorithmUsesOffsetForOneFingerstickAndKeepsAConstantOffset() {
+        let time = Date(timeIntervalSince1970: 1_800_000_000)
+        let single = [Sibionics2CalibrationAnchor(sensorMgDl: 150, fingerstickMgDl: 165, timeStamp: time)]
+        // A constant +10 mg/dL error: every fit, offset fallback and local snap agree on it.
+        let line = (0..<4).map {
+            Sibionics2CalibrationAnchor(sensorMgDl: 100 + Double($0) * 40,
+                                        fingerstickMgDl: 110 + Double($0) * 40,
+                                        timeStamp: time.addingTimeInterval(Double($0) * 3600))
+        }
+        for algorithm in Sibionics2JugglucoCalibrationAlgorithm.allCases {
+            for weighting in Sibionics2CalibrationWeighting.allCases {
+                for unit in [1, ConstantsBloodGlucose.mmollToMgdl] {
+                    XCTAssertEqual(Sibionics2JugglucoCalibrationMath.calibratedValue(
+                        180, at: time.addingTimeInterval(60), anchors: single,
+                        algorithm: algorithm, weighting: weighting, mgDlPerDisplayUnit: unit
+                    ), 195, accuracy: 0.0001, "\(algorithm) \(weighting) \(unit)")
+                    XCTAssertEqual(Sibionics2JugglucoCalibrationMath.calibratedValue(
+                        200, at: time.addingTimeInterval(4 * 3600), anchors: line,
+                        algorithm: algorithm, weighting: weighting, mgDlPerDisplayUnit: unit
+                    ), 210, accuracy: 0.0001, "\(algorithm) \(weighting) \(unit)")
+                }
+            }
+        }
+        // Fingersticks after the reading are ignored (locked past history), so nothing changes.
+        XCTAssertEqual(Sibionics2JugglucoCalibrationMath.calibratedValue(
+            180, at: time.addingTimeInterval(-60), anchors: single), 180)
+    }
+
+    func testJugglucoSnapDependsOnTheDisplayUnitItWasTunedFor() {
+        let time = Date(timeIntervalSince1970: 1_800_000_000)
+        let anchors = [
+            Sibionics2CalibrationAnchor(sensorMgDl: 90, fingerstickMgDl: 100, timeStamp: time),
+            Sibionics2CalibrationAnchor(sensorMgDl: 180, fingerstickMgDl: 170, timeStamp: time.addingTimeInterval(3600)),
+        ]
+        let mgDl = Sibionics2JugglucoCalibrationMath.calibratedValue(
+            175, at: time.addingTimeInterval(7200), anchors: anchors, mgDlPerDisplayUnit: 1)
+        let mmol = Sibionics2JugglucoCalibrationMath.calibratedValue(
+            175, at: time.addingTimeInterval(7200), anchors: anchors, mgDlPerDisplayUnit: ConstantsBloodGlucose.mmollToMgdl)
+        XCTAssertTrue(mgDl.isFinite && mmol.isFinite)
+        // In mmol/L the 5 mg/dL gap to the nearest fingerstick is small, so its offset pulls harder.
+        XCTAssertNotEqual(mgDl, mmol, accuracy: 0.01)
+    }
+
+    func testCalibrationModesMapToJugglucoAlgorithmsAndKeepStoredValues() throws {
+        XCTAssertNil(Sibionics2CalibrationMode.xDripPlus.jugglucoAlgorithm)
+        XCTAssertEqual(Sibionics2CalibrationMode.jugglucoNG.rawValue, 1, "Existing saved selections must keep meaning")
+        XCTAssertEqual(Sibionics2CalibrationMode.jugglucoNG.jugglucoAlgorithm, .saneWeightedOLS)
+        XCTAssertEqual(Sibionics2CalibrationMode.jugglucoAdaptiveEnsemble.jugglucoAlgorithm, .adaptiveEnsemble)
+        XCTAssertEqual(Sibionics2CalibrationMode.jugglucoMedianSlope.calibrationHistoryDays, 23)
+
+        let suiteName = "Sibionics2CalibrationWeighting.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        XCTAssertEqual(Sibionics2Configuration.calibrationWeighting(for: "sensor-A", userDefaults: defaults), .fresh)
+        XCTAssertTrue(Sibionics2Configuration.setCalibrationWeighting(.stable, for: "sensor-A", userDefaults: defaults))
+        XCTAssertEqual(Sibionics2Configuration.calibrationWeighting(for: "sensor-A", userDefaults: defaults), .stable)
+        XCTAssertEqual(Sibionics2Configuration.calibrationWeighting(for: "sensor-B", userDefaults: defaults), .fresh)
     }
 
     func testAutomaticSensorResetWaitsForStableReadingAndHonorsDisableSetting() {
