@@ -451,9 +451,13 @@ final class Sibionics2ProtocolTests: XCTestCase {
             Data([0x32, 0x5B, 0xD1, 0xFE, 0xFF, 0xB0, 0x71, 0xC7])
         ), "C7:71:B0:D1:5B:32")
         XCTAssertNil(Sibionics2AuthenticationAddress.systemIDAddress(Data([1, 2, 3, 4, 5, 6, 7, 8])))
-        XCTAssertEqual(Sibionics2AuthenticationAddress.serialNumberAddress(Data("C771B0D15B32".utf8)),
-                       "C7:71:B0:D1:5B:32")
-        XCTAssertNil(Sibionics2AuthenticationAddress.serialNumberAddress(Data("P123ABCD".utf8)))
+        // Captured from P225044UHA: 2A25 = 32 5B D1 B0 71 C7 for address C7:71:B0:D1:5B:32.
+        XCTAssertEqual(Sibionics2AuthenticationAddress.serialNumberAddresses(
+            Data([0x32, 0x5B, 0xD1, 0xB0, 0x71, 0xC7])
+        ), ["C7:71:B0:D1:5B:32", "32:5B:D1:B0:71:C7"])
+        XCTAssertEqual(Sibionics2AuthenticationAddress.serialNumberAddresses(Data("C771B0D15B32".utf8)),
+                       ["C7:71:B0:D1:5B:32"])
+        XCTAssertTrue(Sibionics2AuthenticationAddress.serialNumberAddresses(Data("P123ABCD".utf8)).isEmpty)
     }
 
     func testAuthenticationCandidatesTryDetectedThenUnverifiedThenZero() throws {

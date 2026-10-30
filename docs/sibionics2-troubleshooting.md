@@ -33,7 +33,9 @@ iOS does not expose a peripheral's BLE MAC address, and the private CoreBluetoot
 
 - the advertisement manufacturer data, after its 2-byte company identifier, in both byte orders;
 - the Device Information System ID (`2A23`) when it is built from the address with an inserted `FFFE`;
-- a Device Information serial number (`2A25`) that is itself an address.
+- the Device Information serial number (`2A25`). Sibionics 2 publishes the six raw address bytes there, least significant first: `32 5B D1 B0 71 C7` is address `C7:71:B0:D1:5B:32`.
+
+Authentication waits up to 3 seconds for Device Information so the published address is used in the first session.
 
 The sensor accepts any address at authentication, so these values are unverified candidates. Each connection tries one: the detected address first, then the candidates, then the zero address. A connection that ends without glucose readings moves to the next candidate; the first one that produces readings is saved as the detected address and shown as such on the device screen. A manual **Bluetooth address** always takes priority and is never rotated.
 

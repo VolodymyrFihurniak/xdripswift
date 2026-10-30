@@ -88,6 +88,8 @@ enum Sibionics2ConnectionPolicy {
     /// JugglucoNG restarts authentication when a later handshake step is not answered.
     static let handshakeStepTimeout: TimeInterval = 15
     static let maximumHandshakeRestartsPerConnection = 2
+    /// Upper bound on waiting for the Device Information address before authenticating.
+    static let deviceInformationTimeout: TimeInterval = 3
 
     static let historyResponseTimeout: TimeInterval = 90
     static let historyWriteRetryDelay: TimeInterval = 3

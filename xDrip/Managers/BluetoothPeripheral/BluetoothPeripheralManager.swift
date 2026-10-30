@@ -1070,6 +1070,10 @@ class BluetoothPeripheralManager: NSObject {
                         } else {
                             bluetoothTransmitters.insert(nil, at: index)
                         }
+
+                        // Sibionics 1 and 2 share one Core Data entity. Without this break the same
+                        // peripheral is listed twice and two transmitters compete for one BLE link.
+                        break bluetoothPeripheralTypeLoop
                     }
 
                 }

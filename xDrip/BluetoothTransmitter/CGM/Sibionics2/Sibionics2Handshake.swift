@@ -189,10 +189,16 @@ enum Sibionics2AuthenticationAddress {
         return address(from: Data([bytes[7], bytes[6], bytes[5], bytes[2], bytes[1], bytes[0]]))
     }
 
-    /// A Device Information serial number that is itself a BLE address.
-    static func serialNumberAddress(_ data: Data) -> String? {
-        guard let text = String(data: data, encoding: .utf8) else { return nil }
-        return normalize(text.trimmingCharacters(in: .controlCharacters))
+    /// A Device Information serial number that carries the BLE address. Sibionics 2
+    /// publishes the six raw address bytes least significant first (a sensor with
+    /// address C7:71:B0:D1:5B:32 reports 32 5B D1 B0 71 C7); a printable serial is
+    /// accepted when it is itself an address.
+    static func serialNumberAddresses(_ data: Data) -> [String] {
+        if data.count == Sibionics2BluetoothAddressFormat.byteCount {
+            return unique([address(from: Data(data.reversed())), address(from: data)].compactMap { $0 })
+        }
+        guard let text = String(data: data, encoding: .utf8) else { return [] }
+        return normalize(text.trimmingCharacters(in: .controlCharacters)).map { [$0] } ?? []
     }
 
     static func candidates(for identifier: String, userDefaults: UserDefaults = .standard) -> [String] {

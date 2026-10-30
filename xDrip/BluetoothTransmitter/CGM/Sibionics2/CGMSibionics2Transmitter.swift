@@ -31,6 +31,10 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var authenticationAddressInUse: String?
     private var authenticationAddressAwaitingReadings = false
     private var authenticationAddressSelected = false
+    /// Authentication waits for Device Information, which carries the BLE address.
+    private var pendingDeviceInformationReads = 0
+    private var sessionStartDeferred = false
+    private var deviceInformationGeneration = 0
     private var historyRequest = Sibionics2HistoryRequestTracker()
     private var historyRecoveryToken = 0
     private var historyWriteFailures = 0
@@ -165,6 +169,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let manufacturerData = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data
         let candidates = Sibionics2AuthenticationAddress.advertisementCandidates(manufacturerData: manufacturerData)
         guard Sibionics2AuthenticationAddress.addCandidates(candidates, for: identifier) else { return }
+        if identifier.caseInsensitiveCompare(deviceAddress ?? "") == .orderedSame { addressCandidateIndex = 0 }
         trace("Sibionics 2 advertisement manufacturer data=%{public}@ addressCandidates=%{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info,
               manufacturerData?.hexEncodedString() ?? "none", candidates.joined(separator: ","))
@@ -176,7 +181,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             for characteristic in service.characteristics ?? [] where
                 characteristic.uuid == Sibionics2AuthenticationAddress.systemIDCharacteristicUUID ||
                 characteristic.uuid == Sibionics2AuthenticationAddress.serialNumberCharacteristicUUID {
+                pendingDeviceInformationReads += 1
                 peripheral.readValue(for: characteristic)
+            }
+            if pendingDeviceInformationReads == 0, sessionStartDeferred {
+                sessionStartDeferred = false
+                startSession()
             }
             return
         }
@@ -199,6 +209,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         handshakeStepGeneration += 1
         authenticationKeyGroupIndex = 0
         handshakeRestartCount = 0
+        pendingDeviceInformationReads = 0
+        sessionStartDeferred = false
+        deviceInformationGeneration += 1
         handshake = nil
         streamingReady = false
         receivedNonEmptyReadingsPacket = false
@@ -229,7 +242,23 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
               characteristic.uuid == Sibionics2ProtocolCodec.notifyUUID,
               characteristic.isNotifying else { return }
         notificationEnabled = true
-        startSession()
+        let deviceInformationUndiscovered = peripheral.services?.contains {
+            $0.uuid == Sibionics2AuthenticationAddress.deviceInformationServiceUUID && $0.characteristics == nil
+        } ?? false
+        guard pendingDeviceInformationReads > 0 || deviceInformationUndiscovered else {
+            startSession()
+            return
+        }
+        sessionStartDeferred = true
+        let generation = deviceInformationGeneration
+        runOnCentralQueue(after: Sibionics2ConnectionPolicy.deviceInformationTimeout) { [weak self] in
+            guard let self, self.deviceInformationGeneration == generation, self.sessionStartDeferred else { return }
+            trace("Sibionics 2 device information not answered; authenticating without it",
+                  log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+            self.sessionStartDeferred = false
+            self.pendingDeviceInformationReads = 0
+            self.startSession()
+        }
     }
 
     override func peripheral(
@@ -255,15 +284,25 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     private func receiveDeviceInformation(_ characteristic: CBCharacteristic, peripheral: CBPeripheral, error: Error?) {
+        defer {
+            pendingDeviceInformationReads = max(0, pendingDeviceInformationReads - 1)
+            if pendingDeviceInformationReads == 0, sessionStartDeferred {
+                sessionStartDeferred = false
+                startSession()
+            }
+        }
         guard error == nil, let value = characteristic.value else { return }
-        let address = characteristic.uuid == Sibionics2AuthenticationAddress.systemIDCharacteristicUUID
-            ? Sibionics2AuthenticationAddress.systemIDAddress(value)
-            : Sibionics2AuthenticationAddress.serialNumberAddress(value)
-        trace("Sibionics 2 device information %{public}@=%{public}@ addressCandidate=%{public}@",
+        let addresses = characteristic.uuid == Sibionics2AuthenticationAddress.systemIDCharacteristicUUID
+            ? Sibionics2AuthenticationAddress.systemIDAddress(value).map { [$0] } ?? []
+            : Sibionics2AuthenticationAddress.serialNumberAddresses(value)
+        trace("Sibionics 2 device information %{public}@=%{public}@ addressCandidates=%{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info,
-              characteristic.uuid.uuidString, value.hexEncodedString(), address ?? "none")
-        guard let address else { return }
-        Sibionics2AuthenticationAddress.addCandidates([address], for: peripheral.identifier.uuidString)
+              characteristic.uuid.uuidString, value.hexEncodedString(),
+              addresses.isEmpty ? "none" : addresses.joined(separator: ","))
+        if Sibionics2AuthenticationAddress.addCandidates(addresses, for: peripheral.identifier.uuidString) {
+            // A newly published address is tried before candidates that already failed.
+            addressCandidateIndex = 0
+        }
     }
 
     /// The address used in this connection produced readings, so keep it for later sessions.
