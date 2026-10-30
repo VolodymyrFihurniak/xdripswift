@@ -83,6 +83,11 @@ enum Sibionics2ConnectionPolicy {
 
     static let streamingTimeout: TimeInterval = 75
     static let maximumHandshakeReconnectAttempts = 2
+    /// JugglucoNG moves to the next key group when authentication draws no response.
+    static let authenticationResponseTimeout: TimeInterval = 5
+    /// JugglucoNG restarts authentication when a later handshake step is not answered.
+    static let handshakeStepTimeout: TimeInterval = 15
+    static let maximumHandshakeRestartsPerConnection = 2
 
     static let historyResponseTimeout: TimeInterval = 90
     static let historyWriteRetryDelay: TimeInterval = 3

@@ -43,6 +43,8 @@ enum Sibionics2HandshakeResponse: UInt8 {
 
 enum Sibionics2ParseResult {
     case handshake(Sibionics2HandshakeResponse)
+    /// Plain FF31 marker sent when the sensor wants a fresh V120 authentication.
+    case authenticationRequired
     case readings([Sibionics2RawReading])
     case malformed
 }
@@ -63,6 +65,39 @@ enum Sibionics1ChineseParseResult {
     case requestEcho
     case v120AuthRequired
     case malformed
+}
+
+/// Registration key groups accepted by V120 firmware. JugglucoNG tries the
+/// configured variant's group first and falls through the others only when the
+/// sensor does not answer, because an accepted response does not prove the key.
+/// Groups that decode to the same session key (GS3/EU, Chinese/Eco) are listed once.
+enum Sibionics2KeyGroup: CaseIterable {
+    case eco
+    case sijoy
+    case hematonix
+
+    var applicationIdentifier: String {
+        switch self {
+        case .eco: return "com.sisensing.eco"
+        case .sijoy: return "com.sisensing.sijoy"
+        case .hematonix: return "com.sisensing.rusibionics"
+        }
+    }
+
+    var registrationHex: String {
+        switch self {
+        case .eco:
+            return "068449FA5C1B1F97EEC9C1475A8752D5C387D17A65B002D9132489C0BFDFC99F0CAC670E9AB10D62FDE0B2B1E7"
+        case .sijoy:
+            return "56CE249349040C94F8B4B2375A8752D5CBE7A17814B502D9132489C0BFDFC99F0CAC670E8CBB085AF1C780B3D282E3"
+        case .hematonix:
+            return "60B05FEB7C0A148DEED2B3375A8754D9D0E6A5751BCE02D9132489C0BFDFC99F0CAC670E8DA7115CEACF87B7DE8FD4612E1B7638C2"
+        }
+    }
+
+    static func authenticationOrder(for variant: SibionicsDeviceVariant) -> [Sibionics2KeyGroup] {
+        variant == .sibionics1 ? [.sijoy, .hematonix, .eco] : [.eco, .sijoy, .hematonix]
+    }
 }
 
 /// The original Chinese Sibionics 1 protocol has plaintext AA55 frames.
@@ -122,13 +157,14 @@ struct Sibionics2ProtocolCodec {
         0x01, 0x38, 0x0B, 0x9A, 0x00, 0x5B, 0x02, 0x5D,
         0xCD, 0x9E, 0xC3, 0x99, 0x09, 0x37, 0xAA, 0xE8
     ]
-    private static let ecoRegistration = "068449FA5C1B1F97EEC9C1475A8752D5C387D17A65B002D9132489C0BFDFC99F0CAC670E9AB10D62FDE0B2B1E7"
-    private static let sijoyRegistration = "56CE249349040C94F8B4B2375A8752D5CBE7A17814B502D9132489C0BFDFC99F0CAC670E8CBB085AF1C780B3D282E3"
-
+    private static let authenticationRequiredMarker: [UInt8] = [0x23, 0xF7, 0x6F, 0xD9, 0xF4]
+    /// V120 session key for the variant's own key group.
     func deriveSessionKey(variant: SibionicsDeviceVariant = .sibionics2) -> Data? {
-        let registrationHex = variant == .sibionics1 ? Self.sijoyRegistration : Self.ecoRegistration
-        let identity = variant == .sibionics1 ? "com.sisensing.sijoy" : "com.sisensing.eco"
-        let characters = Array(registrationHex.utf8)
+        deriveSessionKey(group: Sibionics2KeyGroup.authenticationOrder(for: variant)[0])
+    }
+
+    func deriveSessionKey(group: Sibionics2KeyGroup) -> Data? {
+        let characters = Array(group.registrationHex.utf8)
         guard characters.count.isMultiple(of: 2) else { return nil }
         var registration = [UInt8]()
         registration.reserveCapacity(characters.count / 2)
@@ -138,9 +174,11 @@ struct Sibionics2ProtocolCodec {
             registration.append(byte)
         }
         let decoded = [UInt8](decrypt(Data(registration)))
-        guard decoded.count >= 22 + identity.utf8.count,
-              let identity = String(bytes: decoded[22...], encoding: .utf8),
-              identity.hasPrefix(variant == .sibionics1 ? "com.sisensing.sijoy" : "com.sisensing.eco") else { return nil }
+        guard decoded.count >= 22 + group.applicationIdentifier.utf8.count else { return nil }
+        // The identity is followed by unprintable padding, so only its printable prefix is compared.
+        let identityBytes = decoded[22...].prefix(while: { (0x20...0x7E).contains($0) })
+        guard let identity = String(bytes: identityBytes, encoding: .ascii),
+              identity.hasPrefix(group.applicationIdentifier) else { return nil }
         return Data(decoded[6..<22])
     }
 
@@ -168,6 +206,7 @@ struct Sibionics2ProtocolCodec {
     func decrypt(_ data: Data) -> Data { encrypt(data) }
 
     func parseV120(_ data: Data) -> Sibionics2ParseResult {
+        if [UInt8](data) == Self.authenticationRequiredMarker { return .authenticationRequired }
         let packet = [UInt8](decrypt(data))
         guard packet.count >= 5, Int(packet[0]) + 1 == packet.count,
               packet.reduce(UInt8(0), { $0 &+ $1 }) == 0 else { return .malformed }

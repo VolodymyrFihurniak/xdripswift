@@ -50,6 +50,49 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertEqual(codec.deriveSessionKey(variant: .sibionics2), codec.deriveSessionKey())
     }
 
+    func testAuthenticationKeyGroupsLeadWithTheConfiguredVariant() {
+        XCTAssertEqual(codec.deriveSessionKey(group: .eco), Data("GKSHGDU0TYA456G4".utf8))
+        XCTAssertEqual(codec.deriveSessionKey(group: .sijoy), Data("THE544U0TYITE461".utf8))
+        XCTAssertEqual(codec.deriveSessionKey(group: .hematonix), Data("LQSS54U0RURUA99J".utf8))
+        XCTAssertEqual(Sibionics2KeyGroup.authenticationOrder(for: .sibionics2), [.eco, .sijoy, .hematonix])
+        XCTAssertEqual(Sibionics2KeyGroup.authenticationOrder(for: .sibionics1), [.sijoy, .hematonix, .eco])
+        for variant in [SibionicsDeviceVariant.sibionics1, .sibionics2] {
+            XCTAssertEqual(Set(Sibionics2KeyGroup.authenticationOrder(for: variant)), Set(Sibionics2KeyGroup.allCases))
+        }
+    }
+
+    func testV120ParserRecognizesPlainAuthenticationRequiredMarker() {
+        guard case .authenticationRequired = codec.parseV120(Data([0x23, 0xF7, 0x6F, 0xD9, 0xF4])) else {
+            return XCTFail("Expected the plain V120 authentication marker")
+        }
+    }
+
+    func testHandshakeAnswersRepeatedDataRequestAndEarlyStreamingReady() {
+        let now = Date(timeIntervalSince1970: 0x6553F100)
+        var repeated = Sibionics2Handshake(macAddress: [UInt8](repeating: 0, count: 6),
+                                           sessionKey: Data("GKSHGDU0TYA456G4".utf8),
+                                           lastDeliveredIndex: 0x1234)
+        _ = repeated.start(at: now)
+        XCTAssertTrue(repeated.isAwaitingAuthentication)
+        _ = repeated.receive(.authenticationAccepted, at: now)
+        XCTAssertFalse(repeated.isAwaitingAuthentication)
+        assertCommand(repeated.receive(.dataRequested, at: now), equals: [0x06, 0x08, 0x34, 0x12, 0, 0])
+        assertCommand(repeated.receive(.dataRequested, at: now), equals: [0x06, 0x08, 0x34, 0x12, 0, 0])
+        XCTAssertNil(repeated.receive(.streamingReady, at: now))
+        XCTAssertTrue(repeated.isStreaming)
+        XCTAssertNil(repeated.receive(.dataRequested, at: now))
+
+        var earlyReady = Sibionics2Handshake(macAddress: [UInt8](repeating: 0, count: 6),
+                                             sessionKey: Data("GKSHGDU0TYA456G4".utf8),
+                                             lastDeliveredIndex: nil)
+        _ = earlyReady.start(at: now)
+        XCTAssertNil(earlyReady.receive(.streamingReady, at: now), "Ready before auth must be ignored")
+        XCTAssertFalse(earlyReady.isStreaming)
+        _ = earlyReady.receive(.authenticationAccepted, at: now)
+        XCTAssertNil(earlyReady.receive(.streamingReady, at: now))
+        XCTAssertTrue(earlyReady.isStreaming)
+    }
+
     func testChineseRequestIsPlaintextWithLittleEndianCursorAndReversedMAC() {
         let chinese = Sibionics1ChineseProtocolCodec()
         let request = chinese.buildDataRequestPacket(lastIndex: 0x1234, macAddress: testBluetoothAddressBytes)
@@ -347,8 +390,9 @@ final class Sibionics2ProtocolTests: XCTestCase {
             for: [.writeWithoutResponse]), .withoutResponse)
         XCTAssertEqual(CGMSibionics2Transmitter.writeType(
             for: [.write]), .withResponse)
+        // The 26-byte auth packet needs an acknowledged (long) write on a 20-byte ATT payload.
         XCTAssertEqual(CGMSibionics2Transmitter.writeType(
-            for: [.write, .writeWithoutResponse]), .withoutResponse)
+            for: [.write, .writeWithoutResponse]), .withResponse)
         XCTAssertNil(CGMSibionics2Transmitter.writeType(for: [.read]))
     }
 

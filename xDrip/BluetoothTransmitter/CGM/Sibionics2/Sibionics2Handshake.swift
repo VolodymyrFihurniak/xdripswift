@@ -246,6 +246,11 @@ struct Sibionics2Handshake {
         return false
     }
 
+    var isAwaitingAuthentication: Bool {
+        if case .awaitingAuthentication = phase { return true }
+        return false
+    }
+
     /// A valid data frame itself establishes streaming on V120; some firmware
     /// does not send a separate streaming-ready acknowledgement.
     mutating func receiveReadings() -> Bool {
@@ -271,7 +276,12 @@ struct Sibionics2Handshake {
         case (.awaitingTimeSync, .dataRequested), (.awaitingDataRequest, .dataRequested):
             phase = .awaitingStreaming
             return codec.buildDataRequestPacket(lastIndex: lastDeliveredIndex ?? 0)
-        case (.awaitingStreaming, .streamingReady):
+        case (.awaitingStreaming, .dataRequested):
+            // The sensor repeats the request when the previous write did not arrive.
+            return codec.buildDataRequestPacket(lastIndex: lastDeliveredIndex ?? 0)
+        case (.awaitingTimeSync, .streamingReady), (.awaitingDataRequest, .streamingReady),
+             (.awaitingStreaming, .streamingReady):
+            // Some firmware acknowledges streaming without asking for a data request.
             phase = .streaming
             return nil
         default:

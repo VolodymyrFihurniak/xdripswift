@@ -23,6 +23,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var notificationEnabled = false
     private var handshakeAttempt = 0
     private var handshakeReconnectCount = 0
+    private var authenticationKeyGroupIndex = 0
+    private var handshakeStepGeneration = 0
+    private var handshakeRestartCount = 0
     private var historyRequest = Sibionics2HistoryRequestTracker()
     private var historyRecoveryToken = 0
     private var historyWriteFailures = 0
@@ -141,9 +144,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
 
+    /// Prefer acknowledged writes like JugglucoNG. The 26-byte V120 auth packet
+    /// exceeds the default 20-byte ATT payload, and CoreBluetooth only splits
+    /// acknowledged writes; an oversized write without response never reaches the sensor.
     static func writeType(for properties: CBCharacteristicProperties) -> CBCharacteristicWriteType? {
-        if properties.contains(.writeWithoutResponse) { return .withoutResponse }
         if properties.contains(.write) { return .withResponse }
+        if properties.contains(.writeWithoutResponse) { return .withoutResponse }
         return nil
     }
 
@@ -165,6 +171,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         readingPollGeneration += 1
         resetDisconnectGeneration += 1
         handshakeAttempt += 1
+        handshakeStepGeneration += 1
+        authenticationKeyGroupIndex = 0
+        handshakeRestartCount = 0
         handshake = nil
         streamingReady = false
         receivedNonEmptyReadingsPacket = false
@@ -236,6 +245,14 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             trace("Sibionics 2 rejected V120 notification of %{public}@ bytes", log: transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
                   value.count.description)
+        case .authenticationRequired:
+            // An unanswered auth is handled by its own timeout; only restart a session that moved past it.
+            guard handshake?.isAwaitingAuthentication != true, let address = deviceAddress else { return }
+            trace("Sibionics 2 FF31 requested authentication; restarting handshake",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+            streamingReady = false
+            readingPollGeneration += 1
+            sendAuthentication(for: address)
         case .handshake(let response):
             if variant == .sibionics1, let address = deviceAddress {
                 sibionics1Connection?.confirm(.v120)
@@ -285,6 +302,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             self.historyRequest.reset()
             self.historyRecoveryToken += 1
             self.handshakeAttempt += 1
+            self.handshakeStepGeneration += 1
         }
         super.prepareForRelease()
     }
@@ -536,6 +554,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
     private func startSession() {
         probeGeneration += 1
+        authenticationKeyGroupIndex = 0
+        handshakeRestartCount = 0
         guard variant == .sibionics1, let address = deviceAddress else {
             startHandshake()
             return
@@ -582,7 +602,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     private func startHandshake() {
-        guard let address = deviceAddress, let sessionKey = codec.deriveSessionKey(variant: variant) else {
+        guard let address = deviceAddress else {
             trace("could not initialize Sibionics 2 authentication", log: transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
             return
@@ -597,22 +617,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         historyWriteFailures = 0
         handshakeAttempt += 1
         let attempt = handshakeAttempt
-        let manualAddress = Sibionics2AuthenticationAddress.override(for: address)
-        let detectedAddress = Sibionics2AuthenticationAddress.detected(for: address)
-        trace("Sibionics 2 authentication address source=%{public}@",
-              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
-              type: .info,
-              manualAddress != nil ? "manual override" : detectedAddress != nil ? "private selector" : "zero fallback")
-        let probeAfterReset = variant.supportsReset && Sibionics2Configuration.resetProbePending(for: address)
-        var newHandshake = Sibionics2Handshake(
-            macAddress: Sibionics2AuthenticationAddress.macBytes(for: address),
-            sessionKey: sessionKey,
-            lastDeliveredIndex: probeAfterReset ? nil : batchProcessor?.state?.lastDeliveredIndex
-        )
-        let command = newHandshake.start(at: Date())
-        guard !command.isEmpty else { return }
-        handshake = newHandshake
-        _ = writeCommand(command, label: "auth")
+        guard sendAuthentication(for: address) else { return }
         scheduleAutoResetCheck(for: address)
         runOnCentralQueue(after: Sibionics2ConnectionPolicy.streamingTimeout) { [weak self] in
             guard let self, self.handshakeAttempt == attempt else { return }
@@ -627,12 +632,88 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             trace("Sibionics 2 handshake stalled: FF31 has not begun streaming",
                   log: self.transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
-            if self.notificationEnabled &&
-                self.handshakeReconnectCount < Sibionics2ConnectionPolicy.maximumHandshakeReconnectAttempts {
-                self.handshakeReconnectCount += 1
-                self.disconnect()
+            self.reconnectAfterStalledHandshake()
+        }
+    }
+
+    /// Builds a fresh handshake with the current key group and writes its auth
+    /// packet. Used for the first attempt and for in-connection retries, which
+    /// keep the connection-wide streaming timeout armed by `startHandshake`.
+    @discardableResult
+    private func sendAuthentication(for address: String) -> Bool {
+        let keyGroups = Sibionics2KeyGroup.authenticationOrder(for: variant)
+        guard keyGroups.indices.contains(authenticationKeyGroupIndex),
+              let sessionKey = codec.deriveSessionKey(group: keyGroups[authenticationKeyGroupIndex]) else {
+            trace("could not initialize Sibionics 2 authentication", log: transmitterLog,
+                  category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+            return false
+        }
+        let manualAddress = Sibionics2AuthenticationAddress.override(for: address)
+        let detectedAddress = Sibionics2AuthenticationAddress.detected(for: address)
+        trace("Sibionics 2 authentication address source=%{public}@ keyGroup=%{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+              type: .info,
+              manualAddress != nil ? "manual override" : detectedAddress != nil ? "private selector" : "zero fallback",
+              keyGroups[authenticationKeyGroupIndex].applicationIdentifier)
+        let probeAfterReset = variant.supportsReset && Sibionics2Configuration.resetProbePending(for: address)
+        var newHandshake = Sibionics2Handshake(
+            macAddress: Sibionics2AuthenticationAddress.macBytes(for: address),
+            sessionKey: sessionKey,
+            lastDeliveredIndex: probeAfterReset ? nil : batchProcessor?.state?.lastDeliveredIndex
+        )
+        let command = newHandshake.start(at: Date())
+        guard !command.isEmpty else { return false }
+        handshake = newHandshake
+        _ = writeCommand(command, label: "auth")
+        scheduleHandshakeStepTimeout()
+        return true
+    }
+
+    /// Mirrors JugglucoNG's auth and handshake-step timeouts: no auth response
+    /// moves to the next key group, and a stalled later step restarts auth.
+    private func scheduleHandshakeStepTimeout() {
+        handshakeStepGeneration += 1
+        let generation = handshakeStepGeneration
+        let delay = handshake?.isAwaitingAuthentication == true
+            ? Sibionics2ConnectionPolicy.authenticationResponseTimeout
+            : Sibionics2ConnectionPolicy.handshakeStepTimeout
+        runOnCentralQueue(after: delay) { [weak self] in
+            guard let self,
+                  self.handshakeStepGeneration == generation,
+                  let handshake = self.handshake, !handshake.isStreaming,
+                  self.getConnectionStatus() == .connected,
+                  let address = self.deviceAddress else { return }
+            if handshake.isAwaitingAuthentication {
+                self.tryNextAuthenticationKeyGroup(for: address)
+            } else if self.handshakeRestartCount < Sibionics2ConnectionPolicy.maximumHandshakeRestartsPerConnection {
+                self.handshakeRestartCount += 1
+                trace("Sibionics 2 handshake step timed out; restarting authentication",
+                      log: self.transmitterLog,
+                      category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+                self.sendAuthentication(for: address)
             }
         }
+    }
+
+    private func tryNextAuthenticationKeyGroup(for address: String) {
+        authenticationKeyGroupIndex += 1
+        guard authenticationKeyGroupIndex < Sibionics2KeyGroup.authenticationOrder(for: variant).count else {
+            authenticationKeyGroupIndex = 0
+            trace("Sibionics 2 authentication was not answered with any key group",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+            reconnectAfterStalledHandshake()
+            return
+        }
+        trace("Sibionics 2 authentication not answered; retrying with the next key group",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+        sendAuthentication(for: address)
+    }
+
+    private func reconnectAfterStalledHandshake() {
+        guard notificationEnabled,
+              handshakeReconnectCount < Sibionics2ConnectionPolicy.maximumHandshakeReconnectAttempts else { return }
+        handshakeReconnectCount += 1
+        disconnect()
     }
 
     private func makeBatchProcessor(for address: String) -> Sibionics2ReadingBatchProcessor {
@@ -706,6 +787,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             case .streamingReady: label = "unexpected"
             }
             _ = writeCommand(nextCommand, label: label)
+            scheduleHandshakeStepTimeout()
         } else if !wasStreaming && handshake.isStreaming {
             if let address = deviceAddress {
                 markStreamingReady(for: address)
