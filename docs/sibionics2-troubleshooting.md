@@ -46,3 +46,15 @@ If detection still fails, export a trace and look for `advertisement manufacture
 There is no polling setting. V120 sensors (Sibionics 2 and EU Sibionics 1) stream on their own after the handshake, as in JugglucoNG. Chinese Sibionics 1 firmware only answers requests, so it is asked once a minute while connected and every 30 seconds until its first page. A session that stays connected but delivers no readings for 3 minutes is reconnected.
 
 The standard Battery Service level is read at each connection and every 6 hours while streaming.
+
+## Calibration methods
+
+xDrip+ uses xDrip's own weighted calibration. The JugglucoNG methods are ports of JugglucoNG's `CalibrationMath`, which its Sibionics driver applies to the stock value through the integrated calibration lane:
+
+- **Weighted OLS** (JugglucoNG default): recency-weighted regression, slope 0.65–1.35, with a small pull towards the nearest fingerstick.
+- **Median slope**: Theil-Sen style median over the twelve fingersticks nearest in time.
+- **Robust regression**: Huber-style reweighting that discounts outlying fingersticks.
+- **Elastic interpolation**: a local fit weighted by glucose proximity, blended with the robust trend.
+- **Adaptive ensemble**: a weighted blend of the four above.
+
+One fingerstick is always a plain offset. **Calibration weighting** (Fresh, the JugglucoNG default; Balanced; Stable) sets how quickly older fingersticks lose influence. JugglucoNG evaluates the fit in the user's display unit, so the calculation follows xDrip's mg/dL or mmol/L setting. Only fingersticks taken at or before a reading affect it.

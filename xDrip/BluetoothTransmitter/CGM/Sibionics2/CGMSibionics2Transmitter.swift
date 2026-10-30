@@ -506,10 +506,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
 
-    var calibrationMode: Sibionics2CalibrationMode {
-        guard let address = deviceAddress else { return .xDripPlus }
-        return Sibionics2Configuration.calibrationMode(for: address)
-    }
+    var calibrationMode: Sibionics2CalibrationMode { calibrationProfile.mode }
+
+    var calibrationProfile: Sibionics2CalibrationProfile { .current(for: deviceAddress) }
 
     func autoResetSettingDidChange(for address: String) {
         runOnCentralQueue { [weak self] in

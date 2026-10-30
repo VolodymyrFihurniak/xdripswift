@@ -577,6 +577,65 @@ final class Sibionics2ProtocolTests: XCTestCase {
         )
     }
 
+    func testEveryJugglucoAlgorithmUsesOffsetForOneFingerstickAndKeepsAConstantOffset() {
+        let time = Date(timeIntervalSince1970: 1_800_000_000)
+        let single = [Sibionics2CalibrationAnchor(sensorMgDl: 150, fingerstickMgDl: 165, timeStamp: time)]
+        // A constant +10 mg/dL error: every fit, offset fallback and local snap agree on it.
+        let line = (0..<4).map {
+            Sibionics2CalibrationAnchor(sensorMgDl: 100 + Double($0) * 40,
+                                        fingerstickMgDl: 110 + Double($0) * 40,
+                                        timeStamp: time.addingTimeInterval(Double($0) * 3600))
+        }
+        for algorithm in Sibionics2JugglucoCalibrationAlgorithm.allCases {
+            for weighting in Sibionics2CalibrationWeighting.allCases {
+                for unit in [1, ConstantsBloodGlucose.mmollToMgdl] {
+                    XCTAssertEqual(Sibionics2JugglucoCalibrationMath.calibratedValue(
+                        180, at: time.addingTimeInterval(60), anchors: single,
+                        algorithm: algorithm, weighting: weighting, mgDlPerDisplayUnit: unit
+                    ), 195, accuracy: 0.0001, "\(algorithm) \(weighting) \(unit)")
+                    XCTAssertEqual(Sibionics2JugglucoCalibrationMath.calibratedValue(
+                        200, at: time.addingTimeInterval(4 * 3600), anchors: line,
+                        algorithm: algorithm, weighting: weighting, mgDlPerDisplayUnit: unit
+                    ), 210, accuracy: 0.0001, "\(algorithm) \(weighting) \(unit)")
+                }
+            }
+        }
+        // Fingersticks after the reading are ignored (locked past history), so nothing changes.
+        XCTAssertEqual(Sibionics2JugglucoCalibrationMath.calibratedValue(
+            180, at: time.addingTimeInterval(-60), anchors: single), 180)
+    }
+
+    func testJugglucoSnapDependsOnTheDisplayUnitItWasTunedFor() {
+        let time = Date(timeIntervalSince1970: 1_800_000_000)
+        let anchors = [
+            Sibionics2CalibrationAnchor(sensorMgDl: 90, fingerstickMgDl: 100, timeStamp: time),
+            Sibionics2CalibrationAnchor(sensorMgDl: 180, fingerstickMgDl: 170, timeStamp: time.addingTimeInterval(3600)),
+        ]
+        let mgDl = Sibionics2JugglucoCalibrationMath.calibratedValue(
+            175, at: time.addingTimeInterval(7200), anchors: anchors, mgDlPerDisplayUnit: 1)
+        let mmol = Sibionics2JugglucoCalibrationMath.calibratedValue(
+            175, at: time.addingTimeInterval(7200), anchors: anchors, mgDlPerDisplayUnit: ConstantsBloodGlucose.mmollToMgdl)
+        XCTAssertTrue(mgDl.isFinite && mmol.isFinite)
+        // In mmol/L the 5 mg/dL gap to the nearest fingerstick is small, so its offset pulls harder.
+        XCTAssertNotEqual(mgDl, mmol, accuracy: 0.01)
+    }
+
+    func testCalibrationModesMapToJugglucoAlgorithmsAndKeepStoredValues() throws {
+        XCTAssertNil(Sibionics2CalibrationMode.xDripPlus.jugglucoAlgorithm)
+        XCTAssertEqual(Sibionics2CalibrationMode.jugglucoNG.rawValue, 1, "Existing saved selections must keep meaning")
+        XCTAssertEqual(Sibionics2CalibrationMode.jugglucoNG.jugglucoAlgorithm, .saneWeightedOLS)
+        XCTAssertEqual(Sibionics2CalibrationMode.jugglucoAdaptiveEnsemble.jugglucoAlgorithm, .adaptiveEnsemble)
+        XCTAssertEqual(Sibionics2CalibrationMode.jugglucoMedianSlope.calibrationHistoryDays, 23)
+
+        let suiteName = "Sibionics2CalibrationWeighting.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        XCTAssertEqual(Sibionics2Configuration.calibrationWeighting(for: "sensor-A", userDefaults: defaults), .fresh)
+        XCTAssertTrue(Sibionics2Configuration.setCalibrationWeighting(.stable, for: "sensor-A", userDefaults: defaults))
+        XCTAssertEqual(Sibionics2Configuration.calibrationWeighting(for: "sensor-A", userDefaults: defaults), .stable)
+        XCTAssertEqual(Sibionics2Configuration.calibrationWeighting(for: "sensor-B", userDefaults: defaults), .fresh)
+    }
+
     func testAutomaticSensorResetWaitsForStableReadingAndHonorsDisableSetting() {
         XCTAssertEqual(Sibionics2SensorProfile.expectedLifeInDays, 23)
         XCTAssertEqual(Sibionics2AutoResetPolicy.expectedSensorLifeDays, 23)

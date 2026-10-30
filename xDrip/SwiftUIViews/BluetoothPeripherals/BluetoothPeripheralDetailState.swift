@@ -742,6 +742,7 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             ]
         )
         let calibrationModes = Sibionics2CalibrationMode.allCases
+        let calibrationWeightings = Sibionics2CalibrationWeighting.allCases
         let settingsSection = BluetoothPeripheralDetailSection(
             id: "sibionics2-settings",
             title: expectedBluetoothPeripheralType == .Sibionics1Type ? Texts_BluetoothPeripheralView.sibionics1SettingsTitle : Texts_BluetoothPeripheralView.sibionics2SettingsTitle,
@@ -773,6 +774,23 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                         })
                     }
                 ),
+                row(
+                    id: "sibionics2-calibration-weighting",
+                    title: Texts_BluetoothPeripheralView.sibionics2CalibrationWeightingTitle,
+                    detail: Sibionics2Configuration.calibrationWeighting(for: address).title,
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        self?.presentSelectionListView(BluetoothPeripheralSelectionList(
+                            title: Texts_BluetoothPeripheralView.sibionics2CalibrationWeightingTitle,
+                            explanation: Texts_BluetoothPeripheralView.sibionics2CalibrationWeightingFooter,
+                            data: calibrationWeightings.map(\.title),
+                            selectedRow: calibrationWeightings.firstIndex(of: Sibionics2Configuration.calibrationWeighting(for: address))
+                        ) { [weak self] index in
+                            guard calibrationWeightings.indices.contains(index) else { return }
+                            self?.saveSibionics2CalibrationWeighting(calibrationWeightings[index], for: bluetoothPeripheral)
+                        })
+                    }
+                ),
                 toggleRow(
                     id: "sibionics2-auto-reset",
                     title: Texts_BluetoothPeripheralView.sibionics2AutoResetTitle,
@@ -791,8 +809,11 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                     }
                 )
             ].filter { row in
-                expectedBluetoothPeripheralType != .Sibionics1Type ||
-                    (row.id != "sibionics2-auto-reset" && row.id != "sibionics2-reset")
+                // The weight profile is a JugglucoNG setting; xDrip+ calibration has its own weighting.
+                (row.id != "sibionics2-calibration-weighting" ||
+                    Sibionics2Configuration.calibrationMode(for: address).jugglucoAlgorithm != nil) &&
+                (expectedBluetoothPeripheralType != .Sibionics1Type ||
+                    (row.id != "sibionics2-auto-reset" && row.id != "sibionics2-reset"))
             }
         )
         return [connectionSection, settingsSection]
@@ -1987,6 +2008,18 @@ private extension BluetoothPeripheralDetailState {
         trace("Sibionics 2 calibration method changed to %{public}@",
               log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController,
               type: .info, mode.title)
+        refresh()
+    }
+
+    func saveSibionics2CalibrationWeighting(_ weighting: Sibionics2CalibrationWeighting, for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        guard weighting != Sibionics2Configuration.calibrationWeighting(for: address),
+              Sibionics2Configuration.setCalibrationWeighting(weighting, for: address) else { return }
+        // Same refresh as a method change: the calibrator is rebuilt with the new profile.
+        bluetoothPeripheralManager?.cgmConfigurationDidChange(for: bluetoothPeripheral)
+        trace("Sibionics calibration weighting changed to %{public}@",
+              log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController,
+              type: .info, weighting.title)
         refresh()
     }
 

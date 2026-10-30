@@ -324,7 +324,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         let other = reading(150, at: 420, sensor: otherSensor)
         try context.save()
 
-        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: .jugglucoNG), 2)
+        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, profile: Sibionics2CalibrationProfile(mode: .jugglucoNG)), 2)
         XCTAssertEqual(before.calculatedValue, 120)
         XCTAssertEqual(after.calculatedValue, 145)
         XCTAssertEqual(manual.calculatedValue, 0)
@@ -333,7 +333,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(other.calculatedValue, 0)
         XCTAssertEqual(future.bg, 145)
         XCTAssertEqual(later.bg, 160)
-        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: .jugglucoNG), 0)
+        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, profile: Sibionics2CalibrationProfile(mode: .jugglucoNG)), 0)
         try context.save()
         context.reset()
         let stored = try context.fetch(NSFetchRequest<BgReading>(entityName: "BgReading"))
@@ -355,7 +355,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
             calibration: nil, rawData: 125, deviceName: nil, nsManagedObjectContext: context)
         try context.save()
 
-        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: .xDripPlus), 2)
+        XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, profile: Sibionics2CalibrationProfile(mode: .xDripPlus)), 2)
         XCTAssertEqual(before.calculatedValue, 125)
         XCTAssertEqual(reading.calculatedValue, 180, accuracy: 0.00001)
         XCTAssertEqual(reading.ageAdjustedRawValue, 125)
@@ -376,7 +376,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
                 calibration: nil, rawData: 125, deviceName: nil, nsManagedObjectContext: context)
             try context.save()
 
-            XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, mode: mode), 1)
+            XCTAssertEqual(Sibionics2ReadingRepair.repair(in: context, sensor: sensor, profile: Sibionics2CalibrationProfile(mode: mode)), 1)
             XCTAssertEqual(reading.calculatedValue, 180, accuracy: 0.00001, "Mode: \(mode)")
         }
     }
@@ -402,7 +402,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         let stableID = row.id
         let data = [GlucoseData(timeStamp: at.addingTimeInterval(5), glucoseLevelRaw: 150)]
         XCTAssertFalse(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                         glucoseData: data, mode: .xDripPlus).isEmpty)
+                         glucoseData: data, profile: Sibionics2CalibrationProfile(mode: .xDripPlus)).isEmpty)
         XCTAssertEqual(row.rawData, 150)
         XCTAssertEqual(row.ageAdjustedRawValue, 150)
         XCTAssertEqual(row.calculatedValue, 150)
@@ -414,7 +414,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(neighbor.rawData, 120, "A neighboring minute is not the same sample")
         XCTAssertEqual(unrelated.calculatedValue, 90)
         XCTAssertTrue(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                         glucoseData: data, mode: .xDripPlus).isEmpty)
+                         glucoseData: data, profile: Sibionics2CalibrationProfile(mode: .xDripPlus)).isEmpty)
         try context.save()
         context.reset()
         let stored = try context.fetch(NSFetchRequest<BgReading>(entityName: "BgReading"))
@@ -442,7 +442,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
             let corrected = [GlucoseData(timeStamp: at, glucoseLevelRaw: 120),
                              GlucoseData(timeStamp: after.timeStamp, glucoseLevelRaw: 144)]
             XCTAssertFalse(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                              glucoseData: corrected, mode: mode).isEmpty)
+                              glucoseData: corrected, profile: Sibionics2CalibrationProfile(mode: mode)).isEmpty)
             XCTAssertEqual(anchor.rawValue, 120, accuracy: 0.00001)
             XCTAssertEqual(anchor.estimateRawAtTimeOfCalibration, 120, accuracy: 0.00001)
             XCTAssertEqual(anchor.bg, 150)
@@ -454,7 +454,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
             let restored = [GlucoseData(timeStamp: at, glucoseLevelRaw: 100),
                             GlucoseData(timeStamp: after.timeStamp, glucoseLevelRaw: 120)]
             _ = Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                    glucoseData: restored, mode: mode)
+                    glucoseData: restored, profile: Sibionics2CalibrationProfile(mode: mode))
             XCTAssertEqual(anchor.rawValue, 100, accuracy: 0.00001)
             XCTAssertEqual(after.calculatedValue, 170, accuracy: 0.00001)
             XCTAssertEqual(manual.calculatedValue, 150)
@@ -473,7 +473,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
                      [GlucoseData(timeStamp: at, glucoseLevelRaw: .nan)],
                      [GlucoseData(timeStamp: at, glucoseLevelRaw: 0)]] {
             XCTAssertTrue(Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                              glucoseData: data, mode: .jugglucoNG).isEmpty)
+                              glucoseData: data, profile: Sibionics2CalibrationProfile(mode: .jugglucoNG)).isEmpty)
         }
         XCTAssertEqual(row.calculatedValue, 100)
     }
@@ -492,7 +492,7 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         for mode in Sibionics2CalibrationMode.allCases {
             let value = mode == .xDripPlus ? 110.0 : 120.0
             _ = Sibionics2PersistedReadingReplay.reconcile(in: context, sensor: sensor,
-                    glucoseData: [GlucoseData(timeStamp: at, glucoseLevelRaw: value)], mode: mode)
+                    glucoseData: [GlucoseData(timeStamp: at, glucoseLevelRaw: value)], profile: Sibionics2CalibrationProfile(mode: mode))
             XCTAssertEqual(row.calculatedValue, value)
         }
     }
