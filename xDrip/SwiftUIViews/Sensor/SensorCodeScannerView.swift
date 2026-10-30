@@ -524,6 +524,236 @@ private struct DexcomG6CameraScannerRepresentable: UIViewRepresentable {
     }
 }
 
+// MARK: - Sibionics 1 label scanner
+
+/// Reads the GS1 code on a Sibionics 1 sensor label and returns its short code.
+/// The label may be printed as QR or Data Matrix, so both symbologies are read.
+struct Sibionics1LabelScannerView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    let onScan: (String) -> Void
+
+    @State private var scannerError: DexcomG6CameraScannerError?
+    @State private var rejectedSibionics2Label = false
+    @State private var scanSucceeded = false
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Sibionics1LabelScannerRepresentable(
+                    onScan: { shortCode in
+                        scanSucceeded = true
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            onScan(shortCode)
+                            dismiss()
+                        }
+                    },
+                    onSibionics2Label: { rejectedSibionics2Label = true },
+                    onError: { scannerError = $0 }
+                )
+                .ignoresSafeArea()
+
+                GeometryReader { proxy in
+                    ScannerMaskShape(scanSize: 200)
+                        .fill(.black.opacity(0.4), style: FillStyle(eoFill: true))
+
+                    VStack(spacing: 16) {
+                        ScannerCornerShape(cornerLength: 22)
+                            .stroke(
+                                scanSucceeded ? Color.green : Color.white,
+                                style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round)
+                            )
+                            .frame(width: 200, height: 200)
+
+                        Label(
+                            rejectedSibionics2Label
+                                ? Texts_BluetoothPeripheralView.sibionics1LabelIsSibionics2
+                                : Texts_BluetoothPeripheralView.sibionics1LabelScannerGuidance,
+                            systemImage: rejectedSibionics2Label ? "exclamationmark.triangle" : "qrcode.viewfinder"
+                        )
+                        .font(.headline)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 14)
+                        .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
+
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .padding(.horizontal, 24)
+                    .offset(y: proxy.size.height / 2 - 100)
+                }
+                .ignoresSafeArea()
+            }
+            .background(Color.black)
+            .navigationTitle(Texts_BluetoothPeripheralView.sibionics1LabelScannerTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(Texts_Common.Cancel) { dismiss() }
+                        .foregroundStyle(ConstantsAppColors.toolbarNeutralAction)
+                }
+            }
+        }
+        .colorScheme(.dark)
+        .alert(item: $scannerError) { error in
+            switch error {
+            case .permissionDenied:
+                return Alert(
+                    title: Text(Texts_HomeView.cameraAccessRequired),
+                    message: Text(Texts_HomeView.cameraAccessRequiredMessage),
+                    primaryButton: .default(Text(Texts_HomeView.openSettings)) {
+                        guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
+                        openURL(settingsURL)
+                        dismiss()
+                    },
+                    secondaryButton: .cancel { dismiss() }
+                )
+            case .unavailable:
+                return Alert(
+                    title: Text(Texts_HomeView.cameraUnavailable),
+                    message: Text(Texts_HomeView.cameraUnavailableMessage),
+                    dismissButton: .default(Text(Texts_Common.Ok)) { dismiss() }
+                )
+            }
+        }
+    }
+}
+
+private struct Sibionics1LabelScannerRepresentable: UIViewRepresentable {
+    let onScan: (String) -> Void
+    let onSibionics2Label: () -> Void
+    let onError: (DexcomG6CameraScannerError) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onScan: onScan, onSibionics2Label: onSibionics2Label, onError: onError)
+    }
+
+    func makeUIView(context: Context) -> CameraPreviewView {
+        let view = CameraPreviewView()
+        view.previewLayer.videoGravity = .resizeAspectFill
+        view.previewLayer.session = context.coordinator.captureSession
+        context.coordinator.start()
+        return view
+    }
+
+    func updateUIView(_ uiView: CameraPreviewView, context: Context) {
+        uiView.updateVideoOrientation()
+    }
+
+    static func dismantleUIView(_ uiView: CameraPreviewView, coordinator: Coordinator) {
+        coordinator.stop()
+    }
+
+    final class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
+        let captureSession = AVCaptureSession()
+
+        private let sessionQueue = DispatchQueue(label: "com.xdripswift.sibionics-label-scanner")
+        private let onScan: (String) -> Void
+        private let onSibionics2Label: () -> Void
+        private let onError: (DexcomG6CameraScannerError) -> Void
+        private var isConfigured = false
+        private var hasDeliveredResult = false
+
+        init(
+            onScan: @escaping (String) -> Void,
+            onSibionics2Label: @escaping () -> Void,
+            onError: @escaping (DexcomG6CameraScannerError) -> Void
+        ) {
+            self.onScan = onScan
+            self.onSibionics2Label = onSibionics2Label
+            self.onError = onError
+        }
+
+        func start() {
+            switch AVCaptureDevice.authorizationStatus(for: .video) {
+            case .authorized:
+                configureAndStart()
+            case .notDetermined:
+                AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                    guard let self else { return }
+                    granted ? self.configureAndStart() : self.report(.permissionDenied)
+                }
+            case .denied, .restricted:
+                report(.permissionDenied)
+            @unknown default:
+                report(.unavailable)
+            }
+        }
+
+        func stop() {
+            sessionQueue.async { [weak self] in
+                guard let self, self.captureSession.isRunning else { return }
+                self.captureSession.stopRunning()
+            }
+        }
+
+        private func configureAndStart() {
+            sessionQueue.async { [weak self] in
+                guard let self else { return }
+                if !self.isConfigured {
+                    guard let camera = AVCaptureDevice.default(for: .video),
+                          let input = try? AVCaptureDeviceInput(device: camera),
+                          self.captureSession.canAddInput(input) else {
+                        self.report(.unavailable)
+                        return
+                    }
+                    let output = AVCaptureMetadataOutput()
+                    guard self.captureSession.canAddOutput(output) else {
+                        self.report(.unavailable)
+                        return
+                    }
+                    self.captureSession.beginConfiguration()
+                    self.captureSession.addInput(input)
+                    self.captureSession.addOutput(output)
+                    output.setMetadataObjectsDelegate(self, queue: .main)
+                    let types = [AVMetadataObject.ObjectType.qr, .dataMatrix]
+                        .filter(output.availableMetadataObjectTypes.contains)
+                    guard !types.isEmpty else {
+                        self.captureSession.commitConfiguration()
+                        self.report(.unavailable)
+                        return
+                    }
+                    output.metadataObjectTypes = types
+                    self.captureSession.commitConfiguration()
+                    self.isConfigured = true
+                }
+                guard !self.captureSession.isRunning else { return }
+                self.captureSession.startRunning()
+            }
+        }
+
+        private func report(_ error: DexcomG6CameraScannerError) {
+            DispatchQueue.main.async { [weak self] in self?.onError(error) }
+        }
+
+        func metadataOutput(
+            _ output: AVCaptureMetadataOutput,
+            didOutput metadataObjects: [AVMetadataObject],
+            from connection: AVCaptureConnection
+        ) {
+            guard !hasDeliveredResult else { return }
+            for case let code as AVMetadataMachineReadableCodeObject in metadataObjects {
+                guard let payload = code.stringValue else { continue }
+                switch Sibionics1SensorQRCode.shortCode(fromLabel: payload) {
+                case .success(let shortCode):
+                    hasDeliveredResult = true
+                    stop()
+                    onScan(shortCode)
+                    return
+                case .failure(.sibionics2Label):
+                    onSibionics2Label()
+                case .failure(.notSibionicsLabel):
+                    continue
+                }
+            }
+        }
+    }
+}
+
 // MARK: - scanner overlay
 
 private struct ScannerMaskShape: Shape {

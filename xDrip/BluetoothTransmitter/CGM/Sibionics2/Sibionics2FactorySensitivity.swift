@@ -26,18 +26,26 @@ enum Sibionics2FactorySensitivity {
         advertisedName: String?,
         probeCode: String? = nil,
         variant: SibionicsDeviceVariant = .sibionics2,
-        sibionics1Family: Sibionics1Family = .eu
+        sibionics1Family: Sibionics1Family = .eu,
+        sibionics1LabelShortCode: String? = nil
     ) -> Double {
         guard variant == .sibionics1 else {
             return resolve(probeCode: probeCode, shortCode: advertisedName)
         }
-        return sibionics1ShortCodeSensitivity(advertisedName: advertisedName, family: sibionics1Family)
+        return sibionics1ShortCodeSensitivity(
+            advertisedName: advertisedName, family: sibionics1Family, labelShortCode: sibionics1LabelShortCode
+        )
             ?? decodeShortCode(sibionics1Family.fallbackShortCode)
             ?? defaultSensitivity
     }
 
     /// Sensitivity decoded from the S1 short code, or nil when only the variant fallback applies.
-    static func sibionics1ShortCodeSensitivity(advertisedName: String?, family: Sibionics1Family) -> Double? {
+    /// A scanned label's short code wins over the one derived from the Bluetooth name, as
+    /// JugglucoNG builds the sensor identity from the QR payload when one is given.
+    static func sibionics1ShortCodeSensitivity(
+        advertisedName: String?, family: Sibionics1Family, labelShortCode: String? = nil
+    ) -> Double? {
+        if let labelShortCode, let decoded = decodeShortCode(labelShortCode) { return decoded }
         let shortCode = deriveShortCode(advertisedName, fallback: family.fallbackShortCode)
         guard shortCode != family.fallbackShortCode else { return nil }
         return decodeShortCode(shortCode)
@@ -242,5 +250,85 @@ enum Sibionics1Family {
     static func resolve(protocolMode: Sibionics1ProtocolMode?, keyGroup: Sibionics2KeyGroup?) -> Sibionics1Family {
         if protocolMode == .chinese { return .chinese }
         return keyGroup == .hematonix ? .hematonix : .eu
+    }
+}
+
+/// The Sibionics 1 sensor label: a GS1 code carrying GTIN (01), dates (11, 17),
+/// batch (10) and serial (21). Ported from JugglucoNG SibionicsRegistry
+/// (supportedQrMatch, deriveNativeQrName, buildIdentity) for the single-piece types.
+enum Sibionics1SensorQRCode {
+    enum ParseError: Error, Equatable {
+        /// Not a Sibionics GS1 sensor label.
+        case notSibionicsLabel
+        /// A Sibionics 2 (V120 "P"/"XPT" serial) label scanned for a Sibionics 1 sensor.
+        case sibionics2Label
+    }
+
+    private static let groupSeparator: Character = "\u{1D}"
+    private static let gtinPrefix = "0697283164"
+    private static let labelPattern = try! NSRegularExpression(
+        pattern: "^\u{1D}?01(\\d{14})11\\d{6}17\\d{6}10[A-Z0-9]{8,20}\u{1D}?21([A-Z0-9]{10,20})\u{1D}?$"
+    )
+
+    /// The 8-character short code JugglucoNG stores for the sensor; its last four
+    /// characters encode the factory sensitivity.
+    static func shortCode(fromLabel payload: String) -> Result<String, ParseError> {
+        let cleaned = cleanPayload(payload)
+        let range = NSRange(cleaned.startIndex..., in: cleaned)
+        guard let match = labelPattern.firstMatch(in: cleaned, range: range),
+              let gtinRange = Range(match.range(at: 1), in: cleaned),
+              let serialRange = Range(match.range(at: 2), in: cleaned) else {
+            return .failure(.notSibionicsLabel)
+        }
+        let gtin = String(cleaned[gtinRange])
+        guard gtin.hasPrefix(gtinPrefix), hasValidCheckDigit(gtin),
+              let nativeName = nativeName(cleaned) else {
+            return .failure(.notSibionicsLabel)
+        }
+        let serial = String(cleaned[serialRange])
+        guard !(serial.hasPrefix("P") || serial.hasPrefix("XPT")) else { return .failure(.sibionics2Label) }
+        // buildIdentity: the QR short view is the last 11 characters; its first 8 are the short code.
+        let shortView = String(nativeName.suffix(11))
+        guard shortView.count == 11 else { return .failure(.notSibionicsLabel) }
+        return .success(String(shortView.prefix(8)))
+    }
+
+    /// Scanners may prefix the GS1 DataMatrix identifier and render FNC1 as "^]".
+    static func cleanPayload(_ source: String) -> String {
+        var text = source.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if text.hasPrefix("]D2") { text.removeFirst(3) }
+        text = text.replacingOccurrences(of: "^]", with: String(groupSeparator))
+        return String(text.filter {
+            ($0.isASCII && ($0.isLetter || $0.isNumber)) || $0 == groupSeparator
+        })
+    }
+
+    /// JugglucoNG's legacy 16-character identity window, which the stock app also uses.
+    private static func nativeName(_ payload: String) -> String? {
+        let characters = Array(payload)
+        guard payload.contains(gtinPrefix), characters.count >= 50 else { return nil }
+        let window: [Character]
+        if characters.count < 65 {
+            let endLength = characters.count - 49
+            let startLength = 16 - endLength
+            guard endLength > 0, startLength >= 0,
+                  characters.count >= 49 + endLength, characters.count >= 22 + startLength else { return nil }
+            window = Array(characters[22..<(22 + startLength)]) + Array(characters[49..<(49 + endLength)])
+        } else {
+            let start = characters.count - 17
+            window = Array(characters[start..<(start + 16)])
+        }
+        guard window.count == 16 else { return nil }
+        return String(window.filter { $0.isASCII && ($0.isLetter || $0.isNumber) })
+    }
+
+    private static func hasValidCheckDigit(_ gtin: String) -> Bool {
+        let digits = gtin.compactMap(\.wholeNumberValue)
+        guard digits.count == gtin.count, let check = digits.last else { return false }
+        let body = digits.dropLast()
+        let sum = body.enumerated().reduce(0) { total, item in
+            total + ((body.count - item.offset) % 2 == 1 ? item.element * 3 : item.element)
+        }
+        return (10 - sum % 10) % 10 == check
     }
 }

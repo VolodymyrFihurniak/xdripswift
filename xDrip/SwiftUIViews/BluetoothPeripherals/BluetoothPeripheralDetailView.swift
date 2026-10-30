@@ -106,6 +106,9 @@ struct BluetoothPeripheralDetailView: View {
             }
         }
         .alert(item: $state.pendingAlert, content: makeAlert)
+        .fullScreenCover(item: $state.sibionics1LabelScan) { request in
+            Sibionics1LabelScannerView(onScan: request.onScan)
+        }
         .onAppear {
             state.start()
             state.setSignalStrengthVisible(true)

@@ -58,6 +58,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
     @Published private(set) var category = BluetoothPeripheralCategory.CGM
     @Published private(set) var canDeletePeripheral = false
     @Published var pendingAlert: BluetoothPeripheralDetailAlert?
+    /// Set to present the camera for a Sibionics 1 sensor label.
+    @Published var sibionics1LabelScan: Sibionics1LabelScanRequest?
     @Published var sibionics2SearchText = "" {
         didSet {
             if sibionics2SearchText != oldValue {
@@ -711,12 +713,17 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             advertisedName: bluetoothPeripheral.blePeripheral.name,
             probeCode: probeCode,
             variant: (bluetoothPeripheral as? Sibionics2)?.variant ?? .sibionics2,
-            sibionics1Family: sibionics1Family
+            sibionics1Family: sibionics1Family,
+            sibionics1LabelShortCode: Sibionics2Configuration.sibionics1LabelShortCode(for: address)
         )
+        let sibionics1LabelShortCode = Sibionics2Configuration.sibionics1LabelShortCode(for: address)
         let usesSibionics1Fallback = isSibionics1 && Sibionics2FactorySensitivity.sibionics1ShortCodeSensitivity(
-            advertisedName: bluetoothPeripheral.blePeripheral.name, family: sibionics1Family) == nil
+            advertisedName: bluetoothPeripheral.blePeripheral.name, family: sibionics1Family,
+            labelShortCode: sibionics1LabelShortCode) == nil
         let probeDetail: String
-        if usesSibionics1Fallback {
+        if isSibionics1, let sibionics1LabelShortCode, !usesSibionics1Fallback {
+            probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(sibionics1LabelShortCode)"
+        } else if usesSibionics1Fallback {
             probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(Texts_BluetoothPeripheralView.sibionics1SensitivityFallback)"
         } else if let probeCode {
             probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(probeCode)"
@@ -762,9 +769,20 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                     title: isSibionics1 ? Texts_BluetoothPeripheralView.sibionics1SensitivityTitle
                         : Texts_BluetoothPeripheralView.sibionics2ProbeCodeTitle,
                     detail: probeDetail,
-                    showsDisclosure: !isSibionics1,
-                    action: isSibionics1 ? nil : { [weak self] in
-                        self?.requestSibionics2ProbeCode(for: bluetoothPeripheral)
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        if isSibionics1 {
+                            self?.requestSibionics1LabelScan(for: bluetoothPeripheral)
+                        } else {
+                            self?.requestSibionics2ProbeCode(for: bluetoothPeripheral)
+                        }
+                    }
+                ),
+                row(
+                    id: "sibionics1-label-remove",
+                    title: Texts_BluetoothPeripheralView.sibionics1LabelRemove,
+                    action: { [weak self] in
+                        self?.saveSibionics1LabelShortCode(nil, for: bluetoothPeripheral)
                     }
                 ),
                 row(
@@ -823,7 +841,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                 (row.id != "sibionics2-calibration-weighting" ||
                     Sibionics2Configuration.calibrationMode(for: address).jugglucoAlgorithm != nil) &&
                 // JugglucoNG resets every Sibionics type manually; automatic reset is Sibionics 2 only.
-                (expectedBluetoothPeripheralType != .Sibionics1Type || row.id != "sibionics2-auto-reset")
+                (expectedBluetoothPeripheralType != .Sibionics1Type || row.id != "sibionics2-auto-reset") &&
+                (row.id != "sibionics1-label-remove" || (isSibionics1 && sibionics1LabelShortCode != nil))
             }
         )
         return [connectionSection, settingsSection]
@@ -1988,6 +2007,28 @@ private extension BluetoothPeripheralDetailState {
         ))
     }
 
+    /// Opens the camera for the Sibionics 1 sensor label.
+    func requestSibionics1LabelScan(for bluetoothPeripheral: BluetoothPeripheral) {
+        sibionics1LabelScan = Sibionics1LabelScanRequest(address: bluetoothPeripheral.blePeripheral.address) { [weak self] shortCode in
+            self?.saveSibionics1LabelShortCode(shortCode, for: bluetoothPeripheral)
+        }
+    }
+
+    func saveSibionics1LabelShortCode(_ shortCode: String?, for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        guard Sibionics2Configuration.sibionics1LabelShortCode(for: address) != shortCode else { refresh(); return }
+        Sibionics2Configuration.setSibionics1LabelShortCode(shortCode, for: address)
+        // A different factory sensitivity invalidates the stock state: replay history with it.
+        (bluetoothPeripheralManager?.getBluetoothTransmitter(
+            for: bluetoothPeripheral,
+            createANewOneIfNecesssary: false
+        ) as? CGMSibionics2Transmitter)?.probeCodeDidChange(for: address)
+        trace("Sibionics 1 label short code was %{public}@",
+              log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController,
+              type: .info, shortCode.map { "scanned: \($0)" } ?? "removed")
+        refresh()
+    }
+
     func saveSibionics2ProbeCode(_ text: String, for bluetoothPeripheral: BluetoothPeripheral) {
         let address = bluetoothPeripheral.blePeripheral.address
         let previousCode = Sibionics2Configuration.probeCode(for: address)
@@ -2357,6 +2398,12 @@ enum BluetoothPeripheralConnectButtonTintColor {
 }
 
 /// Alert requested by transmitter validation or connection actions.
+struct Sibionics1LabelScanRequest: Identifiable {
+    let id = UUID()
+    let address: String
+    let onScan: (String) -> Void
+}
+
 struct BluetoothPeripheralDetailAlert: Identifiable {
     let id = UUID()
     let title: String

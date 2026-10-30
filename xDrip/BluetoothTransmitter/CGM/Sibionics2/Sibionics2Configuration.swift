@@ -608,6 +608,22 @@ enum Sibionics2Configuration {
         return true
     }
 
+    /// Short code read from a scanned Sibionics 1 sensor label.
+    static func sibionics1LabelShortCode(for identifier: String, userDefaults: UserDefaults = .standard) -> String? {
+        guard let key = key("sibionics1LabelShortCode", identifier: identifier),
+              let code = userDefaults.string(forKey: key), code.count == 8 else { return nil }
+        return code
+    }
+
+    static func setSibionics1LabelShortCode(_ code: String?, for identifier: String, userDefaults: UserDefaults = .standard) {
+        guard let key = key("sibionics1LabelShortCode", identifier: identifier) else { return }
+        if let code, code.count == 8 {
+            userDefaults.set(code, forKey: key)
+        } else {
+            userDefaults.removeObject(forKey: key)
+        }
+    }
+
     /// The V120 key group whose session produced readings for this sensor.
     static func confirmedKeyGroup(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics2KeyGroup? {
         guard let key = key("confirmedKeyGroup", identifier: identifier),
