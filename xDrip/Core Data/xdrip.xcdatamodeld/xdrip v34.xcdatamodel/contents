@@ -44,6 +44,9 @@
         <attribute name="calibrationFlag" attributeType="Boolean" usesScalarValueType="YES"/>
         <attribute name="deviceName" optional="YES" attributeType="String"/>
         <attribute name="hideSlope" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="valueIsFromWatch" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="watchCollectedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="watchReceivedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="id" attributeType="String"/>
         <attribute name="isSuppressedByFiveMinuteCadence" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="ra" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
@@ -76,7 +79,6 @@
         <relationship name="libre2heartbeat" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="Libre2HeartBeat" inverseName="blePeripheral" inverseEntity="Libre2HeartBeat"/>
         <relationship name="m5Stack" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="M5Stack" inverseName="blePeripheral" inverseEntity="M5Stack"/>
         <relationship name="medtrumTouchCareNano" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="MedtrumTouchCareNano" inverseName="blePeripheral" inverseEntity="MedtrumTouchCareNano"/>
-        <relationship name="sibionics2" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="Sibionics2" inverseName="blePeripheral" inverseEntity="Sibionics2"/>
         <relationship name="miaoMiao" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="MiaoMiao" inverseName="blePeripheral" inverseEntity="MiaoMiao"/>
         <relationship name="omniPodHeartBeat" optional="YES" maxCount="1" deletionRule="Cascade" destinationEntity="OmniPodHeartBeat" inverseName="blePeripheral" inverseEntity="OmniPodHeartBeat"/>
     </entity>
@@ -251,10 +253,6 @@
     </entity>
     <entity name="OmniPodHeartBeat" representedClassName=".OmniPodHeartBeat" syncable="YES">
         <relationship name="blePeripheral" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="BLEPeripheral" inverseName="omniPodHeartBeat" inverseEntity="BLEPeripheral"/>
-    </entity>
-    <entity name="Sibionics2" representedClassName=".Sibionics2" syncable="YES">
-        <attribute name="sensorVariant" attributeType="Integer 16" defaultValueString="2" usesScalarValueType="YES"/>
-        <relationship name="blePeripheral" maxCount="1" deletionRule="Cascade" destinationEntity="BLEPeripheral" inverseName="sibionics2" inverseEntity="BLEPeripheral"/>
     </entity>
     <entity name="Sensor" representedClassName=".Sensor" syncable="YES">
         <attribute name="endDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>

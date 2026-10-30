@@ -1,5 +1,6 @@
 "common_Ok" = "OK";
 "common_cancel" = "Cancel";
+"common_close" = "Close";
 "common_dismiss" = "Dismiss";
 "common_mgdl" = "mg/dL";
 "common_mmol" = "mmol/L";
@@ -149,3 +150,12 @@
 "adaptive_stale" = "Stale reading";
 "adaptive_unavailable" = "No data";
 "adaptive_description" = "Glucose, trend and reading age with an adaptive glass appearance.";
+
+"common_statistics_a1c" = "HbA1c";
+
+"common_statistics_estimatedA1cTrend" = "Estimated HbA1c trend";
+
+"common_statistics_estimatedA1c" = "Estimated HbA1c";
+
+/* Switch title when the surrounding screen or section identifies the feature */
+"common_enable" = "Enable";

@@ -233,6 +233,8 @@
 "batteryHistoryRange" = "Період";
 "batteryHistoryRangeAccessibility" = "Період історії батареї";
 "batteryHistoryRangeExplanation" = "Фіксовані періоди відлічуються від поточного моменту назад на вибрану кількість днів. Проміжки позначають періоди без показань.";
+"batteryHistoryInactive" = "Передавач неактивний";
+"batteryHistoryHistoricalRangeExplanation" = "Періоди закінчуються останнім збереженим показанням. Проміжки позначають періоди без показань.";
 
 "connectionDiagramOtherApp" = "Інший застосунок";
 
@@ -311,3 +313,8 @@
 "sibionics2.labelScanTitle" = "Сканувати етикетку датчика";
 "sibionics2.labelIsSibionics1" = "Це етикетка Sibionics 1. Додайте датчик як Sibionics 1.";
 "sibionics2.labelHasNoFactoryCode" = "На цій етикетці немає заводського коду. Використовується назва датчика.";
+
+/* Bluetooth permission status and instructions. %@ is the installed app name. */
+"bluetoothAccessNotEnabled" = "Доступ до Bluetooth не ввімкнено";
+"bluetoothAccessInstructions" = "Щоб підключитися, відкрийте Параметри → Приватність і безпека → Bluetooth і дозвольте доступ для %@.";
+"bluetoothAccessRestrictedInstructions" = "Обмеження пристрою блокують доступ до Bluetooth. Перевірте параметри Екранного часу або зверніться до адміністратора пристрою, щоб увімкнути доступ.";

@@ -868,7 +868,9 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
             bundle.url(forResource: "xdrip", withExtension: "momd")
                 ?? Bundle.main.url(forResource: "xdrip", withExtension: "momd")
         )
-        let v33URL = momdURL.appendingPathComponent("xdrip v33.mom")
+        // The fork's first Sibionics model, kept under its own name after the upstream
+        // v33 merge so installed fork builds still migrate to the current model.
+        let v33URL = momdURL.appendingPathComponent("xdrip v33 Sibionics.mom")
         let v33Model = try XCTUnwrap(NSManagedObjectModel(contentsOf: v33URL))
         let currentModel = try managedObjectModel()
         XCTAssertNil(v33Model.entitiesByName["Sibionics2"]?.attributesByName["sensorVariant"])
