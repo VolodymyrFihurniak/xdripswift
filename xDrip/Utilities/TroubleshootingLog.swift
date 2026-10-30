@@ -1055,6 +1055,9 @@ final class TroubleshootingLogStore {
     /// A failed append or rewrite leaves the current-session cache useful but means the next
     /// successful storage opportunity must replace the whole file rather than append to stale data.
     private var persistenceNeedsRewrite = false
+    /// Latest authentication outcome per CGM, including outcomes the reducer discards as routine.
+    /// Queue-confined and not persisted: it only describes candidates recorded by this process.
+    private var lastCGMAuthentication = [TroubleshootingLogSource: TroubleshootingCGMActivity]()
 
     /// The consumer history lives under Application Support rather than beside the e-mail trace
     /// attachments in Documents. This keeps the two retention policies and sharing paths independent.
@@ -1111,6 +1114,7 @@ final class TroubleshootingLogStore {
     }
 
     private func recordOnQueue(_ entry: TroubleshootingLogEntry) {
+        guard acceptsAuthenticationCandidate(entry) else { return }
         prepareCacheOnQueue()
         let previousEntries = cachedEntries ?? []
         let pruned = prunedEntries(previousEntries + [entry], referenceDate: now())
@@ -1201,6 +1205,26 @@ final class TroubleshootingLogStore {
         }
         guard persistenceNeedsRewrite || pruned != entries else { return }
         persistenceNeedsRewrite = !rewriteOnQueue(pruned)
+    }
+
+    /// The reducer replays only retained rows, and a healthy cached reconnect is never retained.
+    /// A later `authenticationStarted` would then look like a fresh pairing on every replay.
+    /// Remembering discarded outcomes here keeps that retry out, as the reducer intends.
+    private func acceptsAuthenticationCandidate(_ entry: TroubleshootingLogEntry) -> Bool {
+        guard case let .cgm(source, activity) = entry.kind else { return true }
+        switch activity {
+        case .authenticationStarted:
+            guard lastCGMAuthentication[source] == nil else { return false }
+            lastCGMAuthentication[source] = activity
+        case .authenticationSucceeded, .authenticationFailed, .recoveryRequired, .authenticationRecovered:
+            lastCGMAuthentication[source] = activity
+        case .addingStarted, .removed:
+            // Mirrors the reducer: a new Add or a Delete starts authentication history afresh.
+            lastCGMAuthentication.removeValue(forKey: source)
+        default:
+            break
+        }
+        return true
     }
 
     private func prunedEntries(
