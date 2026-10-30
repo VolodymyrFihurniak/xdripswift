@@ -150,21 +150,16 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertTrue(readings.isEmpty)
     }
 
-    func testChineseParserRejectsCorruptTruncatedAndExtraPayloads() {
+    func testChineseParserRejectsCorruptAndTruncatedPayloadsLikeJuggluco() {
         let chinese = Sibionics1ChineseProtocolCodec()
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let response = chineseFrame([0xAA, 0x55, 0x09, 1] + [UInt8](repeating: 0, count: 14))
         var corrupt = response
         corrupt[5] ^= 1
-        let echo = chinese.buildDataRequestPacket(lastIndex: 1, macAddress: [])
-        var corruptEcho = echo
-        corruptEcho[5] ^= 1
         let malformed = [
             Data(), Data([0xAA, 0x55, 0x09]), corrupt, Data(response.dropLast()),
             chineseFrame([0xAA, 0x55, 0x09, 2] + [UInt8](repeating: 0, count: 14)),
-            chineseFrame([0xAA, 0x55, 0x09, 0, 0]),
             chineseFrame([0xAA, 0x55, 0x08, 0]),
-            corruptEcho, Data(echo.dropLast()), Data([0xAA, 0x55, 0x07]),
             Data([0x23, 0xF7, 0x6F, 0xD9, 0xF4, 0]), Data([0x23, 0xF7, 0x6F, 0xD9, 0xF5])
         ]
         for frame in malformed {
@@ -173,6 +168,21 @@ final class Sibionics2ProtocolTests: XCTestCase {
                 continue
             }
         }
+        // JugglucoNG treats any AA55 07 frame as the echo and accepts trailing bytes after
+        // the declared entries, provided the frame checksum holds.
+        let echo = chinese.buildDataRequestPacket(lastIndex: 1, macAddress: [])
+        var corruptEcho = echo
+        corruptEcho[5] ^= 1
+        for frame in [corruptEcho, Data(echo.dropLast()), Data([0xAA, 0x55, 0x07])] {
+            guard case .requestEcho = chinese.parse(frame, at: now) else {
+                XCTFail("Echo not recognized: \(frame as NSData)")
+                continue
+            }
+        }
+        guard case .readings(let padded) = chinese.parse(chineseFrame([0xAA, 0x55, 0x09, 0, 0]), at: now) else {
+            return XCTFail("A checksummed frame with trailing bytes is a Chinese response")
+        }
+        XCTAssertTrue(padded.isEmpty)
     }
 
     func testConfirmedProtocolModePersistsPerPeripheralUUIDAndCanBeCleared() throws {

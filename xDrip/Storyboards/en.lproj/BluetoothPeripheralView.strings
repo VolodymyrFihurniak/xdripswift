@@ -207,11 +207,12 @@
 "sibionics2.calibrationWeightingStable" = "Stable";
 "sibionics2.autoResetTitle" = "Automatic sensor reset";
 "sibionics2.resetTitle" = "Reset sensor";
-"sibionics2.resetConfirmTitle" = "Reset Sibionics 2?";
+"sibionics2.resetConfirmTitle" = "Reset sensor?";
 "sibionics2.resetConfirmMessage" = "This sends a reset command to the sensor. Continue only if you intend to start a new sensor session.";
 
 "sibionics1.discoveryTitle" = "Nearby Sibionics 1 sensors";
 "sibionics1.discoveryEmpty" = "Searching for Sibionics 1 sensors…";
 "sibionics1.settingsTitle" = "Sibionics 1 settings";
-"sibionics1.settingsFooter" = "The sensor protocol is detected automatically. Calibration adjusts readings using fingersticks.";
-"sibionics1.sensitivityUnknown" = "Factory sensitivity unknown · neutral scaling";
+"sibionics1.settingsFooter" = "The sensor protocol is detected automatically. Factory sensitivity comes from the sensor name or, when it carries none, the default for the sensor type. Calibration adjusts readings using fingersticks. You can reset the sensor manually.";
+"sibionics1.sensitivityTitle" = "Factory sensitivity";
+"sibionics1.sensitivityFallback" = "sensor type default";

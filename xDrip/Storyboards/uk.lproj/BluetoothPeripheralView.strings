@@ -295,11 +295,12 @@
 "sibionics2.calibrationWeightingStable" = "Стабільні";
 "sibionics2.autoResetTitle" = "Автоматичне скидання датчика";
 "sibionics2.resetTitle" = "Скинути датчик";
-"sibionics2.resetConfirmTitle" = "Скинути Sibionics 2?";
+"sibionics2.resetConfirmTitle" = "Скинути датчик?";
 "sibionics2.resetConfirmMessage" = "Датчику буде надіслано команду скидання. Продовжуйте, лише якщо справді хочете почати новий сеанс датчика.";
 
 "sibionics1.discoveryTitle" = "Датчики Sibionics 1 поблизу";
 "sibionics1.discoveryEmpty" = "Пошук датчиків Sibionics 1…";
 "sibionics1.settingsTitle" = "Налаштування Sibionics 1";
-"sibionics1.settingsFooter" = "Протокол датчика визначається автоматично. Калібрування коригує показники за вимірами глюкометра.";
-"sibionics1.sensitivityUnknown" = "Заводська чутливість невідома · нейтральний коефіцієнт";
+"sibionics1.settingsFooter" = "Протокол датчика визначається автоматично. Заводська чутливість береться з назви датчика, а якщо її там немає — типове значення для типу датчика. Калібрування коригує показники за вимірами глюкометра. Датчик можна скинути вручну.";
+"sibionics1.sensitivityTitle" = "Заводська чутливість";
+"sibionics1.sensitivityFallback" = "типове значення для типу датчика";

@@ -608,6 +608,29 @@ enum Sibionics2Configuration {
         return true
     }
 
+    /// The V120 key group whose session produced readings for this sensor.
+    static func confirmedKeyGroup(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics2KeyGroup? {
+        guard let key = key("confirmedKeyGroup", identifier: identifier),
+              userDefaults.object(forKey: key) != nil else { return nil }
+        return Sibionics2KeyGroup(rawValue: userDefaults.integer(forKey: key))
+    }
+
+    static func setConfirmedKeyGroup(_ group: Sibionics2KeyGroup?, for identifier: String, userDefaults: UserDefaults = .standard) {
+        guard let key = key("confirmedKeyGroup", identifier: identifier) else { return }
+        if let group {
+            userDefaults.set(group.rawValue, forKey: key)
+        } else {
+            userDefaults.removeObject(forKey: key)
+        }
+    }
+
+    static func sibionics1Family(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics1Family {
+        Sibionics1Family.resolve(
+            protocolMode: protocolMode(for: identifier, userDefaults: userDefaults),
+            keyGroup: confirmedKeyGroup(for: identifier, userDefaults: userDefaults)
+        )
+    }
+
     static func calibrationWeighting(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics2CalibrationWeighting {
         guard let key = key("calibrationWeighting", identifier: identifier),
               userDefaults.object(forKey: key) != nil,

@@ -57,7 +57,9 @@ enum SibionicsDeviceVariant: Int16 {
     var peripheralType: BluetoothPeripheralType {
         self == .sibionics1 ? .Sibionics1Type : .Sibionics2Type
     }
-    var supportsReset: Bool { self == .sibionics2 }
+    /// JugglucoNG offers a manual reset for every Sibionics type, automatic reset only for Sibionics 2.
+    var supportsManualReset: Bool { true }
+    var supportsAutoReset: Bool { self == .sibionics2 }
 }
 
 enum Sibionics1ChineseParseResult {
@@ -71,10 +73,10 @@ enum Sibionics1ChineseParseResult {
 /// configured variant's group first and falls through the others only when the
 /// sensor does not answer, because an accepted response does not prove the key.
 /// Groups that decode to the same session key (GS3/EU, Chinese/Eco) are listed once.
-enum Sibionics2KeyGroup: CaseIterable {
-    case eco
-    case sijoy
-    case hematonix
+enum Sibionics2KeyGroup: Int, CaseIterable {
+    case eco = 0
+    case sijoy = 1
+    case hematonix = 2
 
     var applicationIdentifier: String {
         switch self {
@@ -95,8 +97,15 @@ enum Sibionics2KeyGroup: CaseIterable {
         }
     }
 
-    static func authenticationOrder(for variant: SibionicsDeviceVariant) -> [Sibionics2KeyGroup] {
-        variant == .sibionics1 ? [.sijoy, .hematonix, .eco] : [.eco, .sijoy, .hematonix]
+    /// The variant's own group leads; a group that already produced readings for
+    /// this sensor is tried first, as JugglucoNG locks the type chosen at setup.
+    static func authenticationOrder(
+        for variant: SibionicsDeviceVariant,
+        preferred: Sibionics2KeyGroup? = nil
+    ) -> [Sibionics2KeyGroup] {
+        let order: [Sibionics2KeyGroup] = variant == .sibionics1 ? [.sijoy, .hematonix, .eco] : [.eco, .sijoy, .hematonix]
+        guard let preferred else { return order }
+        return [preferred] + order.filter { $0 != preferred }
     }
 }
 
@@ -114,15 +123,21 @@ struct Sibionics1ChineseProtocolCodec {
         return Data(packet)
     }
 
+    /// Direct FF32 reset command used by Chinese AA55 firmware (JugglucoNG buildChineseResetPacket).
+    func buildResetPacket() -> Data {
+        Data([0xAA, 0x55, 0x10, 0xF1])
+    }
+
+    /// Mirrors JugglucoNG's parseChinese: any AA55 07 frame is the request echo, and a
+    /// data frame needs its checksum and at least the declared entries.
     func parse(_ data: Data, at now: Date) -> Sibionics1ChineseParseResult {
         let bytes = [UInt8](data)
         if bytes == Self.v120Marker { return .v120AuthRequired }
-        guard bytes.count >= 5, bytes[0] == 0xAA, bytes[1] == 0x55,
-              bytes.reduce(UInt8(0), { $0 &+ $1 }) == 0 else { return .malformed }
-        if bytes[2] == 0x07 {
-            return bytes.count == 20 ? .requestEcho : .malformed
-        }
-        guard bytes[2] == 0x09, bytes.count == 5 + Int(bytes[3]) * 14 else { return .malformed }
+        guard bytes.count >= 3, bytes[0] == 0xAA, bytes[1] == 0x55 else { return .malformed }
+        if bytes[2] == 0x07 { return .requestEcho }
+        guard bytes[2] == 0x09, bytes.count >= 5,
+              bytes.reduce(UInt8(0), { $0 &+ $1 }) == 0,
+              bytes.count >= 5 + Int(bytes[3]) * 14 else { return .malformed }
         var readings: [Sibionics2RawReading] = []
         readings.reserveCapacity(Int(bytes[3]))
         for i in 0..<Int(bytes[3]) {
@@ -261,6 +276,11 @@ struct Sibionics2ProtocolCodec {
 
     func buildDataRequestPacket(lastIndex: UInt16) -> Data {
         packet([0x08, UInt8(truncatingIfNeeded: lastIndex), UInt8(truncatingIfNeeded: lastIndex >> 8), 0, 0])
+    }
+
+    /// Direct FF32 reset for EU/Hematonix (GS1) V120 firmware; it is sent unencrypted.
+    func buildGS1ResetPacket() -> Data {
+        Data([0x24, 0xE7, 0x6F, 0x34])
     }
 
     /// V120 maintenance reset command from JugglucoNG's Sibionics protocol.

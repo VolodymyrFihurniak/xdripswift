@@ -24,6 +24,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var handshakeAttempt = 0
     private var handshakeReconnectCount = 0
     private var authenticationKeyGroupIndex = 0
+    /// Frozen per connection so the index keeps naming the same group when one is confirmed.
+    private var connectionKeyGroups = [Sibionics2KeyGroup]()
     private var handshakeStepGeneration = 0
     private var handshakeRestartCount = 0
     /// Rotates through unverified authentication addresses, one per connection.
@@ -48,6 +50,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var lastBatteryReadAt: Date?
     private var autoResetCheckGeneration = 0
     private var resetDisconnectGeneration = 0
+    /// Pages in the connection that sent the reset may be buffered pre-reset data.
+    private var resetSentThisConnection = false
     private let transmitterLog = OSLog(subsystem: ConstantsLog.subSystem, category: ConstantsLog.categoryBluetoothPeripheralManager)
 
     init(
@@ -213,12 +217,14 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         handshakeAttempt += 1
         handshakeStepGeneration += 1
         authenticationKeyGroupIndex = 0
+        connectionKeyGroups = []
         handshakeRestartCount = 0
         pendingDeviceInformationReads = 0
         sessionStartDeferred = false
         deviceInformationGeneration += 1
         streamingWatchdogGeneration += 1
         batteryLevelCharacteristic = nil
+        resetSentThisConnection = false
         handshake = nil
         streamingReady = false
         receivedNonEmptyReadingsPacket = false
@@ -442,7 +448,10 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 return
             }
             self.handshake = handshake
-            if let address = deviceAddress { confirmAuthenticationAddress(for: address) }
+            if let address = deviceAddress {
+                confirmAuthenticationAddress(for: address)
+                confirmKeyGroup(for: address)
+            }
             if !streamingReady {
                 if let address = deviceAddress {
                     markStreamingReady(for: address)
@@ -521,7 +530,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     func requestSensorReset(for requestedAddress: String? = nil) {
-        guard variant.supportsReset else { return }
+        guard variant.supportsManualReset else { return }
         guard let address = requestedAddress ?? deviceAddress else {
             trace("Sibionics 2 reset requested before a peripheral address was assigned",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
@@ -644,9 +653,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     private func sendPendingResetIfReady(for address: String) {
-        guard variant.supportsReset, streamingReady,
+        guard variant.supportsManualReset, streamingReady,
               Sibionics2Configuration.resetRequested(for: address) else { return }
-        guard writeCommand(codec.buildResetPacket(), label: "maintenance-reset") else {
+        guard writeCommand(resetPacket, label: "maintenance-reset") else {
             resetDisconnectGeneration += 1
             let generation = resetDisconnectGeneration
             runOnCentralQueue(after: Sibionics2ConnectionPolicy.resetWriteRetryDelay) { [weak self] in
@@ -662,6 +671,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
 
         Sibionics2Configuration.markResetSent(for: address)
+        resetSentThisConnection = true
         readingPollGeneration += 1
         resetDisconnectGeneration += 1
         let generation = resetDisconnectGeneration
@@ -677,8 +687,15 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
 
+    /// JugglucoNG buildMaintenanceResetPacket: encrypted 0x10 for Sibionics 2, the
+    /// plain GS1 command for EU/Hematonix V120 and the AA55 command for Chinese firmware.
+    private var resetPacket: Data {
+        guard variant == .sibionics1 else { return codec.buildResetPacket() }
+        return usesChineseProtocol ? chineseCodec.buildResetPacket() : codec.buildGS1ResetPacket()
+    }
+
     private func scheduleAutoResetCheck(for address: String) {
-        guard variant.supportsReset else { return }
+        guard variant.supportsAutoReset else { return }
         autoResetCheckGeneration += 1
         let generation = autoResetCheckGeneration
         guard !Sibionics2Configuration.awaitingResetRestart(for: address),
@@ -706,7 +723,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     private func evaluateAutoReset(for address: String) {
-        guard variant.supportsReset else { return }
+        guard variant.supportsAutoReset else { return }
         guard !Sibionics2Configuration.awaitingResetRestart(for: address) else { return }
         let decision = Sibionics2AutoResetPolicy.evaluate(
             now: Date(),
@@ -734,6 +751,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private func startSession() {
         probeGeneration += 1
         authenticationKeyGroupIndex = 0
+        connectionKeyGroups = []
         handshakeRestartCount = 0
         authenticationAddressInUse = nil
         authenticationAddressSelected = false
@@ -772,7 +790,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
     @discardableResult
     private func sendChineseDataRequest(for address: String) -> Bool {
-        let cursor = stateStore.load(for: address)?.lastDeliveredIndex ?? 0
+        // After a reset JugglucoNG asks for idx 1 so a restarted sensor answers from its new session.
+        let cursor = Sibionics2Configuration.resetProbePending(for: address)
+            ? 1 : stateStore.load(for: address)?.lastDeliveredIndex ?? 0
         return writeCommand(chineseCodec.buildDataRequestPacket(
             lastIndex: cursor, macAddress: authenticationMacAddress(for: address)
         ), label: "Chinese data-request index=\(cursor)")
@@ -851,7 +871,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     /// keep the connection-wide streaming timeout armed by `startHandshake`.
     @discardableResult
     private func sendAuthentication(for address: String) -> Bool {
-        let keyGroups = Sibionics2KeyGroup.authenticationOrder(for: variant)
+        let keyGroups = authenticationKeyGroups(for: address)
         guard keyGroups.indices.contains(authenticationKeyGroupIndex),
               let sessionKey = codec.deriveSessionKey(group: keyGroups[authenticationKeyGroupIndex]) else {
             trace("could not initialize Sibionics 2 authentication", log: transmitterLog,
@@ -862,7 +882,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
               type: .info, keyGroups[authenticationKeyGroupIndex].applicationIdentifier)
         let macAddress = authenticationMacAddress(for: address)
-        let probeAfterReset = variant.supportsReset && Sibionics2Configuration.resetProbePending(for: address)
+        let probeAfterReset = variant.supportsManualReset && Sibionics2Configuration.resetProbePending(for: address)
         var newHandshake = Sibionics2Handshake(
             macAddress: macAddress,
             sessionKey: sessionKey,
@@ -904,8 +924,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
     private func tryNextAuthenticationKeyGroup(for address: String) {
         authenticationKeyGroupIndex += 1
-        guard authenticationKeyGroupIndex < Sibionics2KeyGroup.authenticationOrder(for: variant).count else {
+        guard authenticationKeyGroupIndex < authenticationKeyGroups(for: address).count else {
             authenticationKeyGroupIndex = 0
+        connectionKeyGroups = []
             trace("Sibionics 2 authentication was not answered with any key group",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
             reconnectAfterStalledHandshake()
@@ -914,6 +935,43 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         trace("Sibionics 2 authentication not answered; retrying with the next key group",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
         sendAuthentication(for: address)
+    }
+
+    private func authenticationKeyGroups(for address: String) -> [Sibionics2KeyGroup] {
+        if connectionKeyGroups.isEmpty {
+            connectionKeyGroups = Sibionics2KeyGroup.authenticationOrder(
+                for: variant, preferred: Sibionics2Configuration.confirmedKeyGroup(for: address)
+            )
+        }
+        return connectionKeyGroups
+    }
+
+    /// Readings prove the key group; it leads the next connection. For Sibionics 1 the
+    /// group also selects the fallback sensitivity, so a change replays history with it.
+    private func confirmKeyGroup(for address: String) {
+        guard connectionKeyGroups.indices.contains(authenticationKeyGroupIndex) else { return }
+        let group = connectionKeyGroups[authenticationKeyGroupIndex]
+        guard Sibionics2Configuration.confirmedKeyGroup(for: address) != group else { return }
+        let previousSensitivity = factorySensitivity(for: address)
+        Sibionics2Configuration.setConfirmedKeyGroup(group, for: address)
+        trace("Sibionics authentication key group confirmed: %{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
+              type: .info, group.applicationIdentifier)
+        if factorySensitivity(for: address) != previousSensitivity {
+            probeCodeDidChange(for: address)
+        }
+    }
+
+    private func factorySensitivity(for address: String) -> Double {
+        let family: Sibionics1Family = usesChineseProtocol ? .chinese : Sibionics1Family.resolve(
+            protocolMode: .v120, keyGroup: Sibionics2Configuration.confirmedKeyGroup(for: address)
+        )
+        return Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: advertisedName,
+            probeCode: Sibionics2Configuration.probeCode(for: address),
+            variant: variant,
+            sibionics1Family: family
+        )
     }
 
     private func reconnectAfterStalledHandshake() {
@@ -928,15 +986,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
            batchProcessor.state != nil || stateStore.load(for: address) == nil {
             return batchProcessor
         }
-        let probeCode = Sibionics2Configuration.probeCode(for: address)
-        let sensitivity = Sibionics2FactorySensitivity.effectiveSensitivity(
-            advertisedName: advertisedName,
-            probeCode: probeCode, variant: variant
-        )
-        trace("Sibionics 2 sensitivity=%{public}@ source=%{public}@",
+        let probeCode = variant == .sibionics2 ? Sibionics2Configuration.probeCode(for: address) : nil
+        let sensitivity = factorySensitivity(for: address)
+        trace("Sibionics sensitivity=%{public}@ source=%{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
               type: .info, sensitivity.description,
-              probeCode != nil ? "QR probe code" : "advertisement fallback")
+              probeCode != nil ? "QR probe code" : "short code or variant fallback")
         return Sibionics2ReadingBatchProcessor(
             deviceIdentifier: address,
             stateStore: stateStore,
@@ -1095,7 +1150,15 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             abs($0.timeIntervalSince(sensorStartDate)) > Sibionics2ConnectionPolicy.sessionStartDateTolerance
         } ?? true
         let sensorAge = max(0, receivedAt.timeIntervalSince(sensorStartDate))
-        if variant.supportsReset, detectedNewSensor, Sibionics2Configuration.awaitingResetRestart(for: address) {
+        if variant.supportsManualReset, !detectedNewSensor, !resetSentThisConnection, !readings.isEmpty,
+           Sibionics2Configuration.awaitingResetRestart(for: address) {
+            // JugglucoNG's one-shot session probe: a later connection answered from the
+            // tracked session, so the reset did not take. Return to the saved cursor.
+            Sibionics2Configuration.clearResetRestart(for: address)
+            trace("Sibionics reset probe answered by the existing session; resuming from the saved cursor",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+        }
+        if variant.supportsManualReset, detectedNewSensor, Sibionics2Configuration.awaitingResetRestart(for: address) {
             Sibionics2Configuration.clearResetRestart(for: address)
             resetDisconnectGeneration += 1
             autoResetCheckGeneration += 1

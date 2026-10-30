@@ -528,13 +528,40 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(SibionicsReadingAge.nextRefreshInterval(since: now.addingTimeInterval(-119.25), now: now), 0.75, accuracy: 0.001)
     }
 
-    func testSibionics1SensitivityUsesOnlyOwnCodeOrNeutralScaling() {
-        XCTAssertNil(Sibionics2FactorySensitivity.decodedSibionics1Sensitivity(
-            advertisedName: nil, probeCode: nil))
+    func testSibionics1SensitivityFollowsJugglucoShortCodeThenVariantFallback() {
+        // Variant fallback tokens: EU YMWD016F, Hematonix YEZ1450H, Chinese GEPD802J.
         XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
-            advertisedName: nil, variant: .sibionics1), 1.0)
+            advertisedName: nil, variant: .sibionics1, sibionics1Family: .eu), 1.58, accuracy: 0.0001)
         XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
-            advertisedName: "ABCD1270SERIAL", variant: .sibionics1), 1.27)
+            advertisedName: nil, variant: .sibionics1, sibionics1Family: .hematonix), 1.47, accuracy: 0.0001)
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: nil, variant: .sibionics1, sibionics1Family: .chinese), 1.27, accuracy: 0.0001)
+        XCTAssertNil(Sibionics2FactorySensitivity.sibionics1ShortCodeSensitivity(advertisedName: nil, family: .eu))
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: "ABCD1270SERIAL", variant: .sibionics1), 1.27, accuracy: 0.0001)
+        XCTAssertEqual(Sibionics2FactorySensitivity.sibionics1ShortCodeSensitivity(
+            advertisedName: "ABCD1270SERIAL", family: .eu) ?? 0, 1.27, accuracy: 0.0001)
+        // JugglucoNG decodes the probe code only for Sibionics 2.
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: nil, probeCode: "ANY14CHARACTER", variant: .sibionics1, sibionics1Family: .eu),
+            1.58, accuracy: 0.0001)
+        XCTAssertEqual(Sibionics2FactorySensitivity.deriveShortCode("ABCDEF", fallback: "YMWD016F"), "00000ABC")
+        XCTAssertEqual(Sibionics2FactorySensitivity.deriveShortCode("", fallback: "YMWD016F"), "YMWD016F")
+        XCTAssertEqual(Sibionics1Family.resolve(protocolMode: .chinese, keyGroup: .hematonix), .chinese)
+        XCTAssertEqual(Sibionics1Family.resolve(protocolMode: .v120, keyGroup: .hematonix), .hematonix)
+        XCTAssertEqual(Sibionics1Family.resolve(protocolMode: nil, keyGroup: nil), .eu)
+    }
+
+    func testSibionics1ResetUsesItsProtocolsDirectCommandAndConfirmedKeyLeads() {
+        XCTAssertEqual([UInt8](Sibionics1ChineseProtocolCodec().buildResetPacket()), [0xAA, 0x55, 0x10, 0xF1])
+        XCTAssertEqual([UInt8](Sibionics2ProtocolCodec().buildGS1ResetPacket()), [0x24, 0xE7, 0x6F, 0x34])
+        XCTAssertTrue(SibionicsDeviceVariant.sibionics1.supportsManualReset)
+        XCTAssertFalse(SibionicsDeviceVariant.sibionics1.supportsAutoReset)
+        XCTAssertTrue(SibionicsDeviceVariant.sibionics2.supportsAutoReset)
+        XCTAssertEqual(Sibionics2KeyGroup.authenticationOrder(for: .sibionics1, preferred: .hematonix),
+                       [.hematonix, .sijoy, .eco])
+        XCTAssertEqual(Sibionics2KeyGroup.authenticationOrder(for: .sibionics2, preferred: .eco),
+                       [.eco, .sijoy, .hematonix])
     }
 
     func testSibionics1PeripheralFactoryPersistsExplicitVariant() throws {

@@ -14,30 +14,54 @@ enum Sibionics2FactorySensitivity {
     private static let variantFallbackShortCode = "0316015A"
     /// Final fallback when the variant token also fails to decode.
     static let defaultSensitivity: Double = 1.27
-    /// Identity scaling when an S1 factory code is unavailable. This is not a
-    /// factory calibration borrowed from a different sensor.
-    static let neutralSensitivity: Double = 1.0
 
     static func isSupported(_ sensitivity: Double) -> Bool {
         sensitivity.isFinite && supportedSensitivityRange.contains(sensitivity)
     }
 
+    /// Sibionics 2 decodes the QR probe code first. Sibionics 1 follows JugglucoNG's
+    /// sensitivityFor: the probe decoder is Sibionics 2 only, so S1 uses its short code,
+    /// then its own variant's fallback token, then 1.27.
     static func effectiveSensitivity(
         advertisedName: String?,
         probeCode: String? = nil,
-        variant: SibionicsDeviceVariant = .sibionics2
+        variant: SibionicsDeviceVariant = .sibionics2,
+        sibionics1Family: Sibionics1Family = .eu
     ) -> Double {
         guard variant == .sibionics1 else {
             return resolve(probeCode: probeCode, shortCode: advertisedName)
         }
-        return decodedSibionics1Sensitivity(advertisedName: advertisedName, probeCode: probeCode)
-            ?? neutralSensitivity
+        return sibionics1ShortCodeSensitivity(advertisedName: advertisedName, family: sibionics1Family)
+            ?? decodeShortCode(sibionics1Family.fallbackShortCode)
+            ?? defaultSensitivity
     }
 
-    static func decodedSibionics1Sensitivity(advertisedName: String?, probeCode: String?) -> Double? {
-        let normalizedName = normalize(advertisedName)
-        let shortCode = normalizedName.count >= 8 ? String(normalizedName.prefix(8)) : normalizedName
-        return decodeProbe(probeCode) ?? decodeShortCode(shortCode)
+    /// Sensitivity decoded from the S1 short code, or nil when only the variant fallback applies.
+    static func sibionics1ShortCodeSensitivity(advertisedName: String?, family: Sibionics1Family) -> Double? {
+        let shortCode = deriveShortCode(advertisedName, fallback: family.fallbackShortCode)
+        guard shortCode != family.fallbackShortCode else { return nil }
+        return decodeShortCode(shortCode)
+    }
+
+    /// JugglucoNG's SibionicsSensitivity.deriveShortCode for a Bluetooth name.
+    static func deriveShortCode(_ source: String?, fallback: String) -> String {
+        let normalized = normalize(source)
+        if normalized.count >= 8 {
+            let prefix = String(normalized.prefix(8))
+            if decodeShortCode(prefix) != nil { return prefix }
+        }
+        let shortName: String
+        if normalized.count <= 11 && normalized.hasPrefix("LT") && normalized.count >= 8 {
+            shortName = String((String(normalized.suffix(4)) + normalized).prefix(11))
+        } else if (1...10).contains(normalized.count) {
+            shortName = String(repeating: "0", count: 11 - normalized.count) + normalized
+        } else if normalized.count >= 11 {
+            shortName = String(normalized.prefix(11))
+        } else {
+            shortName = fallback
+        }
+        let candidate = String(shortName.prefix(8))
+        return candidate.count == 8 ? candidate : fallback
     }
 
     static func decodeProbe(_ code: String?) -> Double? {
@@ -196,5 +220,27 @@ enum Sibionics2FactorySensitivity {
               let c0 = UnicodeScalar(out0), let c1 = UnicodeScalar(out1), let c2 = UnicodeScalar(out2)
         else { return nil }
         return Int(String(String.UnicodeScalarView([c0, c1, c2])))
+    }
+}
+
+/// Sibionics 1 product lines, which differ in key group, fallback sensitivity token
+/// and stock algorithm (JugglucoNG SibionicsConstants.Variant EU, HEMATONIX, CHINESE).
+enum Sibionics1Family {
+    case eu
+    case hematonix
+    case chinese
+
+    var fallbackShortCode: String {
+        switch self {
+        case .eu: return "YMWD016F"
+        case .hematonix: return "YEZ1450H"
+        case .chinese: return "GEPD802J"
+        }
+    }
+
+    /// The family follows the confirmed protocol and the key group that produced readings.
+    static func resolve(protocolMode: Sibionics1ProtocolMode?, keyGroup: Sibionics2KeyGroup?) -> Sibionics1Family {
+        if protocolMode == .chinese { return .chinese }
+        return keyGroup == .hematonix ? .hematonix : .eu
     }
 }

@@ -58,3 +58,18 @@ xDrip+ uses xDrip's own weighted calibration. The JugglucoNG methods are ports o
 - **Adaptive ensemble**: a weighted blend of the four above.
 
 One fingerstick is always a plain offset. **Calibration weighting** (Fresh, the JugglucoNG default; Balanced; Stable) sets how quickly older fingersticks lose influence. JugglucoNG evaluates the fit in the user's display unit, so the calculation follows xDrip's mg/dL or mmol/L setting. Only fingersticks taken at or before a reading affect it.
+
+## Sibionics 1 specifics
+
+Sibionics 1 covers three JugglucoNG product lines, told apart at runtime:
+
+| Line | Protocol | Stock algorithm | Fallback sensitivity |
+|---|---|---|---|
+| EU (Sijoy key) | V120 | V116A | `YMWD016F` → 1.58 |
+| Hematonix | V120 | V116A | `YEZ1450H` → 1.47 |
+| Chinese GS1 CN | AA55 | V115G | `GEPD802J` → 1.27 |
+
+- The protocol is probed on first connection: an AA55 echo or data confirms Chinese; no answer, or the V120 marker, switches to V120. The result is saved per sensor.
+- V120 authentication tries the Sijoy, Hematonix and Eco keys. The group that produces readings is saved and leads later connections; it also selects the Hematonix fallback sensitivity.
+- Factory sensitivity follows JugglucoNG: the short code derived from the Bluetooth name, then the line's fallback token, then 1.27. The QR probe decoder is Sibionics 2 only.
+- Manual reset sends the line's direct command (`24 E7 6F 34` for V120, `AA 55 10 F1` for Chinese). Automatic reset is Sibionics 2 only, as in JugglucoNG. The first request after a reset asks for index 1; if the existing session answers, the reset did not take and the saved cursor is used again.

@@ -4,11 +4,12 @@ class Texts_BluetoothPeripheralView {
     
     static private let filename = "BluetoothPeripheralView"
 
-    static let sibionics1SensitivityUnknown = NSLocalizedString("sibionics1.sensitivityUnknown", tableName: filename, bundle: .main, value: "Factory sensitivity unknown · neutral scaling", comment: "No sensor-specific factory sensitivity is available")
+    static let sibionics1SensitivityTitle = NSLocalizedString("sibionics1.sensitivityTitle", tableName: filename, bundle: .main, value: "Factory sensitivity", comment: "Sibionics 1 factory sensitivity row")
+    static let sibionics1SensitivityFallback = NSLocalizedString("sibionics1.sensitivityFallback", tableName: filename, bundle: .main, value: "sensor type default", comment: "Sibionics 1 sensitivity comes from JugglucoNG's fallback code for the sensor type")
     static let sibionics1DiscoveryTitle = NSLocalizedString("sibionics1.discoveryTitle", tableName: filename, bundle: .main, value: "Nearby Sibionics 1 sensors", comment: "Sibionics 1 sensor settings")
     static let sibionics1DiscoveryEmpty = NSLocalizedString("sibionics1.discoveryEmpty", tableName: filename, bundle: .main, value: "Searching for Sibionics 1 sensors…", comment: "Sibionics 1 sensor settings")
     static let sibionics1SettingsTitle = NSLocalizedString("sibionics1.settingsTitle", tableName: filename, bundle: .main, value: "Sibionics 1 settings", comment: "Sibionics 1 sensor settings")
-    static let sibionics1SettingsFooter = NSLocalizedString("sibionics1.settingsFooter", tableName: filename, bundle: .main, value: "The sensor protocol is detected automatically. Calibration adjusts readings using fingersticks.", comment: "Sibionics 1 sensor settings")
+    static let sibionics1SettingsFooter = NSLocalizedString("sibionics1.settingsFooter", tableName: filename, bundle: .main, value: "The sensor protocol is detected automatically. Factory sensitivity comes from the sensor name or, when it carries none, the default for the sensor type. Calibration adjusts readings using fingersticks. You can reset the sensor manually.", comment: "Sibionics 1 sensor settings")
 
     static let sibionics2DiscoveryTitle = NSLocalizedString("sibionics2.discoveryTitle", tableName: filename, bundle: .main, value: "Nearby Sibionics 2 sensors", comment: "Heading for nearby Sibionics 2 scan results")
     static let sibionics2DiscoveryFooter = NSLocalizedString("sibionics2.discoveryFooter", tableName: filename, bundle: .main, value: "Keep this screen open and select your sensor when it appears.", comment: "Instructions for selecting a discovered Sibionics 2 sensor")
@@ -45,8 +46,8 @@ class Texts_BluetoothPeripheralView {
     static let sibionics2CalibrationWeightingBalanced = NSLocalizedString("sibionics2.calibrationWeightingBalanced", tableName: filename, bundle: .main, value: "Balanced", comment: "JugglucoNG calibration weight profile")
     static let sibionics2CalibrationWeightingStable = NSLocalizedString("sibionics2.calibrationWeightingStable", tableName: filename, bundle: .main, value: "Stable", comment: "JugglucoNG calibration weight profile")
     static let sibionics2AutoResetTitle = NSLocalizedString("sibionics2.autoResetTitle", tableName: filename, bundle: .main, value: "Automatic sensor reset", comment: "Toggle automatic reset for Sibionics 2")
-    static let sibionics2ResetTitle = NSLocalizedString("sibionics2.resetTitle", tableName: filename, bundle: .main, value: "Reset sensor", comment: "Manual Sibionics 2 reset action")
-    static let sibionics2ResetConfirmTitle = NSLocalizedString("sibionics2.resetConfirmTitle", tableName: filename, bundle: .main, value: "Reset Sibionics 2?", comment: "Confirmation title before resetting Sibionics 2")
+    static let sibionics2ResetTitle = NSLocalizedString("sibionics2.resetTitle", tableName: filename, bundle: .main, value: "Reset sensor", comment: "Manual Sibionics reset action")
+    static let sibionics2ResetConfirmTitle = NSLocalizedString("sibionics2.resetConfirmTitle", tableName: filename, bundle: .main, value: "Reset sensor?", comment: "Confirmation title before resetting a Sibionics sensor")
     static let sibionics2ResetConfirmMessage = NSLocalizedString("sibionics2.resetConfirmMessage", tableName: filename, bundle: .main, value: "This sends a reset command to the sensor. Continue only if you intend to start a new sensor session.", comment: "Confirmation message before resetting Sibionics 2")
 
     static let signalStrengthDisconnected = NSLocalizedString("signalStrengthDisconnected", tableName: filename, bundle: .main, value: "Disconnected", comment: "Signal value replacement while an always-on device is disconnected")

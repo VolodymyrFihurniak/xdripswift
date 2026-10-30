@@ -703,17 +703,26 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         let address = bluetoothPeripheral.blePeripheral.address
         let savedAuthenticationAddress = Sibionics2AuthenticationAddress.override(for: address)
             ?? Sibionics2AuthenticationAddress.detected(for: address)
-        let probeCode = Sibionics2Configuration.probeCode(for: address)
+        let isSibionics1 = expectedBluetoothPeripheralType == .Sibionics1Type
+        // JugglucoNG decodes the QR probe code only for Sibionics 2; S1 uses its short code.
+        let probeCode = isSibionics1 ? nil : Sibionics2Configuration.probeCode(for: address)
+        let sibionics1Family = Sibionics2Configuration.sibionics1Family(for: address)
         let sensitivity = Sibionics2FactorySensitivity.effectiveSensitivity(
             advertisedName: bluetoothPeripheral.blePeripheral.name,
             probeCode: probeCode,
-            variant: (bluetoothPeripheral as? Sibionics2)?.variant ?? .sibionics2
+            variant: (bluetoothPeripheral as? Sibionics2)?.variant ?? .sibionics2,
+            sibionics1Family: sibionics1Family
         )
-        let missingSibionics1Sensitivity = expectedBluetoothPeripheralType == .Sibionics1Type &&
-            Sibionics2FactorySensitivity.decodedSibionics1Sensitivity(
-                advertisedName: bluetoothPeripheral.blePeripheral.name, probeCode: probeCode) == nil
-        let probeDetail = missingSibionics1Sensitivity ? Texts_BluetoothPeripheralView.sibionics1SensitivityUnknown : probeCode.map { "\(sensitivity.stringWithoutTrailingZeroes) · \($0)" }
-            ?? "\(sensitivity.stringWithoutTrailingZeroes) · \(Texts_BluetoothPeripheralView.sibionics2ProbeCodeAutomatic)"
+        let usesSibionics1Fallback = isSibionics1 && Sibionics2FactorySensitivity.sibionics1ShortCodeSensitivity(
+            advertisedName: bluetoothPeripheral.blePeripheral.name, family: sibionics1Family) == nil
+        let probeDetail: String
+        if usesSibionics1Fallback {
+            probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(Texts_BluetoothPeripheralView.sibionics1SensitivityFallback)"
+        } else if let probeCode {
+            probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(probeCode)"
+        } else {
+            probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(Texts_BluetoothPeripheralView.sibionics2ProbeCodeAutomatic)"
+        }
         let connectionSection = BluetoothPeripheralDetailSection(
             id: "sibionics2-authentication-address",
             title: Texts_BluetoothPeripheralView.sibionics2ConnectionTitle,
@@ -750,10 +759,11 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             rows: [
                 row(
                     id: "sibionics2-probe-code",
-                    title: Texts_BluetoothPeripheralView.sibionics2ProbeCodeTitle,
+                    title: isSibionics1 ? Texts_BluetoothPeripheralView.sibionics1SensitivityTitle
+                        : Texts_BluetoothPeripheralView.sibionics2ProbeCodeTitle,
                     detail: probeDetail,
-                    showsDisclosure: true,
-                    action: { [weak self] in
+                    showsDisclosure: !isSibionics1,
+                    action: isSibionics1 ? nil : { [weak self] in
                         self?.requestSibionics2ProbeCode(for: bluetoothPeripheral)
                     }
                 ),
@@ -812,8 +822,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                 // The weight profile is a JugglucoNG setting; xDrip+ calibration has its own weighting.
                 (row.id != "sibionics2-calibration-weighting" ||
                     Sibionics2Configuration.calibrationMode(for: address).jugglucoAlgorithm != nil) &&
-                (expectedBluetoothPeripheralType != .Sibionics1Type ||
-                    (row.id != "sibionics2-auto-reset" && row.id != "sibionics2-reset"))
+                // JugglucoNG resets every Sibionics type manually; automatic reset is Sibionics 2 only.
+                (expectedBluetoothPeripheralType != .Sibionics1Type || row.id != "sibionics2-auto-reset")
             }
         )
         return [connectionSection, settingsSection]
