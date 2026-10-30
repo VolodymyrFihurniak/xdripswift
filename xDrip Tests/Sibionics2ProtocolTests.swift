@@ -518,21 +518,21 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertEqual(plaintext.reduce(UInt8(0), { $0 &+ $1 }), 0)
     }
 
-    func testSibionics2PollIntervalAndCalibrationModePersistPerPeripheral() throws {
+    func testBatteryLevelAcceptsOnlyOneBytePercentage() {
+        XCTAssertEqual(Sibionics2Battery.percentage(from: Data([87])), 87)
+        XCTAssertEqual(Sibionics2Battery.percentage(from: Data([100])), 100)
+        XCTAssertNil(Sibionics2Battery.percentage(from: Data([101])))
+        XCTAssertNil(Sibionics2Battery.percentage(from: Data()))
+        XCTAssertNil(Sibionics2Battery.percentage(from: Data([50, 0])))
+    }
+
+    func testSibionics2CalibrationModeAndResetSettingsPersistPerPeripheral() throws {
         let suiteName = "Sibionics2ConfigurationTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-A", userDefaults: defaults), .oneMinute)
-        XCTAssertEqual(Sibionics2PollInterval.allCases.map(\.rawValue), [1, 5, 10, 15])
-        for interval in Sibionics2PollInterval.allCases {
-            XCTAssertTrue(Sibionics2Configuration.setPollInterval(interval, for: "sensor-A", userDefaults: defaults))
-            XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-A", userDefaults: defaults), interval)
-        }
         XCTAssertTrue(Sibionics2Configuration.setCalibrationMode(.jugglucoNG, for: "sensor-A", userDefaults: defaults))
-        XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-A", userDefaults: defaults), .fifteenMinutes)
         XCTAssertEqual(Sibionics2Configuration.calibrationMode(for: "sensor-A", userDefaults: defaults), .jugglucoNG)
-        XCTAssertEqual(Sibionics2Configuration.pollInterval(for: "sensor-B", userDefaults: defaults), .oneMinute)
         XCTAssertEqual(Sibionics2Configuration.calibrationMode(for: "sensor-B", userDefaults: defaults), .xDripPlus)
         XCTAssertEqual(Sibionics2CalibrationMode.xDripPlus.calibrationHistoryDays, 4)
         XCTAssertEqual(Sibionics2CalibrationMode.jugglucoNG.calibrationHistoryDays, 23)

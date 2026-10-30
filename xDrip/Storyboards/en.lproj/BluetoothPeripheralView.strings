@@ -188,7 +188,7 @@
 "sibionics2.bluetoothAddressDetected" = "detected automatically";
 "sibionics2.probeCodeTitle" = "Sensor QR code";
 "sibionics2.settingsTitle" = "Sibionics 2 settings";
-"sibionics2.settingsFooter" = "The QR code supplies factory sensitivity. Calibration adjusts readings using fingersticks. Polling controls how often xDripSwift requests the latest data. Automatic reset can begin four hours before day 22 when glucose is stable; a safety reset is forced four hours before day 23 even if automatic reset is off. You can also reset manually.";
+"sibionics2.settingsFooter" = "The QR code supplies factory sensitivity. Calibration adjusts readings using fingersticks. Automatic reset can begin four hours before day 22 when glucose is stable; a safety reset is forced four hours before day 23 even if automatic reset is off. You can also reset manually.";
 "sibionics2.probeCodeFooter" = "Enter the 14-character probe code from the sensor QR label. The stock JugglucoNG algorithm decodes its factory sensitivity automatically. Leave empty to use the sensor advertisement fallback.";
 "sibionics2.probeCodeAutomatic" = "automatic from Bluetooth name";
 "sibionics2.probeCodeInvalid" = "Enter a valid 14-character sensor probe code.";
@@ -196,12 +196,6 @@
 "sibionics2.calibrationFooter" = "Both methods work on top of the stock Sibionics correction. xDrip+ uses xDrip's weighted calibration; JugglucoNG uses a fresh weighted fit with a local fingerstick anchor.";
 "sibionics2.calibrationXdripPlus" = "xDrip+";
 "sibionics2.calibrationJugglucoNG" = "JugglucoNG";
-"sibionics2.pollTitle" = "Request latest value";
-"sibionics2.pollFooter" = "How often xDripSwift asks the sensor for readings after the live connection starts.";
-"sibionics2.pollOneMinute" = "1 minute";
-"sibionics2.pollFiveMinutes" = "5 minutes";
-"sibionics2.pollTenMinutes" = "10 minutes";
-"sibionics2.pollFifteenMinutes" = "15 minutes";
 "sibionics2.autoResetTitle" = "Automatic sensor reset";
 "sibionics2.resetTitle" = "Reset sensor";
 "sibionics2.resetConfirmTitle" = "Reset Sibionics 2?";
@@ -210,5 +204,5 @@
 "sibionics1.discoveryTitle" = "Nearby Sibionics 1 sensors";
 "sibionics1.discoveryEmpty" = "Searching for Sibionics 1 sensors…";
 "sibionics1.settingsTitle" = "Sibionics 1 settings";
-"sibionics1.settingsFooter" = "The sensor protocol is detected automatically. Calibration adjusts readings using fingersticks. Polling controls how often xDripSwift requests the latest data.";
+"sibionics1.settingsFooter" = "The sensor protocol is detected automatically. Calibration adjusts readings using fingersticks.";
 "sibionics1.sensitivityUnknown" = "Factory sensitivity unknown · neutral scaling";

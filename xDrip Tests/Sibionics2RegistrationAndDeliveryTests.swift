@@ -595,6 +595,9 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertFalse(chinese.confirmed)
         chinese.confirm(.chinese)
         XCTAssertFalse(chinese.fallBackToV120())
+        XCTAssertTrue(chinese.requireV120(), "The V120 marker overrides a confirmed Chinese session")
+        XCTAssertEqual(chinese.mode, .v120)
+        XCTAssertFalse(chinese.requireV120())
         XCTAssertEqual(Sibionics1ConnectionState(savedMode: .v120).mode, .v120)
     }
 
@@ -1263,14 +1266,10 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         )
 
         let invalidRaw = rows[129].reading(index: 131, rawMmol: .nan, sensorStartDate: sensorStartDate)
-        let invalidTemperature = rows[129].reading(
-            index: 132,
-            temperatureC: 99,
-            sensorStartDate: sensorStartDate
-        )
+        let nonPositiveRaw = rows[129].reading(index: 132, rawMmol: 0, sensorStartDate: sensorStartDate)
         let delivered = batchProcessor.process([
             invalidRaw,
-            invalidTemperature,
+            nonPositiveRaw,
             rows[129].reading(sensorStartDate: sensorStartDate)
         ], receivedAt: sensorStartDate.addingTimeInterval(20_000))
 
@@ -1279,7 +1278,10 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertTrue(delivered.allSatisfy {
             $0.glucoseLevelRaw.isFinite && $0.glucoseLevelRaw > 0 && $0.glucoseLevelRaw <= 900
         })
-        XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 130)
+        // Unusable minutes are skipped, not treated as missing history: the cursor
+        // moves past them so the next page is accepted instead of stalling forever.
+        XCTAssertEqual(stateStore.load(for: address)?.lastDeliveredIndex, 132)
+        XCTAssertFalse(batchProcessor.requiresHistoryReplay)
     }
     func testDelegateDeliverySeamForwardsOnlyProcessedGlucoseAndSensorAge() throws {
         let rows = try fixtureRows()

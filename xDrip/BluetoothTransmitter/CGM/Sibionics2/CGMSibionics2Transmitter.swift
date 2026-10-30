@@ -40,7 +40,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var historyWriteFailures = 0
     private var historyRetryScheduled = false
     private var historyReconnectCount = 0
+    /// Chinese Sibionics 1 firmware answers requests but does not push, so it is
+    /// asked once a minute as JugglucoNG does. V120 sensors stream without polling.
     private var readingPollGeneration = 0
+    private var streamingWatchdogGeneration = 0
+    private var batteryLevelCharacteristic: CBCharacteristic?
+    private var lastBatteryReadAt: Date?
     private var autoResetCheckGeneration = 0
     private var resetDisconnectGeneration = 0
     private let transmitterLog = OSLog(subsystem: ConstantsLog.subSystem, category: ConstantsLog.categoryBluetoothPeripheralManager)
@@ -67,7 +72,11 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             // and auto-discovery like JugglucoNG (scan for devices with FF30 service)
             CBUUID_Advertisement: Sibionics2ProtocolCodec.serviceUUID.uuidString,
             // Device Information is read for a System ID or serial that carries the BLE address.
-            servicesCBUUIDs: [Sibionics2ProtocolCodec.serviceUUID, Sibionics2AuthenticationAddress.deviceInformationServiceUUID],
+            servicesCBUUIDs: [
+                Sibionics2ProtocolCodec.serviceUUID,
+                Sibionics2AuthenticationAddress.deviceInformationServiceUUID,
+                Sibionics2Battery.serviceUUID
+            ],
             CBUUID_ReceiveCharacteristic: Sibionics2ProtocolCodec.notifyUUID.uuidString,
             CBUUID_WriteCharacteristic: Sibionics2ProtocolCodec.writeUUID.uuidString,
             bluetoothTransmitterDelegate: bluetoothTransmitterDelegate
@@ -99,9 +108,6 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         rssi RSSI: NSNumber
     ) {
         let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name
-        if let address = Sibionics2AuthenticationAddress.automaticAddress(for: peripheral, centralManager: central) {
-            _ = Sibionics2AuthenticationAddress.setDetected(address, for: peripheral.identifier.uuidString)
-        }
         guard Self.canAdoptPeripheral(
             advertisedName: name,
             storedAddress: deviceAddress,
@@ -133,15 +139,6 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             BluetoothPeripheralScanResult(identifier: identifier, name: name, rssi: RSSI.intValue),
             bluetoothTransmitter: self
         )
-    }
-
-    override func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        if let address = Sibionics2AuthenticationAddress.automaticAddress(for: peripheral, centralManager: central) {
-            _ = Sibionics2AuthenticationAddress.setDetected(address, for: peripheral.identifier.uuidString)
-            trace("Sibionics 2 Bluetooth address detected automatically",
-                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
-        }
-        super.centralManager(central, didConnect: peripheral)
     }
 
     func selectDiscoveredPeripheral(identifier: String) {
@@ -177,6 +174,14 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
     override func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         super.peripheral(peripheral, didDiscoverCharacteristicsFor: service, error: error)
+        if error == nil, service.uuid == Sibionics2Battery.serviceUUID {
+            batteryLevelCharacteristic = service.characteristics?.first { $0.uuid == Sibionics2Battery.levelCharacteristicUUID }
+            if let batteryLevelCharacteristic {
+                lastBatteryReadAt = Date()
+                peripheral.readValue(for: batteryLevelCharacteristic)
+            }
+            return
+        }
         if error == nil, service.uuid == Sibionics2AuthenticationAddress.deviceInformationServiceUUID {
             for characteristic in service.characteristics ?? [] where
                 characteristic.uuid == Sibionics2AuthenticationAddress.systemIDCharacteristicUUID ||
@@ -212,6 +217,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         pendingDeviceInformationReads = 0
         sessionStartDeferred = false
         deviceInformationGeneration += 1
+        streamingWatchdogGeneration += 1
+        batteryLevelCharacteristic = nil
         handshake = nil
         streamingReady = false
         receivedNonEmptyReadingsPacket = false
@@ -267,6 +274,10 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         error: Error?
     ) {
         super.peripheral(peripheral, didUpdateValueFor: characteristic, error: error)
+        if characteristic.uuid == Sibionics2Battery.levelCharacteristicUUID {
+            receiveBatteryLevel(characteristic.value, error: error)
+            return
+        }
         if characteristic.uuid == Sibionics2AuthenticationAddress.systemIDCharacteristicUUID ||
             characteristic.uuid == Sibionics2AuthenticationAddress.serialNumberCharacteristicUUID {
             receiveDeviceInformation(characteristic, peripheral: peripheral, error: error)
@@ -281,6 +292,28 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
 
         receiveNotification(value, at: Date())
+    }
+
+    private func receiveBatteryLevel(_ value: Data?, error: Error?) {
+        guard error == nil, let percentage = value.flatMap(Sibionics2Battery.percentage(from:)) else { return }
+        trace("Sibionics 2 battery level=%{public}@%%", log: transmitterLog,
+              category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info, percentage.description)
+        DispatchQueue.main.async { [weak self] in
+            var noGlucose = [GlucoseData]()
+            self?.cgmTransmitterDelegate?.cgmTransmitterInfoReceived(
+                glucoseData: &noGlucose,
+                transmitterBatteryInfo: .percentage(percentage: percentage),
+                sensorAge: nil
+            )
+        }
+    }
+
+    /// JugglucoNG refreshes the standard battery level every six hours while streaming.
+    private func refreshBatteryLevelIfDue(now: Date) {
+        guard let batteryLevelCharacteristic, let peripheral = batteryLevelCharacteristic.service?.peripheral,
+              now.timeIntervalSince(lastBatteryReadAt ?? .distantPast) >= Sibionics2Battery.refreshInterval else { return }
+        lastBatteryReadAt = now
+        peripheral.readValue(for: batteryLevelCharacteristic)
     }
 
     private func receiveDeviceInformation(_ characteristic: CBCharacteristic, peripheral: CBPeripheral, error: Error?) {
@@ -362,12 +395,15 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 if !readings.isEmpty, let address = deviceAddress { confirmAuthenticationAddress(for: address) }
                 receiveReadings(readings, at: date)
             case .requestEcho:
-                if sibionics1Connection?.confirmed == false && sibionics1Connection?.receivedEcho == false {
-                    sibionics1Connection?.receiveEcho()
-                    scheduleChineseProbeTimeout()
-                }
+                // JugglucoNG treats the AA55 echo as proof of the Chinese protocol and
+                // keeps re-requesting data; falling back to V120 here broke these sensors.
+                guard sibionics1Connection?.confirmed == false, let address = deviceAddress else { return }
+                sibionics1Connection?.receiveEcho()
+                sibionics1Connection?.confirm(.chinese)
+                Sibionics2Configuration.setProtocolMode(.chinese, for: address)
+                scheduleChineseDataRetry(for: address)
             case .v120AuthRequired:
-                fallBackToV120()
+                switchToV120()
             case .malformed:
                 trace("Sibionics 1 rejected malformed probe/data notification", log: transmitterLog,
                       category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
@@ -426,6 +462,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             self.probeGeneration += 1
             self.sibionics1Connection = nil
             self.readingPollGeneration += 1
+            self.streamingWatchdogGeneration += 1
             self.autoResetCheckGeneration += 1
             self.resetDisconnectGeneration += 1
             self.handshake = nil
@@ -472,16 +509,6 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     var calibrationMode: Sibionics2CalibrationMode {
         guard let address = deviceAddress else { return .xDripPlus }
         return Sibionics2Configuration.calibrationMode(for: address)
-    }
-
-    func pollIntervalDidChange(for address: String) {
-        runOnCentralQueue { [weak self] in
-            guard let self,
-                  let currentAddress = self.deviceAddress,
-                  currentAddress.caseInsensitiveCompare(address) == .orderedSame else { return }
-            self.readingPollGeneration += 1
-            self.scheduleReadingPoll(for: currentAddress)
-        }
     }
 
     func autoResetSettingDidChange(for address: String) {
@@ -575,27 +602,45 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private func markStreamingReady(for address: String) {
         streamingReady = true
         handshakeReconnectCount = 0
-        scheduleReadingPoll(for: address)
+        scheduleChinesePoll(for: address)
+        scheduleStreamingWatchdog()
         sendPendingResetIfReady(for: address)
     }
 
-    private func scheduleReadingPoll(for address: String) {
-        guard streamingReady else { return }
+    private var usesChineseProtocol: Bool {
+        variant == .sibionics1 && sibionics1Connection?.mode == .chinese
+    }
+
+    /// The Chinese protocol needs a request for every page; V120 streams on its own.
+    private func scheduleChinesePoll(for address: String) {
+        guard streamingReady, usesChineseProtocol else { return }
         readingPollGeneration += 1
         let generation = readingPollGeneration
-        let interval = Sibionics2Configuration.pollInterval(for: address)
-        runOnCentralQueue(after: interval.seconds) { [weak self] in
+        runOnCentralQueue(after: Sibionics2ConnectionPolicy.chinesePollInterval) { [weak self] in
             guard let self,
                   self.readingPollGeneration == generation,
-                  self.streamingReady,
+                  self.streamingReady, self.usesChineseProtocol,
                   let currentAddress = self.deviceAddress,
                   currentAddress.caseInsensitiveCompare(address) == .orderedSame else { return }
-            if self.variant.supportsReset && Sibionics2Configuration.resetRequested(for: currentAddress) {
-                self.sendPendingResetIfReady(for: currentAddress)
-            } else {
-                _ = self.sendDataRequest(for: currentAddress)
-            }
-            self.scheduleReadingPoll(for: currentAddress)
+            _ = self.sendDataRequest(for: currentAddress)
+            self.scheduleChinesePoll(for: currentAddress)
+        }
+    }
+
+    /// Reconnects a session that stays up but stops delivering readings, as
+    /// JugglucoNG's streaming timeout does. Each readings packet re-arms it.
+    private func scheduleStreamingWatchdog() {
+        streamingWatchdogGeneration += 1
+        let generation = streamingWatchdogGeneration
+        runOnCentralQueue(after: Sibionics2ConnectionPolicy.readingsStallTimeout) { [weak self] in
+            guard let self,
+                  self.streamingWatchdogGeneration == generation,
+                  self.streamingReady,
+                  self.getConnectionStatus() == .connected else { return }
+            trace("Sibionics 2 no readings for %{public}@ seconds while streaming; reconnecting",
+                  log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
+                  Sibionics2ConnectionPolicy.readingsStallTimeout.description)
+            self.disconnect()
         }
     }
 
@@ -704,7 +749,25 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         } else {
             batchProcessor = makeBatchProcessor(for: address)
             _ = sendChineseDataRequest(for: address)
-            scheduleChineseProbeTimeout()
+            if Sibionics2Configuration.protocolMode(for: address) == .chinese {
+                // A confirmed Chinese sensor is not re-probed; only its V120 marker switches it.
+                sibionics1Connection?.confirm(.chinese)
+                scheduleChineseDataRetry(for: address)
+            } else {
+                scheduleChineseProbeTimeout()
+            }
+        }
+    }
+
+    /// Re-sends the Chinese request until the first data page, as JugglucoNG's data timeout does.
+    private func scheduleChineseDataRetry(for address: String) {
+        probeGeneration += 1
+        let generation = probeGeneration
+        runOnCentralQueue(after: Sibionics2ConnectionPolicy.chineseDataRetryInterval) { [weak self] in
+            guard let self, self.probeGeneration == generation,
+                  self.notificationEnabled, !self.streamingReady, self.usesChineseProtocol else { return }
+            _ = self.sendChineseDataRequest(for: address)
+            self.scheduleChineseDataRetry(for: address)
         }
     }
 
@@ -724,15 +787,25 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         runOnCentralQueue(after: connection.probeDelay) { [weak self] in
             guard let self, self.probeGeneration == generation,
                   self.notificationEnabled else { return }
-            // An echo grants one longer data window. Its deadline is finite;
-            // repeated echoes must not keep a sensor indefinitely in probing.
+            // No Chinese answer at all: the firmware speaks V120.
             self.fallBackToV120()
         }
     }
 
     private func fallBackToV120() {
         guard sibionics1Connection?.fallBackToV120() == true else { return }
+        beginV120AfterChineseProbe()
+    }
+
+    /// The V120 marker is authoritative even for a sensor saved as Chinese.
+    private func switchToV120() {
+        guard sibionics1Connection?.requireV120() == true else { return }
+        beginV120AfterChineseProbe()
+    }
+
+    private func beginV120AfterChineseProbe() {
         probeGeneration += 1
+        readingPollGeneration += 1
         // The factory algorithms have different serialized state and must not
         // reuse a Chinese processor when the sensor requests EU authentication.
         batchProcessor = nil
@@ -988,6 +1061,10 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
     private func receiveReadings(_ readings: [Sibionics2RawReading], at receivedAt: Date) {
         guard let address = deviceAddress else { return }
+        if !readings.isEmpty {
+            scheduleStreamingWatchdog()
+            refreshBatteryLevelIfDue(now: receivedAt)
+        }
         var currentProcessor = batchProcessor ?? makeBatchProcessor(for: address)
         let previousStartDate = currentProcessor.state?.sensorStartDate ?? probeReplaySessionStartDate
         let glucoseData = currentProcessor.process(readings, receivedAt: receivedAt)
@@ -1023,7 +1100,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             Sibionics2Configuration.clearResetRestart(for: address)
             resetDisconnectGeneration += 1
             autoResetCheckGeneration += 1
-            scheduleReadingPoll(for: address)
+            scheduleStreamingWatchdog()
             trace("Sibionics 2 confirmed a new sensor session after reset; local processor state has advanced",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
         }
@@ -1103,6 +1180,14 @@ struct Sibionics1ConnectionState {
     mutating func fallBackToV120() -> Bool {
         guard mode == .chinese, !confirmed else { return false }
         mode = .v120
+        return true
+    }
+
+    /// The sensor's V120 authentication marker switches even a confirmed Chinese session.
+    mutating func requireV120() -> Bool {
+        guard mode == .chinese else { return false }
+        mode = .v120
+        confirmed = false
         return true
     }
 }

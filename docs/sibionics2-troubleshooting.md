@@ -40,3 +40,9 @@ Authentication waits up to 3 seconds for Device Information so the published add
 The sensor accepts any address at authentication, so these values are unverified candidates. Each connection tries one: the detected address first, then the candidates, then the zero address. A connection that ends without glucose readings moves to the next candidate; the first one that produces readings is saved as the detected address and shown as such on the device screen. A manual **Bluetooth address** always takes priority and is never rotated.
 
 If detection still fails, export a trace and look for `advertisement manufacturer data`, `device information 2A23`/`2A25` and `authentication address source`. Those lines show what the sensor publishes, which is needed to add another source.
+
+## Readings cadence
+
+There is no polling setting. V120 sensors (Sibionics 2 and EU Sibionics 1) stream on their own after the handshake, as in JugglucoNG. Chinese Sibionics 1 firmware only answers requests, so it is asked once a minute while connected and every 30 seconds until its first page. A session that stays connected but delivers no readings for 3 minutes is reconnected.
+
+The standard Battery Service level is read at each connection and every 6 hours while streaming.

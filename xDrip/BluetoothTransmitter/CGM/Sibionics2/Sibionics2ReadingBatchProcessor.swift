@@ -213,15 +213,12 @@ struct Sibionics2ReadingBatchProcessor {
         )
     }
 
+    /// Only the minute index and time decide history continuity. A minute with an
+    /// unusable measurement still advances the cursor (the processor skips it), as in
+    /// JugglucoNG; filtering it here left a permanent gap that stalled delivery.
     private static func isValid(_ reading: Sibionics2RawReading) -> Bool {
         reading.index >= Sibionics2ReadingValidationPolicy.minimumIndex &&
             reading.index <= Sibionics2ReadingValidationPolicy.maximumIndex &&
-            reading.eventTime.timeIntervalSince1970.isFinite &&
-            reading.temperatureC.isFinite && reading.temperatureC > 0 &&
-            reading.temperatureC <= Sibionics2ReadingValidationPolicy.maximumTemperatureCelsius &&
-            reading.impedance >= Sibionics2ReadingValidationPolicy.minimumImpedance &&
-            reading.impedance <= Sibionics2ReadingValidationPolicy.maximumImpedance &&
-            reading.rawMmol.isFinite && reading.rawMmol > 0 &&
-            reading.rawMmol <= Sibionics2ReadingValidationPolicy.maximumRawGlucoseMmol
+            reading.eventTime.timeIntervalSince1970.isFinite
     }
 }

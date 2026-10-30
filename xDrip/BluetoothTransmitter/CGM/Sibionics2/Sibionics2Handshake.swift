@@ -61,9 +61,8 @@ private enum Sibionics2BluetoothAddressFormat {
 }
 
 /// Resolves the Bluetooth address carried by the V120 authentication packet.
-/// iOS does not publish a public MAC API; some CoreBluetooth versions expose
-/// private selectors used by the reference apps, so the explicit address field
-/// remains available as a fallback when those selectors are absent.
+/// iOS has no public MAC API, so the address comes from what the sensor
+/// publishes (Device Information, advertisement) or from a manual entry.
 enum Sibionics2AuthenticationAddress {
     private static let keyPrefix = "sibionics2.authenticationAddress."
     private static let detectedKeyPrefix = "sibionics2.detectedBluetoothAddress."
@@ -136,23 +135,6 @@ enum Sibionics2AuthenticationAddress {
                 .map { String(format: "%02X", $0.intValue) }
                 .joined(separator: String(Sibionics2BluetoothAddressFormat.separator))
             return normalize(formattedAddress)
-        }
-        return nil
-    }
-
-    static func automaticAddress(for peripheral: CBPeripheral, centralManager: CBCentralManager) -> String? {
-        let peripheralSelector = NSSelectorFromString("BDAddress")
-        if peripheral.responds(to: peripheralSelector),
-           let result = peripheral.perform(peripheralSelector)?.takeUnretainedValue(),
-           let address = address(from: result) {
-            return address
-        }
-
-        let centralSelector = NSSelectorFromString("retrieveAddressForPeripheral:")
-        if centralManager.responds(to: centralSelector),
-           let result = centralManager.perform(centralSelector, with: peripheral)?.takeUnretainedValue(),
-           let address = address(from: result) {
-            return address
         }
         return nil
     }

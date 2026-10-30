@@ -742,7 +742,6 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             ]
         )
         let calibrationModes = Sibionics2CalibrationMode.allCases
-        let pollIntervals = Sibionics2PollInterval.allCases
         let settingsSection = BluetoothPeripheralDetailSection(
             id: "sibionics2-settings",
             title: expectedBluetoothPeripheralType == .Sibionics1Type ? Texts_BluetoothPeripheralView.sibionics1SettingsTitle : Texts_BluetoothPeripheralView.sibionics2SettingsTitle,
@@ -780,23 +779,6 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                     isOn: Sibionics2Configuration.autoResetEnabled(for: address),
                     setValue: { [weak self] isEnabled in
                         self?.saveSibionics2AutoReset(isEnabled, for: bluetoothPeripheral)
-                    }
-                ),
-                row(
-                    id: "sibionics2-poll-interval",
-                    title: Texts_BluetoothPeripheralView.sibionics2PollTitle,
-                    detail: Sibionics2Configuration.pollInterval(for: address).title,
-                    showsDisclosure: true,
-                    action: { [weak self] in
-                        self?.presentSelectionListView(BluetoothPeripheralSelectionList(
-                            title: Texts_BluetoothPeripheralView.sibionics2PollTitle,
-                            explanation: Texts_BluetoothPeripheralView.sibionics2PollFooter,
-                            data: pollIntervals.map(\.title),
-                            selectedRow: pollIntervals.firstIndex(of: Sibionics2Configuration.pollInterval(for: address))
-                        ) { [weak self] index in
-                            guard pollIntervals.indices.contains(index) else { return }
-                            self?.saveSibionics2PollInterval(pollIntervals[index], for: bluetoothPeripheral)
-                        })
                     }
                 ),
                 row(
@@ -2016,17 +1998,6 @@ private extension BluetoothPeripheralDetailState {
             for: bluetoothPeripheral,
             createANewOneIfNecesssary: false
         ) as? CGMSibionics2Transmitter)?.autoResetSettingDidChange(for: address)
-        refresh()
-    }
-
-    func saveSibionics2PollInterval(_ interval: Sibionics2PollInterval, for bluetoothPeripheral: BluetoothPeripheral) {
-        let address = bluetoothPeripheral.blePeripheral.address
-        guard interval != Sibionics2Configuration.pollInterval(for: address),
-              Sibionics2Configuration.setPollInterval(interval, for: address) else { return }
-        (bluetoothPeripheralManager?.getBluetoothTransmitter(
-            for: bluetoothPeripheral,
-            createANewOneIfNecesssary: false
-        ) as? CGMSibionics2Transmitter)?.pollIntervalDidChange(for: address)
         refresh()
     }
 

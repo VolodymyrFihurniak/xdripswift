@@ -1,3 +1,4 @@
+import CoreBluetooth
 import Foundation
 
 enum Sibionics2Time {
@@ -21,9 +22,6 @@ enum Sibionics2ReadingValidationPolicy {
     static let maximumIndex = Sibionics2V120ReadingFormat.maximumIndex
     static let maximumRawGlucoseMmol =
         Sibionics2V120ReadingFormat.maximumEncodedValue / Sibionics2V120ReadingFormat.measurementScale
-    static let maximumTemperatureCelsius = 80.0
-    static let minimumImpedance = 0
-    static let maximumImpedance = Sibionics2V120ReadingFormat.maximumIndex
 }
 
 enum Sibionics2CalibrationMode: Int, CaseIterable {
@@ -49,22 +47,16 @@ enum Sibionics2CalibrationMode: Int, CaseIterable {
     }
 }
 
-enum Sibionics2PollInterval: Int, CaseIterable {
-    case oneMinute = 1
-    case fiveMinutes = 5
-    case tenMinutes = 10
-    case fifteenMinutes = 15
+/// Standard BLE Battery Service, which Sibionics sensors expose next to FF30.
+enum Sibionics2Battery {
+    static let serviceUUID = CBUUID(string: "180F")
+    static let levelCharacteristicUUID = CBUUID(string: "2A19")
+    static let refreshInterval: TimeInterval = 6 * Sibionics2Time.secondsPerHour
 
-    static let defaultInterval: Self = .oneMinute
-    var seconds: TimeInterval { TimeInterval(rawValue) * Sibionics2Time.secondsPerMinute }
-
-    var title: String {
-        switch self {
-        case .oneMinute: return Texts_BluetoothPeripheralView.sibionics2PollOneMinute
-        case .fiveMinutes: return Texts_BluetoothPeripheralView.sibionics2PollFiveMinutes
-        case .tenMinutes: return Texts_BluetoothPeripheralView.sibionics2PollTenMinutes
-        case .fifteenMinutes: return Texts_BluetoothPeripheralView.sibionics2PollFifteenMinutes
-        }
+    /// Battery Level is one unsigned byte holding a percentage.
+    static func percentage(from value: Data) -> Int? {
+        guard value.count == 1, let level = value.first, level <= 100 else { return nil }
+        return Int(level)
     }
 }
 
@@ -79,7 +71,11 @@ enum Sibionics2ConnectionPolicy {
     static let minimumScheduledDelay: TimeInterval = 1
     static let resetWriteRetryDelay: TimeInterval = 5
     static let resetRestartConfirmationDelay: TimeInterval = 15
-    static let automaticResetRecheckInterval = Sibionics2PollInterval.fifteenMinutes.seconds
+    static let automaticResetRecheckInterval: TimeInterval = 15 * Sibionics2Time.secondsPerMinute
+    static let chinesePollInterval: TimeInterval = Sibionics2Time.secondsPerMinute
+    static let chineseDataRetryInterval: TimeInterval = 30
+    /// JugglucoNG reconnects when streaming has produced no reading for three minutes.
+    static let readingsStallTimeout: TimeInterval = 3 * Sibionics2Time.secondsPerMinute
 
     static let streamingTimeout: TimeInterval = 75
     static let maximumHandshakeReconnectAttempts = 2
@@ -108,8 +104,7 @@ enum Sibionics2AutoResetReadingPolicy {
     static let maximumComfortableMgDl = 180.0
     static let maximumRateMgDlPerMinute = 2.0
     static let maximumReadingAge: TimeInterval = 10 * Sibionics2Time.secondsPerMinute
-    static let maximumReadingIntervalMinutes: TimeInterval =
-        TimeInterval(Sibionics2PollInterval.fifteenMinutes.rawValue)
+    static let maximumReadingIntervalMinutes: TimeInterval = 15
 }
 
 struct Sibionics2CalibrationAnchor {
@@ -329,26 +324,6 @@ enum Sibionics2Configuration {
     ) -> Bool {
         guard let key = key("calibrationMode", identifier: identifier) else { return false }
         userDefaults.set(mode.rawValue, forKey: key)
-        return true
-    }
-
-    static func pollInterval(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics2PollInterval {
-        guard let key = key("pollInterval", identifier: identifier),
-              userDefaults.object(forKey: key) != nil,
-              let interval = Sibionics2PollInterval(rawValue: userDefaults.integer(forKey: key)) else {
-            return Sibionics2PollInterval.defaultInterval
-        }
-        return interval
-    }
-
-    @discardableResult
-    static func setPollInterval(
-        _ interval: Sibionics2PollInterval,
-        for identifier: String,
-        userDefaults: UserDefaults = .standard
-    ) -> Bool {
-        guard let key = key("pollInterval", identifier: identifier) else { return false }
-        userDefaults.set(interval.rawValue, forKey: key)
         return true
     }
 
