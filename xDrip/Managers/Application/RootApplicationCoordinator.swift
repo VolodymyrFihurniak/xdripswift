@@ -1122,7 +1122,10 @@ import AppIntents
         ) > 0 else { return }
         activeSensor.noiseHistoryIsComplete = false
         coreDataManager.saveChanges()
-        _ = bgPostProcessingManager?.processLatestReadings()
+        // Repaired rows are historical, so do not gate downstream on a newer visible reading.
+        _ = bgPostProcessingManager?.processBgReadings(
+            processingStartDateOverride: nil, allowHistoricalDownstreamRewrite: true
+        )
         statisticsManager?.invalidate()
         rootHomeStateModel.invalidateCharts()
         sensorNoiseManager?.update(activeSensor: activeSensor)
@@ -1239,7 +1242,7 @@ import AppIntents
                     coreDataManager.saveChanges()
                     let replacedDownstream = bgPostProcessingManager?.processBgReadings(
                         processingStartDateOverride: fromDate, allowHistoricalDownstreamRewrite: true
-                    ) ?? false
+                    ).rewroteDownstreamHistory ?? false
                     if !replacedDownstream {
                         let visible = replayed.filter { !$0.isSuppressedByFiveMinuteCadence }
                         nightscoutSyncManager?.replaceBgReadingsInNightscout(bgReadings: visible)
