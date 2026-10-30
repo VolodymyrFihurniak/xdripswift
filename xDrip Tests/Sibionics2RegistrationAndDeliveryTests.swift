@@ -628,8 +628,10 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         XCTAssertEqual(sensor.variant, .sibionics1)
         XCTAssertEqual(sensor.bluetoothPeripheralType(), .Sibionics1Type)
         XCTAssertEqual(BluetoothPeripheralType.Sibionics1Type.category(), .CGM)
-        XCTAssertFalse(sensor.variant.supportsReset)
-        XCTAssertTrue(SibionicsDeviceVariant.sibionics2.supportsReset)
+        // JugglucoNG: manual reset for every type, automatic reset only for Sibionics 2.
+        XCTAssertTrue(sensor.variant.supportsManualReset)
+        XCTAssertFalse(sensor.variant.supportsAutoReset)
+        XCTAssertTrue(SibionicsDeviceVariant.sibionics2.supportsAutoReset)
     }
 
     func testSibionics1DiscoveryRequiresServiceAndName() {
