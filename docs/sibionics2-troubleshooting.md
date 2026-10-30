@@ -26,3 +26,15 @@ For a controlled comparison, pause the Android app's sensor connection while the
 FF32 commands use acknowledged writes whenever the characteristic supports them. The 26-byte V120 authentication packet is longer than the default 20-byte BLE payload, and iOS only splits acknowledged writes, so an unacknowledged auth packet can be lost without an error.
 
 If authentication draws no response within 5 seconds, the next registration key group is tried, as in JugglucoNG: Sibionics 2 tries the Eco key first, then the EU (Sijoy) and Hematonix keys; Sibionics 1 starts with the EU key. The trace logs the key group with `authentication address source`. A later handshake step that is not answered within 15 seconds restarts authentication, up to twice per connection. When the sensor sends the plain V120 authentication marker, a new handshake is started.
+
+## Automatic Bluetooth address
+
+iOS does not expose a peripheral's BLE MAC address, and the private CoreBluetooth selectors used earlier are absent on current iOS versions, so detection always fell back to the zero address. The address is now collected from sources a sensor can publish:
+
+- the advertisement manufacturer data, after its 2-byte company identifier, in both byte orders;
+- the Device Information System ID (`2A23`) when it is built from the address with an inserted `FFFE`;
+- a Device Information serial number (`2A25`) that is itself an address.
+
+The sensor accepts any address at authentication, so these values are unverified candidates. Each connection tries one: the detected address first, then the candidates, then the zero address. A connection that ends without glucose readings moves to the next candidate; the first one that produces readings is saved as the detected address and shown as such on the device screen. A manual **Bluetooth address** always takes priority and is never rotated.
+
+If detection still fails, export a trace and look for `advertisement manufacturer data`, `device information 2A23`/`2A25` and `authentication address source`. Those lines show what the sensor publishes, which is needed to add another source.

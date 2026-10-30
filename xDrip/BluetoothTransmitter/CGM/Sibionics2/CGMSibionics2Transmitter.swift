@@ -26,6 +26,11 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var authenticationKeyGroupIndex = 0
     private var handshakeStepGeneration = 0
     private var handshakeRestartCount = 0
+    /// Rotates through unverified authentication addresses, one per connection.
+    private var addressCandidateIndex = 0
+    private var authenticationAddressInUse: String?
+    private var authenticationAddressAwaitingReadings = false
+    private var authenticationAddressSelected = false
     private var historyRequest = Sibionics2HistoryRequestTracker()
     private var historyRecoveryToken = 0
     private var historyWriteFailures = 0
@@ -57,7 +62,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             // Use service UUID for advertisement filtering to enable background scanning
             // and auto-discovery like JugglucoNG (scan for devices with FF30 service)
             CBUUID_Advertisement: Sibionics2ProtocolCodec.serviceUUID.uuidString,
-            servicesCBUUIDs: [Sibionics2ProtocolCodec.serviceUUID],
+            // Device Information is read for a System ID or serial that carries the BLE address.
+            servicesCBUUIDs: [Sibionics2ProtocolCodec.serviceUUID, Sibionics2AuthenticationAddress.deviceInformationServiceUUID],
             CBUUID_ReceiveCharacteristic: Sibionics2ProtocolCodec.notifyUUID.uuidString,
             CBUUID_WriteCharacteristic: Sibionics2ProtocolCodec.writeUUID.uuidString,
             bluetoothTransmitterDelegate: bluetoothTransmitterDelegate
@@ -104,6 +110,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             // Background discoveries may omit UUIDs in advertisementData.
             discoveredWithSibionicsServiceFilter: true
         ) else { return }
+
+        recordAdvertisedAddressCandidates(advertisementData, for: peripheral.identifier.uuidString)
 
         guard deviceAddress == nil else {
             super.centralManager(central, didDiscover: peripheral, advertisementData: advertisementData, rssi: RSSI)
@@ -153,8 +161,25 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         return nil
     }
 
+    private func recordAdvertisedAddressCandidates(_ advertisementData: [String: Any], for identifier: String) {
+        let manufacturerData = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data
+        let candidates = Sibionics2AuthenticationAddress.advertisementCandidates(manufacturerData: manufacturerData)
+        guard Sibionics2AuthenticationAddress.addCandidates(candidates, for: identifier) else { return }
+        trace("Sibionics 2 advertisement manufacturer data=%{public}@ addressCandidates=%{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info,
+              manufacturerData?.hexEncodedString() ?? "none", candidates.joined(separator: ","))
+    }
+
     override func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         super.peripheral(peripheral, didDiscoverCharacteristicsFor: service, error: error)
+        if error == nil, service.uuid == Sibionics2AuthenticationAddress.deviceInformationServiceUUID {
+            for characteristic in service.characteristics ?? [] where
+                characteristic.uuid == Sibionics2AuthenticationAddress.systemIDCharacteristicUUID ||
+                characteristic.uuid == Sibionics2AuthenticationAddress.serialNumberCharacteristicUUID {
+                peripheral.readValue(for: characteristic)
+            }
+            return
+        }
         guard error == nil, service.uuid == Sibionics2ProtocolCodec.serviceUUID else { return }
         characteristicWriteType = service.characteristics?.first(where: { $0.uuid == Sibionics2ProtocolCodec.writeUUID })
             .flatMap { Self.writeType(for: $0.properties) }
@@ -182,6 +207,15 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         historyRequest.reset()
         historyRecoveryToken += 1
         historyRetryScheduled = false
+        if authenticationAddressAwaitingReadings {
+            // The sensor accepts any address at authentication, so a session that
+            // never streamed is the only sign the address was wrong.
+            authenticationAddressAwaitingReadings = false
+            addressCandidateIndex += 1
+            trace("Sibionics 2 session ended without readings; next connection tries another authentication address",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+        }
+        authenticationAddressSelected = false
         super.centralManager(central, didDisconnectPeripheral: peripheral, error: error)
     }
 
@@ -204,6 +238,11 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         error: Error?
     ) {
         super.peripheral(peripheral, didUpdateValueFor: characteristic, error: error)
+        if characteristic.uuid == Sibionics2AuthenticationAddress.systemIDCharacteristicUUID ||
+            characteristic.uuid == Sibionics2AuthenticationAddress.serialNumberCharacteristicUUID {
+            receiveDeviceInformation(characteristic, peripheral: peripheral, error: error)
+            return
+        }
         guard characteristic.uuid == Sibionics2ProtocolCodec.notifyUUID else { return }
         guard error == nil, let value = characteristic.value else {
             trace("Sibionics 2 FF31 notification failed: %{public}@", log: transmitterLog,
@@ -213,6 +252,61 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
 
         receiveNotification(value, at: Date())
+    }
+
+    private func receiveDeviceInformation(_ characteristic: CBCharacteristic, peripheral: CBPeripheral, error: Error?) {
+        guard error == nil, let value = characteristic.value else { return }
+        let address = characteristic.uuid == Sibionics2AuthenticationAddress.systemIDCharacteristicUUID
+            ? Sibionics2AuthenticationAddress.systemIDAddress(value)
+            : Sibionics2AuthenticationAddress.serialNumberAddress(value)
+        trace("Sibionics 2 device information %{public}@=%{public}@ addressCandidate=%{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info,
+              characteristic.uuid.uuidString, value.hexEncodedString(), address ?? "none")
+        guard let address else { return }
+        Sibionics2AuthenticationAddress.addCandidates([address], for: peripheral.identifier.uuidString)
+    }
+
+    /// The address used in this connection produced readings, so keep it for later sessions.
+    private func confirmAuthenticationAddress(for address: String) {
+        guard authenticationAddressAwaitingReadings else { return }
+        authenticationAddressAwaitingReadings = false
+        addressCandidateIndex = 0
+        guard let confirmed = authenticationAddressInUse,
+              Sibionics2AuthenticationAddress.override(for: address) == nil,
+              Sibionics2AuthenticationAddress.detected(for: address) != confirmed else { return }
+        Sibionics2AuthenticationAddress.setDetected(confirmed, for: address)
+        trace("Sibionics 2 authentication address confirmed by glucose readings",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+    }
+
+    /// The address chosen for this connection; retries within it reuse the same one.
+    private func authenticationMacAddress(for address: String) -> [UInt8] {
+        authenticationAddressSelected
+            ? Sibionics2AuthenticationAddress.macBytes(address: authenticationAddressInUse)
+            : selectAuthenticationAddress(for: address)
+    }
+
+    /// Picks the address for this connection and remembers it until readings confirm it.
+    private func selectAuthenticationAddress(for address: String) -> [UInt8] {
+        let candidates = Sibionics2AuthenticationAddress.authenticationCandidates(for: address)
+        let candidate = candidates[addressCandidateIndex % candidates.count]
+        authenticationAddressInUse = candidate
+        authenticationAddressSelected = true
+        authenticationAddressAwaitingReadings = true
+        let source: String
+        if Sibionics2AuthenticationAddress.override(for: address) != nil {
+            source = "manual override"
+        } else if candidate == nil {
+            source = "zero fallback"
+        } else if candidate == Sibionics2AuthenticationAddress.detected(for: address) {
+            source = "detected"
+        } else {
+            source = "unverified candidate"
+        }
+        trace("Sibionics 2 authentication address source=%{public}@ candidate=%{public}@/%{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info,
+              source, (addressCandidateIndex % candidates.count + 1).description, candidates.count.description)
+        return Sibionics2AuthenticationAddress.macBytes(address: candidate)
     }
 
     private func receiveNotification(_ value: Data, at date: Date) {
@@ -226,6 +320,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                     if !streamingReady { markStreamingReady(for: address) }
                 }
                 receivedNonEmptyReadingsPacket = !readings.isEmpty || receivedNonEmptyReadingsPacket
+                if !readings.isEmpty, let address = deviceAddress { confirmAuthenticationAddress(for: address) }
                 receiveReadings(readings, at: date)
             case .requestEcho:
                 if sibionics1Connection?.confirmed == false && sibionics1Connection?.receivedEcho == false {
@@ -272,6 +367,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 return
             }
             self.handshake = handshake
+            if let address = deviceAddress { confirmAuthenticationAddress(for: address) }
             if !streamingReady {
                 if let address = deviceAddress {
                     markStreamingReady(for: address)
@@ -556,6 +652,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         probeGeneration += 1
         authenticationKeyGroupIndex = 0
         handshakeRestartCount = 0
+        authenticationAddressInUse = nil
+        authenticationAddressSelected = false
+        authenticationAddressAwaitingReadings = false
         guard variant == .sibionics1, let address = deviceAddress else {
             startHandshake()
             return
@@ -574,7 +673,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private func sendChineseDataRequest(for address: String) -> Bool {
         let cursor = stateStore.load(for: address)?.lastDeliveredIndex ?? 0
         return writeCommand(chineseCodec.buildDataRequestPacket(
-            lastIndex: cursor, macAddress: Sibionics2AuthenticationAddress.macBytes(for: address)
+            lastIndex: cursor, macAddress: authenticationMacAddress(for: address)
         ), label: "Chinese data-request index=\(cursor)")
     }
 
@@ -648,16 +747,13 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
             return false
         }
-        let manualAddress = Sibionics2AuthenticationAddress.override(for: address)
-        let detectedAddress = Sibionics2AuthenticationAddress.detected(for: address)
-        trace("Sibionics 2 authentication address source=%{public}@ keyGroup=%{public}@",
+        trace("Sibionics 2 authentication keyGroup=%{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
-              type: .info,
-              manualAddress != nil ? "manual override" : detectedAddress != nil ? "private selector" : "zero fallback",
-              keyGroups[authenticationKeyGroupIndex].applicationIdentifier)
+              type: .info, keyGroups[authenticationKeyGroupIndex].applicationIdentifier)
+        let macAddress = authenticationMacAddress(for: address)
         let probeAfterReset = variant.supportsReset && Sibionics2Configuration.resetProbePending(for: address)
         var newHandshake = Sibionics2Handshake(
-            macAddress: Sibionics2AuthenticationAddress.macBytes(for: address),
+            macAddress: macAddress,
             sessionKey: sessionKey,
             lastDeliveredIndex: probeAfterReset ? nil : batchProcessor?.state?.lastDeliveredIndex
         )

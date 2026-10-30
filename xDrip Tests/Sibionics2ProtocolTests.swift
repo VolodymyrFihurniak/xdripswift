@@ -430,6 +430,61 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertNil(Sibionics2AuthenticationAddress.address(from: Data(repeating: 0, count: 6)))
     }
 
+    func testAuthenticationAddressCandidatesComeFromAdvertisementAndDeviceInformation() {
+        // Company identifier followed by the address in either byte order.
+        let manufacturerData = Data([0x4C, 0x05, 0xC7, 0x71, 0xB0, 0xD1, 0x5B, 0x32])
+        XCTAssertEqual(Sibionics2AuthenticationAddress.advertisementCandidates(manufacturerData: manufacturerData),
+                       ["C7:71:B0:D1:5B:32", "32:5B:D1:B0:71:C7"])
+        XCTAssertEqual(Sibionics2AuthenticationAddress.advertisementCandidates(
+            manufacturerData: Data([0x4C, 0x05, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0xAA])
+        ), ["01:02:03:04:05:06", "06:05:04:03:02:01", "02:03:04:05:06:AA", "AA:06:05:04:03:02"])
+        XCTAssertTrue(Sibionics2AuthenticationAddress.advertisementCandidates(manufacturerData: nil).isEmpty)
+        XCTAssertTrue(Sibionics2AuthenticationAddress.advertisementCandidates(
+            manufacturerData: Data([0x4C, 0x05, 0x01])
+        ).isEmpty)
+        XCTAssertTrue(Sibionics2AuthenticationAddress.advertisementCandidates(
+            manufacturerData: Data([0x4C, 0x05] + [UInt8](repeating: 0xFF, count: 6))
+        ).isEmpty, "An all-FF field is padding, not an address")
+
+        // System ID: device bytes, FFFE, then OUI, all least significant byte first.
+        XCTAssertEqual(Sibionics2AuthenticationAddress.systemIDAddress(
+            Data([0x32, 0x5B, 0xD1, 0xFE, 0xFF, 0xB0, 0x71, 0xC7])
+        ), "C7:71:B0:D1:5B:32")
+        XCTAssertNil(Sibionics2AuthenticationAddress.systemIDAddress(Data([1, 2, 3, 4, 5, 6, 7, 8])))
+        XCTAssertEqual(Sibionics2AuthenticationAddress.serialNumberAddress(Data("C771B0D15B32".utf8)),
+                       "C7:71:B0:D1:5B:32")
+        XCTAssertNil(Sibionics2AuthenticationAddress.serialNumberAddress(Data("P123ABCD".utf8)))
+    }
+
+    func testAuthenticationCandidatesTryDetectedThenUnverifiedThenZero() throws {
+        let suiteName = "Sibionics2AuthAddress.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let identifier = "DE1815CA-590A-1AAF-9C98-34082E80A191"
+
+        XCTAssertEqual(Sibionics2AuthenticationAddress.authenticationCandidates(for: identifier, userDefaults: defaults),
+                       [nil])
+        XCTAssertTrue(Sibionics2AuthenticationAddress.addCandidates(
+            ["C7:71:B0:D1:5B:32", "invalid", "32:5B:D1:B0:71:C7"], for: identifier, userDefaults: defaults))
+        XCTAssertFalse(Sibionics2AuthenticationAddress.addCandidates(
+            ["c771b0d15b32"], for: identifier, userDefaults: defaults), "Duplicates are not stored twice")
+        XCTAssertTrue(Sibionics2AuthenticationAddress.setDetected("32:5B:D1:B0:71:C7", for: identifier, userDefaults: defaults))
+        XCTAssertEqual(Sibionics2AuthenticationAddress.authenticationCandidates(for: identifier, userDefaults: defaults),
+                       ["32:5B:D1:B0:71:C7", "C7:71:B0:D1:5B:32", nil])
+        XCTAssertEqual(Sibionics2AuthenticationAddress.macBytes(address: "C7:71:B0:D1:5B:32"),
+                       [0xC7, 0x71, 0xB0, 0xD1, 0x5B, 0x32])
+        XCTAssertEqual(Sibionics2AuthenticationAddress.macBytes(address: nil), [UInt8](repeating: 0, count: 6))
+
+        XCTAssertTrue(Sibionics2AuthenticationAddress.setOverride(testBluetoothAddress, for: identifier, userDefaults: defaults))
+        XCTAssertEqual(Sibionics2AuthenticationAddress.authenticationCandidates(for: identifier, userDefaults: defaults),
+                       [testBluetoothAddress], "A manual address is never rotated away")
+
+        Sibionics2AuthenticationAddress.clearAutomatic(for: identifier, userDefaults: defaults)
+        XCTAssertNil(Sibionics2AuthenticationAddress.detected(for: identifier, userDefaults: defaults))
+        XCTAssertTrue(Sibionics2AuthenticationAddress.candidates(for: identifier, userDefaults: defaults).isEmpty)
+        XCTAssertEqual(Sibionics2AuthenticationAddress.override(for: identifier, userDefaults: defaults), testBluetoothAddress)
+    }
+
     func testFactorySensitivityUsesJugglucoVariantFallbackWhenFactoryCodeIsMissing() {
         // JugglucoNG retries the Sibionics 2 variant token after invalid QR and BLE codes.
         XCTAssertEqual(
