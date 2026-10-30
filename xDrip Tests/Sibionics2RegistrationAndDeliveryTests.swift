@@ -556,26 +556,53 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
         let gtin = "06972831640011"
         // Without separators the 59-character payload uses JugglucoNG's split identity window.
         let label = "01\(gtin)1125010117270101102501010121ABCDEFGH1270XYZ"
-        XCTAssertEqual(try Sibionics1SensorQRCode.shortCode(fromLabel: label).get(), "7FGH1270")
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: label, variant: .sibionics1), .success(.shortCode("7FGH1270")))
         XCTAssertEqual(Sibionics2FactorySensitivity.sibionics1ShortCodeSensitivity(
             advertisedName: nil, family: .eu, labelShortCode: "7FGH1270") ?? 0, 1.27, accuracy: 0.0001)
         XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
-            advertisedName: nil, variant: .sibionics1, sibionics1Family: .eu, sibionics1LabelShortCode: "7FGH1270"),
+            advertisedName: nil, variant: .sibionics1, sibionics1Family: .eu, labelShortCode: "7FGH1270"),
             1.27, accuracy: 0.0001)
 
         // The GS1 Data Matrix prefix and FNC1 group separators are accepted.
         let framed = "]d201\(gtin)11250101172701011025010101\u{1D}21LT2501ABC1270"
-        XCTAssertEqual(try Sibionics1SensorQRCode.shortCode(fromLabel: framed).get(), "7001ABC1")
-        XCTAssertEqual(Sibionics1SensorQRCode.cleanPayload("]d2ab^]cd"), "AB\u{1D}CD")
+        XCTAssertEqual(try SibionicsSensorLabel.sibionics1ShortCode(fromLabel: framed).get(), "7001ABC1")
+        XCTAssertEqual(SibionicsSensorLabel.cleanPayload("]d2ab^]cd"), "AB\u{1D}CD")
 
-        XCTAssertEqual(Sibionics1SensorQRCode.shortCode(fromLabel: "01\(gtin)1125010117270101102501010121P123456789012"),
-                       .failure(.sibionics2Label))
+        XCTAssertEqual(SibionicsSensorLabel.sibionics1ShortCode(fromLabel: "01\(gtin)1125010117270101102501010121P123456789012"),
+                       .failure(.otherSensorType))
         // Wrong GTIN check digit, foreign GTIN and arbitrary text are not Sibionics labels.
         for payload in ["0106972831640012" + "1125010117270101102501010121ABCDEFGH1270XYZ",
                         "0104012345678901" + "1125010117270101102501010121ABCDEFGH1270XYZ",
                         "EU2VCZUQPSHD5Q", ""] {
-            XCTAssertEqual(Sibionics1SensorQRCode.shortCode(fromLabel: payload), .failure(.notSibionicsLabel), payload)
+            XCTAssertEqual(SibionicsSensorLabel.sibionics1ShortCode(fromLabel: payload), .failure(.notSibionicsLabel), payload)
         }
+    }
+
+    func testSibionics2LabelYieldsProbeCodeOrStructuredSerialShortCode() {
+        let gtin = "06972831640011"
+        let prefix = "01\(gtin)11250101172701011025010101\u{1D}21"
+        // XPT form: the serial is itself a decodable 14-character probe code (1.91).
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: prefix + "XPT4T6HJTZLK87", variant: .sibionics2),
+                       .success(.probeCode("XPT4T6HJTZLK87")))
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: "P225044UHA", probeCode: "XPT4T6HJTZLK87"), 1.91, accuracy: 0.0001)
+
+        // P form: "1" + first 15 serial characters, last 11, first 8 -> "04411520" (1.52).
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: prefix + "P22504411520ABCD", variant: .sibionics2),
+                       .success(.shortCode("04411520")))
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: "P225044UHA", labelShortCode: "04411520"), 1.52, accuracy: 0.0001)
+        // The probe code still outranks a label short code.
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(
+            advertisedName: "P225044UHA", probeCode: "XPT4T6HJTZLK87", labelShortCode: "04411520"),
+            1.91, accuracy: 0.0001)
+
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: prefix + "P22504411ZZZABCD", variant: .sibionics2),
+                       .failure(.noFactoryCode))
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: prefix + "LT2501ABC1270", variant: .sibionics2),
+                       .failure(.otherSensorType))
+        XCTAssertEqual(SibionicsSensorLabel.code(fromLabel: "EU2VCZUQPSHD5Q", variant: .sibionics2),
+                       .failure(.notSibionicsLabel))
     }
 
     func testSibionics1ResetUsesItsProtocolsDirectCommandAndConfirmedKeyLeads() {

@@ -524,33 +524,48 @@ private struct DexcomG6CameraScannerRepresentable: UIViewRepresentable {
     }
 }
 
-// MARK: - Sibionics 1 label scanner
+// MARK: - Sibionics label scanner
 
-/// Reads the GS1 code on a Sibionics 1 sensor label and returns its short code.
-/// The label may be printed as QR or Data Matrix, so both symbologies are read.
-struct Sibionics1LabelScannerView: View {
+/// Reads the GS1 code on a Sibionics sensor label and returns the Sibionics 1 short
+/// code or the Sibionics 2 probe code. Labels are printed as QR or Data Matrix.
+struct SibionicsLabelScannerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
-    let onScan: (String) -> Void
+    let variant: SibionicsDeviceVariant
+    let onScan: (SibionicsSensorLabel.Code) -> Void
 
     @State private var scannerError: DexcomG6CameraScannerError?
-    @State private var rejectedSibionics2Label = false
+    @State private var rejection: SibionicsSensorLabel.ParseError?
     @State private var scanSucceeded = false
+
+    private var guidance: String {
+        switch rejection {
+        case .otherSensorType:
+            return variant == .sibionics1
+                ? Texts_BluetoothPeripheralView.sibionics1LabelIsSibionics2
+                : Texts_BluetoothPeripheralView.sibionics2LabelIsSibionics1
+        case .noFactoryCode:
+            return Texts_BluetoothPeripheralView.sibionics2LabelHasNoFactoryCode
+        case .notSibionicsLabel, nil:
+            return Texts_BluetoothPeripheralView.sibionics1LabelScannerGuidance
+        }
+    }
 
     var body: some View {
         NavigationView {
             ZStack {
-                Sibionics1LabelScannerRepresentable(
-                    onScan: { shortCode in
+                SibionicsLabelScannerRepresentable(
+                    variant: variant,
+                    onScan: { code in
                         scanSucceeded = true
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            onScan(shortCode)
+                            onScan(code)
                             dismiss()
                         }
                     },
-                    onSibionics2Label: { rejectedSibionics2Label = true },
+                    onRejected: { rejection = $0 },
                     onError: { scannerError = $0 }
                 )
                 .ignoresSafeArea()
@@ -567,12 +582,7 @@ struct Sibionics1LabelScannerView: View {
                             )
                             .frame(width: 200, height: 200)
 
-                        Label(
-                            rejectedSibionics2Label
-                                ? Texts_BluetoothPeripheralView.sibionics1LabelIsSibionics2
-                                : Texts_BluetoothPeripheralView.sibionics1LabelScannerGuidance,
-                            systemImage: rejectedSibionics2Label ? "exclamationmark.triangle" : "qrcode.viewfinder"
-                        )
+                        Label(guidance, systemImage: rejection == nil ? "qrcode.viewfinder" : "exclamationmark.triangle")
                         .font(.headline)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.white)
@@ -623,13 +633,14 @@ struct Sibionics1LabelScannerView: View {
     }
 }
 
-private struct Sibionics1LabelScannerRepresentable: UIViewRepresentable {
-    let onScan: (String) -> Void
-    let onSibionics2Label: () -> Void
+private struct SibionicsLabelScannerRepresentable: UIViewRepresentable {
+    let variant: SibionicsDeviceVariant
+    let onScan: (SibionicsSensorLabel.Code) -> Void
+    let onRejected: (SibionicsSensorLabel.ParseError) -> Void
     let onError: (DexcomG6CameraScannerError) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onScan: onScan, onSibionics2Label: onSibionics2Label, onError: onError)
+        Coordinator(variant: variant, onScan: onScan, onRejected: onRejected, onError: onError)
     }
 
     func makeUIView(context: Context) -> CameraPreviewView {
@@ -652,19 +663,22 @@ private struct Sibionics1LabelScannerRepresentable: UIViewRepresentable {
         let captureSession = AVCaptureSession()
 
         private let sessionQueue = DispatchQueue(label: "com.xdripswift.sibionics-label-scanner")
-        private let onScan: (String) -> Void
-        private let onSibionics2Label: () -> Void
+        private let variant: SibionicsDeviceVariant
+        private let onScan: (SibionicsSensorLabel.Code) -> Void
+        private let onRejected: (SibionicsSensorLabel.ParseError) -> Void
         private let onError: (DexcomG6CameraScannerError) -> Void
         private var isConfigured = false
         private var hasDeliveredResult = false
 
         init(
-            onScan: @escaping (String) -> Void,
-            onSibionics2Label: @escaping () -> Void,
+            variant: SibionicsDeviceVariant,
+            onScan: @escaping (SibionicsSensorLabel.Code) -> Void,
+            onRejected: @escaping (SibionicsSensorLabel.ParseError) -> Void,
             onError: @escaping (DexcomG6CameraScannerError) -> Void
         ) {
+            self.variant = variant
             self.onScan = onScan
-            self.onSibionics2Label = onSibionics2Label
+            self.onRejected = onRejected
             self.onError = onError
         }
 
@@ -738,16 +752,16 @@ private struct Sibionics1LabelScannerRepresentable: UIViewRepresentable {
             guard !hasDeliveredResult else { return }
             for case let code as AVMetadataMachineReadableCodeObject in metadataObjects {
                 guard let payload = code.stringValue else { continue }
-                switch Sibionics1SensorQRCode.shortCode(fromLabel: payload) {
-                case .success(let shortCode):
+                switch SibionicsSensorLabel.code(fromLabel: payload, variant: variant) {
+                case .success(let code):
                     hasDeliveredResult = true
                     stop()
-                    onScan(shortCode)
+                    onScan(code)
                     return
-                case .failure(.sibionics2Label):
-                    onSibionics2Label()
                 case .failure(.notSibionicsLabel):
                     continue
+                case .failure(let rejection):
+                    onRejected(rejection)
                 }
             }
         }

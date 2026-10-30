@@ -58,8 +58,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
     @Published private(set) var category = BluetoothPeripheralCategory.CGM
     @Published private(set) var canDeletePeripheral = false
     @Published var pendingAlert: BluetoothPeripheralDetailAlert?
-    /// Set to present the camera for a Sibionics 1 sensor label.
-    @Published var sibionics1LabelScan: Sibionics1LabelScanRequest?
+    /// Set to present the camera for a Sibionics sensor label.
+    @Published var sibionicsLabelScan: SibionicsLabelScanRequest?
     @Published var sibionics2SearchText = "" {
         didSet {
             if sibionics2SearchText != oldValue {
@@ -714,19 +714,21 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             probeCode: probeCode,
             variant: (bluetoothPeripheral as? Sibionics2)?.variant ?? .sibionics2,
             sibionics1Family: sibionics1Family,
-            sibionics1LabelShortCode: Sibionics2Configuration.sibionics1LabelShortCode(for: address)
+            labelShortCode: Sibionics2Configuration.labelShortCode(for: address)
         )
-        let sibionics1LabelShortCode = Sibionics2Configuration.sibionics1LabelShortCode(for: address)
+        let labelShortCode = Sibionics2Configuration.labelShortCode(for: address)
         let usesSibionics1Fallback = isSibionics1 && Sibionics2FactorySensitivity.sibionics1ShortCodeSensitivity(
             advertisedName: bluetoothPeripheral.blePeripheral.name, family: sibionics1Family,
-            labelShortCode: sibionics1LabelShortCode) == nil
+            labelShortCode: labelShortCode) == nil
         let probeDetail: String
-        if isSibionics1, let sibionics1LabelShortCode, !usesSibionics1Fallback {
-            probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(sibionics1LabelShortCode)"
+        if isSibionics1, let labelShortCode, !usesSibionics1Fallback {
+            probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(labelShortCode)"
         } else if usesSibionics1Fallback {
             probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(Texts_BluetoothPeripheralView.sibionics1SensitivityFallback)"
         } else if let probeCode {
             probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(probeCode)"
+        } else if let labelShortCode {
+            probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(labelShortCode)"
         } else {
             probeDetail = "\(sensitivity.stringWithoutTrailingZeroes) · \(Texts_BluetoothPeripheralView.sibionics2ProbeCodeAutomatic)"
         }
@@ -779,10 +781,18 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                     }
                 ),
                 row(
+                    id: "sibionics2-label-scan",
+                    title: Texts_BluetoothPeripheralView.sibionics2LabelScanTitle,
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        self?.requestSibionics2LabelScan(for: bluetoothPeripheral)
+                    }
+                ),
+                row(
                     id: "sibionics1-label-remove",
                     title: Texts_BluetoothPeripheralView.sibionics1LabelRemove,
                     action: { [weak self] in
-                        self?.saveSibionics1LabelShortCode(nil, for: bluetoothPeripheral)
+                        self?.saveSibionicsLabelShortCode(nil, for: bluetoothPeripheral)
                     }
                 ),
                 row(
@@ -842,7 +852,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                     Sibionics2Configuration.calibrationMode(for: address).jugglucoAlgorithm != nil) &&
                 // JugglucoNG resets every Sibionics type manually; automatic reset is Sibionics 2 only.
                 (expectedBluetoothPeripheralType != .Sibionics1Type || row.id != "sibionics2-auto-reset") &&
-                (row.id != "sibionics1-label-remove" || (isSibionics1 && sibionics1LabelShortCode != nil))
+                (row.id != "sibionics1-label-remove" || labelShortCode != nil) &&
+                (row.id != "sibionics2-label-scan" || !isSibionics1)
             }
         )
         return [connectionSection, settingsSection]
@@ -2009,23 +2020,52 @@ private extension BluetoothPeripheralDetailState {
 
     /// Opens the camera for the Sibionics 1 sensor label.
     func requestSibionics1LabelScan(for bluetoothPeripheral: BluetoothPeripheral) {
-        sibionics1LabelScan = Sibionics1LabelScanRequest(address: bluetoothPeripheral.blePeripheral.address) { [weak self] shortCode in
-            self?.saveSibionics1LabelShortCode(shortCode, for: bluetoothPeripheral)
+        sibionicsLabelScan = SibionicsLabelScanRequest(variant: .sibionics1) { [weak self] code in
+            guard case .shortCode(let shortCode) = code else { return }
+            self?.saveSibionicsLabelShortCode(shortCode, for: bluetoothPeripheral)
         }
     }
 
-    func saveSibionics1LabelShortCode(_ shortCode: String?, for bluetoothPeripheral: BluetoothPeripheral) {
+    /// Optional alternative to typing the Sibionics 2 probe code: read it from the label.
+    func requestSibionics2LabelScan(for bluetoothPeripheral: BluetoothPeripheral) {
+        sibionicsLabelScan = SibionicsLabelScanRequest(variant: .sibionics2) { [weak self] code in
+            switch code {
+            case .probeCode(let probeCode):
+                // The probe code supersedes a short code scanned from an older label.
+                Sibionics2Configuration.setLabelShortCode(nil, for: bluetoothPeripheral.blePeripheral.address)
+                self?.saveSibionics2ProbeCode(probeCode, for: bluetoothPeripheral)
+            case .shortCode(let shortCode):
+                // Only a probe code outranks the label's short code, so clear an older one.
+                let address = bluetoothPeripheral.blePeripheral.address
+                if Sibionics2Configuration.probeCode(for: address) != nil,
+                   Sibionics2Configuration.labelShortCode(for: address) == shortCode {
+                    // Same label code: clearing the probe alone changes sensitivity.
+                    Sibionics2Configuration.setProbeCode(nil, for: address)
+                    self?.sensitivityInputDidChange(for: bluetoothPeripheral)
+                } else {
+                    Sibionics2Configuration.setProbeCode(nil, for: address)
+                    self?.saveSibionicsLabelShortCode(shortCode, for: bluetoothPeripheral)
+                }
+            }
+        }
+    }
+
+    func saveSibionicsLabelShortCode(_ shortCode: String?, for bluetoothPeripheral: BluetoothPeripheral) {
         let address = bluetoothPeripheral.blePeripheral.address
-        guard Sibionics2Configuration.sibionics1LabelShortCode(for: address) != shortCode else { refresh(); return }
-        Sibionics2Configuration.setSibionics1LabelShortCode(shortCode, for: address)
-        // A different factory sensitivity invalidates the stock state: replay history with it.
+        guard Sibionics2Configuration.labelShortCode(for: address) != shortCode else { refresh(); return }
+        Sibionics2Configuration.setLabelShortCode(shortCode, for: address)
+        trace("Sibionics label short code was %{public}@",
+              log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController,
+              type: .info, shortCode.map { "scanned: \($0)" } ?? "removed")
+        sensitivityInputDidChange(for: bluetoothPeripheral)
+    }
+
+    /// A different factory sensitivity invalidates the stock state: replay history with it.
+    private func sensitivityInputDidChange(for bluetoothPeripheral: BluetoothPeripheral) {
         (bluetoothPeripheralManager?.getBluetoothTransmitter(
             for: bluetoothPeripheral,
             createANewOneIfNecesssary: false
-        ) as? CGMSibionics2Transmitter)?.probeCodeDidChange(for: address)
-        trace("Sibionics 1 label short code was %{public}@",
-              log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController,
-              type: .info, shortCode.map { "scanned: \($0)" } ?? "removed")
+        ) as? CGMSibionics2Transmitter)?.probeCodeDidChange(for: bluetoothPeripheral.blePeripheral.address)
         refresh()
     }
 
@@ -2398,10 +2438,10 @@ enum BluetoothPeripheralConnectButtonTintColor {
 }
 
 /// Alert requested by transmitter validation or connection actions.
-struct Sibionics1LabelScanRequest: Identifiable {
+struct SibionicsLabelScanRequest: Identifiable {
     let id = UUID()
-    let address: String
-    let onScan: (String) -> Void
+    let variant: SibionicsDeviceVariant
+    let onScan: (SibionicsSensorLabel.Code) -> Void
 }
 
 struct BluetoothPeripheralDetailAlert: Identifiable {

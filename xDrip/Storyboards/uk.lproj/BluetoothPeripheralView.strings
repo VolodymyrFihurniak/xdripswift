@@ -308,3 +308,6 @@
 "sibionics1.labelScannerGuidance" = "Наведіть камеру на код на упаковці датчика";
 "sibionics1.labelIsSibionics2" = "Це етикетка Sibionics 2. Додайте датчик як Sibionics 2.";
 "sibionics1.labelRemove" = "Видалити зчитаний код етикетки";
+"sibionics2.labelScanTitle" = "Сканувати етикетку датчика";
+"sibionics2.labelIsSibionics1" = "Це етикетка Sibionics 1. Додайте датчик як Sibionics 1.";
+"sibionics2.labelHasNoFactoryCode" = "На цій етикетці немає заводського коду. Використовується назва датчика.";

@@ -220,3 +220,6 @@
 "sibionics1.labelScannerGuidance" = "Point the camera at the code on the sensor package";
 "sibionics1.labelIsSibionics2" = "This is a Sibionics 2 label. Add the sensor as Sibionics 2.";
 "sibionics1.labelRemove" = "Remove scanned label code";
+"sibionics2.labelScanTitle" = "Scan sensor label";
+"sibionics2.labelIsSibionics1" = "This is a Sibionics 1 label. Add the sensor as Sibionics 1.";
+"sibionics2.labelHasNoFactoryCode" = "This label carries no factory code. The sensor name is used instead.";

@@ -27,13 +27,16 @@ enum Sibionics2FactorySensitivity {
         probeCode: String? = nil,
         variant: SibionicsDeviceVariant = .sibionics2,
         sibionics1Family: Sibionics1Family = .eu,
-        sibionics1LabelShortCode: String? = nil
+        labelShortCode: String? = nil
     ) -> Double {
         guard variant == .sibionics1 else {
-            return resolve(probeCode: probeCode, shortCode: advertisedName)
+            // sensitivityFor(SIBIONICS2): probe code, then the label's short code, then the name.
+            return decodeProbe(probeCode)
+                ?? labelShortCode.flatMap { decodeShortCode($0) }
+                ?? resolve(probeCode: nil, shortCode: advertisedName)
         }
         return sibionics1ShortCodeSensitivity(
-            advertisedName: advertisedName, family: sibionics1Family, labelShortCode: sibionics1LabelShortCode
+            advertisedName: advertisedName, family: sibionics1Family, labelShortCode: labelShortCode
         )
             ?? decodeShortCode(sibionics1Family.fallbackShortCode)
             ?? defaultSensitivity
@@ -253,15 +256,25 @@ enum Sibionics1Family {
     }
 }
 
-/// The Sibionics 1 sensor label: a GS1 code carrying GTIN (01), dates (11, 17),
+/// The Sibionics sensor label: a GS1 code carrying GTIN (01), dates (11, 17),
 /// batch (10) and serial (21). Ported from JugglucoNG SibionicsRegistry
-/// (supportedQrMatch, deriveNativeQrName, buildIdentity) for the single-piece types.
-enum Sibionics1SensorQRCode {
+/// (supportedQrMatch, acceptsIdentityForm, deriveNativeQrName, buildIdentity).
+enum SibionicsSensorLabel {
+    /// What a label contributes to factory sensitivity.
+    enum Code: Equatable {
+        /// A Sibionics 2 14-character factory probe code.
+        case probeCode(String)
+        /// An 8-character short code whose last four characters encode sensitivity.
+        case shortCode(String)
+    }
+
     enum ParseError: Error, Equatable {
         /// Not a Sibionics GS1 sensor label.
         case notSibionicsLabel
-        /// A Sibionics 2 (V120 "P"/"XPT" serial) label scanned for a Sibionics 1 sensor.
-        case sibionics2Label
+        /// The label belongs to the other sensor type (V120 "P"/"XPT" serial is Sibionics 2).
+        case otherSensorType
+        /// A Sibionics 2 label that carries no decodable factory code.
+        case noFactoryCode
     }
 
     private static let groupSeparator: Character = "\u{1D}"
@@ -270,9 +283,58 @@ enum Sibionics1SensorQRCode {
         pattern: "^\u{1D}?01(\\d{14})11\\d{6}17\\d{6}10[A-Z0-9]{8,20}\u{1D}?21([A-Z0-9]{10,20})\u{1D}?$"
     )
 
-    /// The 8-character short code JugglucoNG stores for the sensor; its last four
-    /// characters encode the factory sensitivity.
-    static func shortCode(fromLabel payload: String) -> Result<String, ParseError> {
+    static func code(fromLabel payload: String, variant: SibionicsDeviceVariant) -> Result<Code, ParseError> {
+        variant == .sibionics1
+            ? sibionics1ShortCode(fromLabel: payload).map(Code.shortCode)
+            : sibionics2Code(fromLabel: payload)
+    }
+
+    /// The 8-character short code JugglucoNG stores for a Sibionics 1 sensor; its last
+    /// four characters encode the factory sensitivity.
+    static func sibionics1ShortCode(fromLabel payload: String) -> Result<String, ParseError> {
+        switch validatedSerial(payload) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let (cleaned, serial)):
+            guard !isV120Serial(serial) else { return .failure(.otherSensorType) }
+            // buildIdentity: the QR short view is the last 11 characters; its first 8 are the short code.
+            guard let nativeName = nativeName(cleaned) else { return .failure(.notSibionicsLabel) }
+            let shortView = String(nativeName.suffix(11))
+            guard shortView.count == 11 else { return .failure(.notSibionicsLabel) }
+            return .success(String(shortView.prefix(8)))
+        }
+    }
+
+    /// A Sibionics 2 label: JugglucoNG keeps the AI (21) value as the probe code when it
+    /// decodes (the XPT form). A P-form serial instead yields the short code of its
+    /// structured identity: "1" plus the first 15 serial characters, last 11, first 8.
+    static func sibionics2Code(fromLabel payload: String) -> Result<Code, ParseError> {
+        switch validatedSerial(payload) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let (_, serial)):
+            guard isV120Serial(serial) else { return .failure(.otherSensorType) }
+            if Sibionics2FactorySensitivity.decodeProbe(serial) != nil { return .success(.probeCode(serial)) }
+            guard serial.hasPrefix("P"), serial.count >= 16 else { return .failure(.noFactoryCode) }
+            let identity = "1" + serial.prefix(15)
+            let shortCode = String(identity.suffix(11).prefix(8))
+            guard Sibionics2FactorySensitivity.decodeShortCode(shortCode) != nil else { return .failure(.noFactoryCode) }
+            return .success(.shortCode(shortCode))
+        }
+    }
+
+    /// Scanners may prefix the GS1 Data Matrix identifier and render FNC1 as "^]".
+    static func cleanPayload(_ source: String) -> String {
+        var text = source.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if text.hasPrefix("]D2") { text.removeFirst(3) }
+        text = text.replacingOccurrences(of: "^]", with: String(groupSeparator))
+        return String(text.filter {
+            ($0.isASCII && ($0.isLetter || $0.isNumber)) || $0 == groupSeparator
+        })
+    }
+
+    /// supportedQrMatch: GS1 layout, Sibionics GTIN with a valid check digit and a native identity.
+    private static func validatedSerial(_ payload: String) -> Result<(String, String), ParseError> {
         let cleaned = cleanPayload(payload)
         let range = NSRange(cleaned.startIndex..., in: cleaned)
         guard let match = labelPattern.firstMatch(in: cleaned, range: range),
@@ -281,26 +343,14 @@ enum Sibionics1SensorQRCode {
             return .failure(.notSibionicsLabel)
         }
         let gtin = String(cleaned[gtinRange])
-        guard gtin.hasPrefix(gtinPrefix), hasValidCheckDigit(gtin),
-              let nativeName = nativeName(cleaned) else {
+        guard gtin.hasPrefix(gtinPrefix), hasValidCheckDigit(gtin), nativeName(cleaned) != nil else {
             return .failure(.notSibionicsLabel)
         }
-        let serial = String(cleaned[serialRange])
-        guard !(serial.hasPrefix("P") || serial.hasPrefix("XPT")) else { return .failure(.sibionics2Label) }
-        // buildIdentity: the QR short view is the last 11 characters; its first 8 are the short code.
-        let shortView = String(nativeName.suffix(11))
-        guard shortView.count == 11 else { return .failure(.notSibionicsLabel) }
-        return .success(String(shortView.prefix(8)))
+        return .success((cleaned, String(cleaned[serialRange])))
     }
 
-    /// Scanners may prefix the GS1 DataMatrix identifier and render FNC1 as "^]".
-    static func cleanPayload(_ source: String) -> String {
-        var text = source.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        if text.hasPrefix("]D2") { text.removeFirst(3) }
-        text = text.replacingOccurrences(of: "^]", with: String(groupSeparator))
-        return String(text.filter {
-            ($0.isASCII && ($0.isLetter || $0.isNumber)) || $0 == groupSeparator
-        })
+    private static func isV120Serial(_ serial: String) -> Bool {
+        serial.hasPrefix("P") || serial.hasPrefix("XPT")
     }
 
     /// JugglucoNG's legacy 16-character identity window, which the stock app also uses.

@@ -1382,7 +1382,7 @@ extension BluetoothPeripheralManager: BluetoothPeripheralManaging {
             Sibionics2AuthenticationAddress.setOverride(nil, for: bluetoothPeripheral.blePeripheral.address)
             Sibionics2AuthenticationAddress.clearAutomatic(for: bluetoothPeripheral.blePeripheral.address)
             Sibionics2Configuration.setConfirmedKeyGroup(nil, for: bluetoothPeripheral.blePeripheral.address)
-            Sibionics2Configuration.setSibionics1LabelShortCode(nil, for: bluetoothPeripheral.blePeripheral.address)
+            Sibionics2Configuration.setLabelShortCode(nil, for: bluetoothPeripheral.blePeripheral.address)
         }
 
         if let dexcomG7 = bluetoothPeripheral as? DexcomG7 {

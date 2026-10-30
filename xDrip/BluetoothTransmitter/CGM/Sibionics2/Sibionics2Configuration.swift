@@ -608,15 +608,15 @@ enum Sibionics2Configuration {
         return true
     }
 
-    /// Short code read from a scanned Sibionics 1 sensor label.
-    static func sibionics1LabelShortCode(for identifier: String, userDefaults: UserDefaults = .standard) -> String? {
-        guard let key = key("sibionics1LabelShortCode", identifier: identifier),
+    /// Short code read from a scanned Sibionics sensor label.
+    static func labelShortCode(for identifier: String, userDefaults: UserDefaults = .standard) -> String? {
+        guard let key = key("labelShortCode", identifier: identifier),
               let code = userDefaults.string(forKey: key), code.count == 8 else { return nil }
         return code
     }
 
-    static func setSibionics1LabelShortCode(_ code: String?, for identifier: String, userDefaults: UserDefaults = .standard) {
-        guard let key = key("sibionics1LabelShortCode", identifier: identifier) else { return }
+    static func setLabelShortCode(_ code: String?, for identifier: String, userDefaults: UserDefaults = .standard) {
+        guard let key = key("labelShortCode", identifier: identifier) else { return }
         if let code, code.count == 8 {
             userDefaults.set(code, forKey: key)
         } else {

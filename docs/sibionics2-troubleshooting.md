@@ -74,3 +74,12 @@ Sibionics 1 covers three JugglucoNG product lines, told apart at runtime:
 - Factory sensitivity follows JugglucoNG: the short code from a scanned sensor label, else the one derived from the Bluetooth name, then the line's fallback token, then 1.27. The 14-character probe decoder is Sibionics 2 only.
 - **Scan the label**: open the Sibionics 1 device, tap **Factory sensitivity** and point the camera at the GS1 code on the package (QR or Data Matrix). The code must carry a Sibionics GTIN (`0697283164…`) with a valid check digit and the dates, batch and serial fields; a Sibionics 2 serial (`P…`/`XPT…`) is refused. The short code is taken from JugglucoNG's 16-character identity window, and changing it replays history with the new sensitivity. **Remove scanned label code** returns to the name or fallback.
 - Manual reset sends the line's direct command (`24 E7 6F 34` for V120, `AA 55 10 F1` for Chinese). Automatic reset is Sibionics 2 only, as in JugglucoNG. The first request after a reset asks for index 1; if the existing session answers, the reset did not take and the saved cursor is used again.
+
+## Scanning a Sibionics 2 label (optional)
+
+Instead of typing the probe code, open the Sibionics 2 device and tap **Scan sensor label**. As in JugglucoNG, the GS1 label (QR or Data Matrix) must carry a Sibionics GTIN and a V120 serial:
+
+- an `XPT…` serial that decodes as a 14-character probe code is saved as the **Sensor QR code**;
+- a `P…` serial yields the short code of its structured identity (`"1"` + first 15 characters, last 11, first 8), used when no probe code is set.
+
+Sensitivity order for Sibionics 2: probe code, label short code, Bluetooth name, then the `0316015A` fallback (1.44). A Sibionics 1 label is refused, and a label without a decodable code leaves the current setting unchanged.
