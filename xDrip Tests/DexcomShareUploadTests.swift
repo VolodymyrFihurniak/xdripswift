@@ -17,7 +17,14 @@ private final class ShareUploadURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        let result = Self.handler(request)
+        // A manager can still be finishing a background account check when tearDown clears the
+        // handler (for example after a test re-enables upload). Fail that late request instead of
+        // trapping on the nil handler, which crashed whichever test happened to run next.
+        guard let handler = Self.handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.cancelled))
+            return
+        }
+        let result = handler(request)
         let finish = {
             self.client?.urlProtocol(self, didReceive: HTTPURLResponse(url: self.request.url!, statusCode: result.0, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
             self.client?.urlProtocol(self, didLoad: result.1)
