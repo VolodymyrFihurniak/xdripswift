@@ -687,4 +687,19 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertTrue(forcedWhenDisabled.resetNow)
         XCTAssertTrue(forcedWhenDisabled.forced)
     }
+
+    func testSibionics1LifetimeIsJugglucoExtendedSessionAndVariantNamesTheSensor() {
+        // JugglucoNG EXTENDED_CHINESE_LIFETIME_MS = 572 h - 19 min.
+        XCTAssertEqual(Sibionics1SensorProfile.extendedLife, 2_058_060, accuracy: 0.001)
+        XCTAssertEqual(Sibionics1SensorProfile.extendedLifeInDays, 23.820_138_888, accuracy: 0.000_001)
+        XCTAssertEqual(Sibionics1SensorProfile.officialLifeInDays, 14)
+
+        XCTAssertEqual(SibionicsDeviceVariant.sibionics1.productName, "Sibionics 1")
+        XCTAssertEqual(SibionicsDeviceVariant.sibionics2.productName, "Sibionics 2")
+        XCTAssertEqual(
+            TroubleshootingLogSource(directTransmitterType: .sibionics2, detailedDescription: "Sibionics 1"),
+            .sibionics1
+        )
+        XCTAssertEqual(TroubleshootingLogSource(directTransmitterType: .sibionics2), .sibionics2)
+    }
 }

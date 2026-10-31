@@ -75,6 +75,10 @@ Sibionics 1 covers three JugglucoNG product lines, told apart at runtime:
 - **Scan the label**: open the Sibionics 1 device, tap **Factory sensitivity** and point the camera at the GS1 code on the package (QR or Data Matrix). The code must carry a Sibionics GTIN (`0697283164…`) with a valid check digit and the dates, batch and serial fields; a Sibionics 2 serial (`P…`/`XPT…`) is refused. The short code is taken from JugglucoNG's 16-character identity window, and changing it replays history with the new sensitivity. **Remove scanned label code** returns to the name or fallback.
 - Manual reset sends the line's direct command (`24 E7 6F 34` for V120, `AA 55 10 F1` for Chinese). Automatic reset is Sibionics 2 only, as in JugglucoNG. The first request after a reset asks for index 1; if the existing session answers, the reset did not take and the saved cursor is used again.
 
+- Sensor life follows JugglucoNG: the label says 14 days, but every Sibionics 1 session is extended automatically to 572 h − 19 min (≈ 23 days 19 h 41 min). Expiry warnings and the sensor age use the extended end; the device screen shows both.
+- There is no warm-up wait for any Sibionics sensor: readings are shown from the first minute, as in JugglucoNG. Earlier builds hid the first 45 minutes of a new sensor.
+- The active sensor is named **Sibionics 1** in the home screen, Sensor Management, reports and the Activity Log (both variants share one internal transmitter type).
+
 ## Scanning a Sibionics 2 label (optional)
 
 Instead of typing the probe code, open the Sibionics 2 device and tap **Scan sensor label**. As in JugglucoNG, the GS1 label (QR or Data Matrix) must carry a Sibionics GTIN and a V120 serial:

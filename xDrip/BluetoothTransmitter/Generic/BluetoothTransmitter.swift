@@ -794,7 +794,7 @@ class BluetoothTransmitter: NSObject, CBCentralManagerDelegate, CBPeripheralDele
             if let cgmTransmitter {
                 let source = TroubleshootingLogSource(
                     directTransmitterType: cgmTransmitter.cgmTransmitterType(),
-                    detailedDescription: cgmTransmitter.cgmTransmitterType().detailedDescription()
+                    detailedDescription: (cgmTransmitter as? CGMSibionics2Transmitter)?.productName ?? cgmTransmitter.cgmTransmitterType().detailedDescription()
                 )
                 troubleshooting = .standard(.cgm(source: source, activity: .connected))
             } else if let namedDevice = TroubleshootingBluetoothDeviceName(deviceName) {

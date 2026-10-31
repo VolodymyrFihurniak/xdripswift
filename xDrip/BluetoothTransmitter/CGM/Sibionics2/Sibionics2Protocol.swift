@@ -60,6 +60,9 @@ enum SibionicsDeviceVariant: Int16 {
     /// JugglucoNG offers a manual reset for every Sibionics type, automatic reset only for Sibionics 2.
     var supportsManualReset: Bool { true }
     var supportsAutoReset: Bool { self == .sibionics2 }
+    /// Name shown for the active sensor. Both variants share `CGMTransmitterType.sibionics2`
+    /// (its raw value is persisted), so the product name must come from the variant.
+    var productName: String { self == .sibionics1 ? "Sibionics 1" : "Sibionics 2" }
 }
 
 enum Sibionics1ChineseParseResult {

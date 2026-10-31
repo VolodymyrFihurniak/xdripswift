@@ -890,7 +890,14 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                         SibionicsReadingAge.detail(since: $0, now: Date())
                     } ?? Texts_BluetoothPeripheralView.sibionicsReadingAgeWaiting
                 )
-            ]
+            ] + (isSibionics1 ? [
+                // JugglucoNG keeps a GS1 session running past the 14 days on the label.
+                row(
+                    id: "sibionics1-sensor-life",
+                    title: Texts_BluetoothPeripheralView.sibionics1SensorLifeTitle,
+                    detail: Texts_BluetoothPeripheralView.sibionics1SensorLifeDetail
+                )
+            ] : [])
         )
         let calibrationModes = Sibionics2CalibrationMode.allCases
         let calibrationWeightings = Sibionics2CalibrationWeighting.allCases
@@ -1697,10 +1704,12 @@ private extension BluetoothPeripheralDetailState {
         guard bluetoothPeripheral == nil, let bluetoothPeripheralManager = bluetoothPeripheralManager else { return }
         guard !type.needsTransmitterId() || transmitterIdTempValue != nil else { return }
 
-        if type == .Libre3Type {
+        if type == .Libre3Type || type.isSibionics {
             guard !isScanning else { return }
             // CoreBluetooth can initially return unknown before retrieving a saved sensor.
             // Show the pending handoff immediately and prevent duplicate transmitter creation.
+            // Sibionics needs the same guard: a second tap during that window created a second
+            // scanning transmitter for the same sensor.
             isScanning = true
             explicitlyStartedScanAt = Date()
             UIApplication.shared.isIdleTimerDisabled = true
@@ -1791,7 +1800,7 @@ private extension BluetoothPeripheralDetailState {
 
         previousScanningResult = startScanningResult
 
-        if expectedBluetoothPeripheralType == .Libre3Type {
+        if expectedBluetoothPeripheralType == .Libre3Type || expectedBluetoothPeripheralType.isSibionics {
             switch startScanningResult {
             case .poweredOff, .unauthorized, .other:
                 isScanning = false
@@ -1818,6 +1827,8 @@ private extension BluetoothPeripheralDetailState {
             if isScanning {
                 explicitlyStartedScanAt = explicitlyStartedScanAt ?? Date()
                 UIApplication.shared.isIdleTimerDisabled = true
+            } else if expectedBluetoothPeripheralType.isSibionics {
+                UIApplication.shared.isIdleTimerDisabled = false
             }
 
         case .poweredOff:

@@ -100,7 +100,7 @@ enum TroubleshootingLogSource: String, Codable {
         case .medtrumTouchCareNano:
             self = .medtrumNano
         case .sibionics2:
-            self = .sibionics2
+            self = description == SibionicsDeviceVariant.sibionics1.productName ? .sibionics1 : .sibionics2
         }
     }
 

@@ -592,8 +592,16 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
     func maxSensorAgeInDays() -> Double? {
-        variant == .sibionics1 ? 14 : Double(Sibionics2SensorProfile.expectedLifeInDays)
+        variant == .sibionics1
+            ? Sibionics1SensorProfile.extendedLifeInDays
+            : Double(Sibionics2SensorProfile.expectedLifeInDays)
     }
+
+    /// JugglucoNG shows Sibionics readings from the first minute: the stock algorithm already
+    /// handles the start of a session. xDrip's generic 45-minute fallback discarded them.
+    func sensorWarmupDurationInMinutes() -> Double? { 0 }
+
+    var productName: String { variant.productName }
 
     /// Sibionics accepts no transmitter-side calibration write. Calibrations live
     /// in xDrip's CGM pipeline, so request fresh data to apply the saved profile.

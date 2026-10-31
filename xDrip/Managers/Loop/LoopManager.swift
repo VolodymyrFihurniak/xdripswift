@@ -255,7 +255,7 @@ enum XDripCGMMetadataBuilder {
             // transmitter. This only omits optional metadata; legacy readings are unchanged.
             guard defaults.isMaster, context.transmitter != nil else { return nil }
             let identifier = defaults.activeSensorTransmitterId
-            let transmitterModel = isAnubis ? DexcomProductNameResolver.anubisTitle : (context.transmitter as? CGMLibre3Transmitter)?.productName ?? transmitterType?.detailedDescription()
+            let transmitterModel = isAnubis ? DexcomProductNameResolver.anubisTitle : (context.transmitter as? CGMLibre3Transmitter)?.productName ?? (context.transmitter as? CGMSibionics2Transmitter)?.productName ?? transmitterType?.detailedDescription()
             guard identifier != nil || transmitterModel != nil || battery != nil else { return nil }
             return .init(identifier: identifier, model: transmitterModel, battery: battery)
         }()

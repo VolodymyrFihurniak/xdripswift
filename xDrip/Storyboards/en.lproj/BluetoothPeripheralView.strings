@@ -183,6 +183,8 @@
 "sibionics.readingAgeWaiting" = "Waiting for reading";
 "sibionics.readingAgeSecondsFormat" = "%d sec ago";
 "sibionics.readingAgeMinutesFormat" = "%d min ago";
+"sibionics1.sensorLifeTitle" = "Sensor life";
+"sibionics1.sensorLifeDetail" = "14 days, extended automatically to 23 d 19 h";
 "sibionics2.bluetoothAddressTitle" = "Bluetooth address";
 "sibionics2.bluetoothAddressFooter" = "xDripSwift tries CoreBluetooth's private address selectors automatically. If they are unavailable and the sensor sends no readings, enter its Bluetooth MAC address from a trusted Android device log.";
 "sibionics2.bluetoothAddressAutomatic" = "not detected; enter manually";
