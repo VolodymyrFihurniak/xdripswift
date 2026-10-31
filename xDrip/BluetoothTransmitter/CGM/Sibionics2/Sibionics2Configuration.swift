@@ -16,6 +16,16 @@ enum Sibionics2SensorProfile {
     static let expectedLife = TimeInterval(expectedLifeInDays) * Sibionics2Time.secondsPerDay
 }
 
+/// Sibionics 1 (GS1 EU, Hematonix, Chinese) lifetime, as in JugglucoNG `SibionicsConstants`.
+/// The label says 14 days, but the sensor keeps streaming: JugglucoNG extends every GS1 session
+/// automatically to `EXTENDED_CHINESE_LIFETIME_MS` (572 h − 19 min, ≈ 23 days 19 h 41 min) and
+/// shows the official end only as information.
+enum Sibionics1SensorProfile {
+    static let officialLifeInDays: Double = 14
+    static let extendedLife: TimeInterval = 572 * Sibionics2Time.secondsPerHour - 19 * Sibionics2Time.secondsPerMinute
+    static let extendedLifeInDays: Double = extendedLife / Sibionics2Time.secondsPerDay
+}
+
 /// Valid ranges for decoded V120 readings before they enter the correction algorithm.
 enum Sibionics2ReadingValidationPolicy {
     static let minimumIndex = 1

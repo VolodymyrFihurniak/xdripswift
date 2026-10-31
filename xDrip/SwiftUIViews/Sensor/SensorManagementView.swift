@@ -546,6 +546,8 @@ struct SensorManagementView: View {
         let sensorDescription: String
         if let libre3 = transmitter as? CGMLibre3Transmitter {
             sensorDescription = libre3.productName
+        } else if activeSensor != nil, let sibionics = transmitter as? CGMSibionics2Transmitter {
+            sensorDescription = sibionics.productName
         } else if activeSensor != nil {
             sensorDescription = UserDefaults.standard.activeSensorDescription ?? Texts_HomeView.sensor
         } else if let dexcomG7 {
@@ -590,7 +592,7 @@ struct SensorManagementView: View {
         case .Medtrum:
             warmupMinutes = nil
         case .some(.Sibionics2):
-            warmupMinutes = ConstantsMaster.minimumSensorWarmUpRequiredInMinutes
+            warmupMinutes = transmitter?.sensorWarmupDurationInMinutes() ?? ConstantsMaster.minimumSensorWarmUpRequiredInMinutes
         case .none:
             warmupMinutes = nil
         }

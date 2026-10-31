@@ -666,7 +666,9 @@ class Trace {
                         }
                         
                     case .Libre3Type:
-                        traceInfo.appendStringAndNewLine("        Type: " + (blePeripheral.libre3?.productName ?? "Libre 3/3 Plus"))
+                        if let libre3 = blePeripheral.libre3 {
+                            traceInfo.appendStringAndNewLine("        Type: " + libre3.productName)
+                        }
                     case .Libre2Type:
                         if blePeripheral.libre2 != nil {
                             

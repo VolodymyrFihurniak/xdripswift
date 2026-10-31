@@ -170,6 +170,11 @@ struct GlucoseReportClinicalPageView: View {
 
     private var dataSourceDescription: String {
         if UserDefaults.standard.isMaster {
+            // Sibionics 1 and 2 share one transmitter type; the sensor description names the variant.
+            if UserDefaults.standard.cgmTransmitterType == .sibionics2,
+               let description = UserDefaults.standard.activeSensorDescription {
+                return description
+            }
             return UserDefaults.standard.cgmTransmitterType?.rawValue ?? configuration.text(.storedCGMReadings)
         }
         return UserDefaults.standard.followerDataSourceType.description

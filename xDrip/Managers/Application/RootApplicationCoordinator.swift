@@ -889,7 +889,7 @@ import AppIntents
                 let currentTroubleshootingCGMSource = bluetoothPeripheralManager.getCGMTransmitter().map {
                     TroubleshootingLogSource(
                         directTransmitterType: $0.cgmTransmitterType(),
-                        detailedDescription: $0.cgmTransmitterType().detailedDescription()
+                        detailedDescription: ($0 as? CGMSibionics2Transmitter)?.productName ?? $0.cgmTransmitterType().detailedDescription()
                     )
                 }
 
@@ -2629,7 +2629,7 @@ import AppIntents
         // if there is a transmitter connected, pull the current maxSensorAgeInDays and store in in UserDefaults
         if let cgmTransmitter = self.bluetoothPeripheralManager?.getCGMTransmitter(), let maxDays = cgmTransmitter.maxSensorAgeInDays() {
             UserDefaults.standard.activeSensorMaxSensorAgeInDays = maxDays
-            UserDefaults.standard.activeSensorDescription = (cgmTransmitter as? CGMLibre3Transmitter)?.productName ?? cgmTransmitter.cgmTransmitterType().detailedDescription()
+            UserDefaults.standard.activeSensorDescription = (cgmTransmitter as? CGMLibre3Transmitter)?.productName ?? (cgmTransmitter as? CGMSibionics2Transmitter)?.productName ?? cgmTransmitter.cgmTransmitterType().detailedDescription()
         }
 
         // The state model owns all visible sensor and data-source formatting. The controller keeps
@@ -2725,7 +2725,7 @@ import AppIntents
         
         // update the activeSensorDescription. Needed as otherwise it won't get done for Libre after an algorithm change
         if let cgmTransmitter = cGMTransmitter {
-            UserDefaults.standard.activeSensorDescription = (cgmTransmitter as? CGMLibre3Transmitter)?.productName ?? cgmTransmitter.cgmTransmitterType().detailedDescription()
+            UserDefaults.standard.activeSensorDescription = (cgmTransmitter as? CGMLibre3Transmitter)?.productName ?? (cgmTransmitter as? CGMSibionics2Transmitter)?.productName ?? cgmTransmitter.cgmTransmitterType().detailedDescription()
         }
         
         // assign activeSensor to newSensor

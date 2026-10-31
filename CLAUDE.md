@@ -56,6 +56,12 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
   S1 = label short code → `deriveShortCode(BLE name)` → family fallback
   (EU `YMWD016F` 1.58, Hematonix `YEZ1450H` 1.47, Chinese `GEPD802J` 1.27) → 1.27.
   GS1 label scanning (`SibionicsSensorLabel`) follows JugglucoNG `SibionicsRegistry`.
+- **Lifetime / warm-up**: S1 = JugglucoNG `EXTENDED_CHINESE_LIFETIME_MS` (572 h − 19 min,
+  `Sibionics1SensorProfile`), label 14 days; S2 = 23 days. `sensorWarmupDurationInMinutes()` is 0
+  (JugglucoNG has no Sibionics warm-up; xDrip's 45-min default hid a new sensor's readings).
+- **Name**: S1 and S2 share `CGMTransmitterType.sibionics2` (persisted raw value). Use
+  `CGMSibionics2Transmitter.productName` / `SibionicsDeviceVariant.productName` wherever the
+  product name is shown (active sensor description, Activity Log source, Loop, reports).
 - **Reset**: manual for all variants (S2 encrypted `0x10`, EU/Hematonix `24 E7 6F 34`,
   Chinese `AA 55 10 F1`); automatic only for Sibionics 2. The post-reset session probe is one-shot.
 - **Calibration** (`xDrip/Calibration/Sibionics2Calibrator.swift`): xDrip+ or JugglucoNG
