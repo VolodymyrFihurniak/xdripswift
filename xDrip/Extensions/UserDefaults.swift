@@ -3103,12 +3103,13 @@ extension UserDefaults {
         }
     }
 
-    /// should readings be stored much more frequentyly in Nightscout ? true or false
+    /// Upload every new reading to Nightscout instead of at most one per 5 minutes.
     ///
-    /// Only really useful for master with Libre 2 Direct connection (60 second readings). Default is false/disabled.
+    /// Matters for 1-minute sensors (Libre 2 Direct, Libre 3, Sibionics). This fork enables it by
+    /// default, so Nightscout gets each value as soon as it arrives; an explicit choice is kept.
     @objc dynamic var storeFrequentReadingsInNightscout: Bool {
         get {
-            return bool(forKey: Key.storeFrequentReadingsInNightscout.rawValue)
+            return object(forKey: Key.storeFrequentReadingsInNightscout.rawValue) == nil || bool(forKey: Key.storeFrequentReadingsInNightscout.rawValue)
         }
         set {
             set(newValue, forKey: Key.storeFrequentReadingsInNightscout.rawValue)

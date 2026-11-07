@@ -69,6 +69,12 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
   Fresh/Balanced/Stable weighting, evaluated in the user's display unit. Mode raw value 1 must stay
   weighted OLS.
 
+## Fork defaults
+
+- Nightscout uploads every new reading (`storeFrequentReadingsInNightscout` defaults to true;
+  toggle "Upload Every Reading" in Nightscout > Upload Options, the old developer row is hidden).
+  Off restores upstream's one reading per 5 minutes.
+
 ## Experimental features (`docs/experimental-features.md`)
 
 Settings → Experimental features (`SettingsRootSection.experimental`,

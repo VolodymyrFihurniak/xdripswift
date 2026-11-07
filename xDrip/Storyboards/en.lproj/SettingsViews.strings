@@ -582,3 +582,5 @@
 "experimental.predictionSensitivity" = "Insulin sensitivity (per unit)";
 "experimental.predictionShow" = "Show prediction";
 "experimental.sectionTitle" = "Experimental features";
+"settingsviews_nightscoutUploadEveryReading" = "Upload Every Reading";
+"settingsviews_nightscoutUploadEveryReadingFooter" = "Upload Every Reading sends each new glucose value to Nightscout as soon as it arrives, every minute with 1-minute sensors. Off, at most one reading per 5 minutes is uploaded.";

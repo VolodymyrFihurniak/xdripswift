@@ -811,3 +811,5 @@
 "experimental.predictionSensitivity" = "Чутливість до інсуліну (на одиницю)";
 "experimental.predictionShow" = "Показувати прогноз";
 "experimental.sectionTitle" = "Експериментальні функції";
+"settingsviews_nightscoutUploadEveryReading" = "Відвантажувати кожен показник";
+"settingsviews_nightscoutUploadEveryReadingFooter" = "Кожне нове значення глюкози надсилається в Nightscout одразу після отримання, з датчиками на 1 хвилину — щохвилини. Якщо вимкнено, відвантажується не більше одного показника на 5 хвилин.";
