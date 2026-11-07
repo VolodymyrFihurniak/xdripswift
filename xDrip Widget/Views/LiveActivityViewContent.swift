@@ -99,6 +99,7 @@ struct LiveActivityViewContentState: View {
                 GeometryReader { chartGeometry in
                     ZStack {
                         GlucoseChartView(glucoseChartType: .liveActivity, bgReadingValues: state.bgReadingValues, bgReadingDates: state.bgReadingDates, isMgDl: state.isMgDl, urgentLowLimitInMgDl: state.urgentLowLimitInMgDl, lowLimitInMgDl: state.lowLimitInMgDl, highLimitInMgDl: state.highLimitInMgDl, urgentHighLimitInMgDl: state.urgentHighLimitInMgDl, liveActivityType: .normal, hoursToShowScalingHours: nil, glucoseCircleDiameterScalingHours: nil, overrideChartHeight: nil, overrideChartWidth: max(chartGeometry.size.width, 0), highContrast: nil)
+                            .experimentalPlots(state.experimentalForecast?.plots ?? GlucoseChartExperimentalPlots())
 
                         if state.warnUserToOpenApp {
                             VStack(alignment: .center) {
@@ -163,6 +164,7 @@ struct LiveActivityViewContentState: View {
 
                     GeometryReader { chartGeometry in
                         GlucoseChartView(glucoseChartType: .liveActivity, bgReadingValues: state.bgReadingValues, bgReadingDates: state.bgReadingDates, isMgDl: state.isMgDl, urgentLowLimitInMgDl: state.urgentLowLimitInMgDl, lowLimitInMgDl: state.lowLimitInMgDl, highLimitInMgDl: state.highLimitInMgDl, urgentHighLimitInMgDl: state.urgentHighLimitInMgDl, liveActivityType: .large, hoursToShowScalingHours: nil, glucoseCircleDiameterScalingHours: nil, overrideChartHeight: nil, overrideChartWidth: max(chartGeometry.size.width, 0), highContrast: nil)
+                            .experimentalPlots(state.experimentalForecast?.plots ?? GlucoseChartExperimentalPlots())
                     }
                     .frame(height: ConstantsGlucoseChartSwiftUI.viewHeightLiveActivityLarge)
                     .padding(.horizontal, 15)

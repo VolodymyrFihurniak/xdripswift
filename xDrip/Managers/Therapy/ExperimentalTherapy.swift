@@ -1365,6 +1365,20 @@ enum ExperimentalChartInputs {
         (basal == .icodec ? 8 : 2) * 24 * 60 * 60
     }
 
+    /// The forecast for widgets, Live Activity and the watch, while "Show prediction" is on.
+    static func companionForecast(defaults: UserDefaults = .standard, now: Date = Date()) -> ExperimentalCompanionForecast? {
+        guard defaults.experimentalPredictionEnabled, let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager else { return nil }
+        let readings = BgReadingsAccessor(coreDataManager: coreDataManager)
+            .getLatestBgReadings(limit: nil, fromDate: now.addingTimeInterval(-2 * 60 * 60), forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
+            .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
+        let forecast = ExperimentalPredictionModel(defaults: defaults).forecast(
+            readings: readings, treatments: PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext, now: now),
+            isMmol: !defaults.bloodGlucoseUnitIsMgDl, targetLowMgDl: defaults.lowMarkValue, targetHighMgDl: defaults.highMarkValue, now: now)
+        guard let first = forecast.first, forecast.count > 1 else { return nil }
+        return ExperimentalCompanionForecast(startAsDouble: first.date.timeIntervalSince1970,
+                                             valuesMgDl: forecast.map { ($0.value * 10).rounded() / 10 })
+    }
+
     static func color(_ insulin: InsulinProfile) -> Color {
         Color(red: Double((insulin.colorHex >> 16) & 0xFF) / 255,
               green: Double((insulin.colorHex >> 8) & 0xFF) / 255,

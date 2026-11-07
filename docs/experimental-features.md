@@ -30,6 +30,11 @@ A dashed line to the right of the main chart, for 1–4 hours (default 2). It is
 Defaults are JugglucoNG's: sensitivity 54 mg/dL (3.0 mmol/L) per unit, carb ratio 10 g/U,
 absorption 35 g/h. It is an estimate for orientation, never a dosing tool.
 
+While **Show prediction** is on, the forecast is also drawn on the medium and large widgets, the
+Live Activity and the watch chart. It travels as a start time plus five-minute values, so the
+Live Activity payload stays small; data from older builds decodes without it. The landscape view
+is a day-by-day AGP comparison, not a live chart, so it does not show the forecast.
+
 Model refinements (JugglucoNG `PredictionModelProfile`, `JournalHumanProfile`, `JournalFoodMath`):
 
 - **Time-of-day periods**: up to seven start times after midnight, each with its own sensitivity,
@@ -84,6 +89,7 @@ measured per kilogram use the study's reference dose.
   hour, as coloured layers stacked along the bottom (JugglucoNG `InsulinActivityStack`). One
   dose's layer adds up to the dose. Steady-state curves (Toujeo, Tresiba) are reduced to one
   daily dose as `S(t) − S(t + 24 h)`. A curve ends where its source stopped measuring.
+- A legend at the top left of the main chart names the colour of each insulin in view.
 - The IOB/COB numbers and curves of the Treatments settings are unchanged.
 
 Not ported yet: JugglucoNG's adaptive forecast.

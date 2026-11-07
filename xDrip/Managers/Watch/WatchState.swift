@@ -42,6 +42,8 @@ struct WatchStatus: WatchPayload {
     var timeStampOfLastHeartBeat: Double?
     var secondsUntilHeartBeatDisconnectWarning: Int?
     var keepAliveIsDisabled: Bool = false
+    /// Experimental forecast for the watch chart.
+    var experimentalForecast: ExperimentalCompanionForecast?
 
     var aidStatus: AIDStatus?
     var therapyMetrics: TherapyMetricsSnapshot? = nil
