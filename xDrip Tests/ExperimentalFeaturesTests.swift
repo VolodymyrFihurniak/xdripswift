@@ -457,14 +457,15 @@ final class ExperimentalFeaturesTests: XCTestCase {
     }
 
     @MainActor
-    func testExperimentalSectionSitsBeforeAboutWithItsThreeRows() throws {
+    func testExperimentalSectionSitsBeforeAboutWithItsFourRows() throws {
         let sections = SettingsListFactory.makeRootSections(coreDataManager: nil, selectedFollowerActions: .none,
                                                             presenter: SettingsActionPresenter(router: SettingsRouter()))
         let experimentalID = SettingsRootSection.experimental.rawValue * 10
         let index = try XCTUnwrap(sections.firstIndex { $0.id == experimentalID })
         let aboutIndex = try XCTUnwrap(sections.firstIndex { $0.id == SettingsRootSection.about.rawValue * 10 })
         XCTAssertLessThan(index, aboutIndex)
-        XCTAssertEqual(sections[index].section().rows.map(\.id), ["experimental.chartStyle", "experimental.prediction", "experimental.insulins"])
+        XCTAssertEqual(sections[index].section().rows.map(\.id),
+                       ["experimental.chartStyle", "experimental.chartCursor", "experimental.prediction", "experimental.insulins"])
     }
 }
 
