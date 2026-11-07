@@ -89,6 +89,33 @@ extension UserDefaults {
         set { set(newValue, forKey: ExperimentalKey.predictionAbsorption) }
     }
 
+    /// Body weight in kg for insulin curves measured per kilogram (Fiasp, Levemir, regular).
+    /// JugglucoNG `JournalHumanProfile` accepts 10...400 kg; nil uses the study's reference dose.
+    var experimentalBodyWeightKg: Double? {
+        get {
+            guard let value = (object(forKey: "experimentalBodyWeightKg") as? NSNumber)?.doubleValue, value.isFinite,
+                  ExperimentalPredictionModel.bodyWeightRange.contains(value) else { return nil }
+            return value
+        }
+        set {
+            if let newValue, newValue.isFinite { set(min(max(newValue, ExperimentalPredictionModel.bodyWeightRange.lowerBound), ExperimentalPredictionModel.bodyWeightRange.upperBound), forKey: "experimentalBodyWeightKg") }
+            else { removeObject(forKey: "experimentalBodyWeightKg") }
+        }
+    }
+
+    /// Time-of-day periods after midnight, encoded as JugglucoNG's `PredictionModelProfile`
+    /// ("start,carbRatio,sensitivity,absorption;..."). Midnight uses the single values above.
+    var experimentalPredictionPeriods: [ExperimentalPredictionPeriod] {
+        get { ExperimentalPredictionPeriod.decode(string(forKey: "experimentalPredictionPeriods")) }
+        set { set(ExperimentalPredictionPeriod.encode(newValue), forKey: "experimentalPredictionPeriods") }
+    }
+
+    /// Adds the late rise of protein and fat to the forecast (JugglucoNG "food macros").
+    var experimentalPredictionMacrosEnabled: Bool {
+        get { bool(forKey: "experimentalPredictionMacrosEnabled") }
+        set { set(newValue, forKey: "experimentalPredictionMacrosEnabled") }
+    }
+
     /// How far ahead the predicted low alert looks, in minutes.
     var experimentalPredictedLowLeadMinutes: Int {
         get {
@@ -317,12 +344,17 @@ enum InsulinCurveCatalogue {
 
     /// The curve for one dose: interpolated between the source's doses when the curve is given in
     /// units (Lyumjev, Afrezza), the reference curve otherwise.
-    static func curve(for profile: InsulinProfile, units: Double) -> [InsulinCurvePoint] {
+    static func curve(for profile: InsulinProfile, units: Double, bodyWeightKg: Double? = nil) -> [InsulinCurvePoint] {
         let definition = definition(profile)
         switch definition.doseAxis {
         case .fixed: return interpolateVariants(definition.variants, requestedDose: definition.referenceDose)
         case .units: return interpolateVariants(definition.variants, requestedDose: units)
-        case .unitsPerKg: return referenceCurve(profile)
+        case .unitsPerKg:
+            // As JugglucoNG `resolve`: units per kilogram with a valid weight, else the reference curve.
+            guard let weight = bodyWeightKg, weight.isFinite, ExperimentalPredictionModel.bodyWeightRange.contains(weight) else {
+                return referenceCurve(profile)
+            }
+            return interpolateVariants(definition.variants, requestedDose: units / weight)
         }
     }
 
@@ -618,6 +650,33 @@ struct ExperimentalTreatment: Sendable, Hashable {
     let kind: Kind
     let notes: String?
 
+    /// Protein and fat grams of a carb entry, written by the treatment editor as "P:20 F:15".
+    var macros: (protein: Double, fat: Double)? {
+        guard kind == .carbs, let notes else { return nil }
+        let protein = Self.number(after: "P:", in: notes) ?? 0
+        let fat = Self.number(after: "F:", in: notes) ?? 0
+        return protein > 0 || fat > 0 ? (protein, fat) : nil
+    }
+
+    /// Exercise intensity, written by the treatment editor as "intensity:light|moderate|intense".
+    var intensity: ExperimentalExerciseIntensity? {
+        guard kind == .exercise, let notes = notes?.lowercased() else { return nil }
+        return ExperimentalExerciseIntensity.allCases.first { notes.contains("intensity:" + $0.rawValue) }
+    }
+
+    static func number(after token: String, in notes: String) -> Double? {
+        guard let range = notes.range(of: token, options: .caseInsensitive) else { return nil }
+        let digits = notes[range.upperBound...].prefix { $0.isNumber || $0 == "." || $0 == "," }
+        return Double(digits.replacingOccurrences(of: ",", with: "."))
+    }
+
+    /// The notes token the editor writes for protein and fat, nil when both are empty.
+    static func macrosNotes(protein: Double?, fat: Double?) -> String? {
+        let parts = [protein.flatMap { $0 > 0 ? "P:\(ExperimentalPredictionModel.compact($0))" : nil },
+                     fat.flatMap { $0 > 0 ? "F:\(ExperimentalPredictionModel.compact($0))" : nil }].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
     /// The insulin of a bolus or basal injection: named in the notes, else the configured default.
     func insulin(bolusDefault: InsulinProfile, basalDefault: InsulinProfile) -> InsulinProfile? {
         switch kind {
@@ -694,6 +753,98 @@ enum PredictedLowAlert {
                                                  policy: UserDefaults.standard.dataFlowPolicy) ?? []
         }
         return result
+    }
+}
+
+/// JugglucoNG `JournalIntensity`; nil (not logged) uses the 0.5 factor.
+enum ExperimentalExerciseIntensity: String, CaseIterable, Sendable {
+    case light, moderate, intense
+
+    var factor: Double {
+        switch self {
+        case .light: return 0.35
+        case .moderate: return 0.65
+        case .intense: return 1
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .light: return ExperimentalTexts.text("intensityLight", "Light")
+        case .moderate: return ExperimentalTexts.text("intensityModerate", "Moderate")
+        case .intense: return ExperimentalTexts.text("intensityIntense", "Intense")
+        }
+    }
+}
+
+/// One time-of-day period of the prediction model (JugglucoNG `PredictionModelBlock`).
+struct ExperimentalPredictionPeriod: Hashable, Sendable {
+    /// Minutes after midnight, 1...1439 (midnight itself uses the single settings).
+    var startMinute: Int
+    var carbRatio: Double
+    var insulinSensitivityMgDl: Double
+    var carbAbsorption: Double
+
+    /// JugglucoNG `MAX_BLOCKS` is 8 including midnight.
+    static let maximumCount = 7
+
+    func normalized() -> ExperimentalPredictionPeriod {
+        func clamp(_ value: Double, _ range: ClosedRange<Double>, _ fallback: Double) -> Double {
+            value.isFinite ? min(max(value, range.lowerBound), range.upperBound) : fallback
+        }
+        return ExperimentalPredictionPeriod(
+            startMinute: min(max(startMinute, 1), 1439),
+            carbRatio: clamp(carbRatio, ExperimentalPredictionModel.carbRatioRange, ExperimentalPredictionModel.defaultCarbRatio),
+            insulinSensitivityMgDl: clamp(insulinSensitivityMgDl, ExperimentalPredictionModel.insulinSensitivityRange, ExperimentalPredictionModel.defaultInsulinSensitivityMgDl),
+            carbAbsorption: clamp(carbAbsorption, ExperimentalPredictionModel.carbAbsorptionRange, ExperimentalPredictionModel.defaultCarbAbsorption))
+    }
+
+    static func encode(_ periods: [ExperimentalPredictionPeriod]) -> String {
+        sanitized(periods).map { "\($0.startMinute),\($0.carbRatio),\($0.insulinSensitivityMgDl),\($0.carbAbsorption)" }.joined(separator: ";")
+    }
+
+    static func decode(_ encoded: String?) -> [ExperimentalPredictionPeriod] {
+        guard let encoded, !encoded.isEmpty else { return [] }
+        return sanitized(encoded.split(separator: ";").compactMap { block in
+            let fields = block.split(separator: ",").map { Double($0) }
+            guard fields.count == 4, let start = fields[0], let ratio = fields[1], let sensitivity = fields[2], let absorption = fields[3] else { return nil }
+            return ExperimentalPredictionPeriod(startMinute: Int(start), carbRatio: ratio, insulinSensitivityMgDl: sensitivity, carbAbsorption: absorption)
+        })
+    }
+
+    /// Sorted, one per start minute, at most `maximumCount`, each value within its range.
+    static func sanitized(_ periods: [ExperimentalPredictionPeriod]) -> [ExperimentalPredictionPeriod] {
+        // Keep the first period for a start minute, then sort (Swift's sort is not guaranteed stable).
+        var seen = Set<Int>()
+        return periods.map { $0.normalized() }
+            .filter { seen.insert($0.startMinute).inserted }
+            .sorted { $0.startMinute < $1.startMinute }
+            .prefix(maximumCount).map { $0 }
+    }
+}
+
+/// JugglucoNG `JournalFoodMath`: protein and fat as a delayed, carb-equivalent rise.
+enum ExperimentalFoodMath {
+    static func fatProteinUnits(protein: Double, fat: Double) -> Double {
+        (max(protein, 0) * 4 + max(fat, 0) * 9) / 100
+    }
+
+    static func tailEquivalentCarbs(protein: Double, fat: Double) -> Double {
+        let units = fatProteinUnits(protein: protein, fat: fat)
+        guard units > 0 else { return 0 }
+        let delayedFraction = units < 1 ? 0.30 : units < 2 ? 0.42 : units < 4 ? 0.55 : 0.65
+        return min(max(units * 10 * delayedFraction, 0), 80)
+    }
+
+    static func tailDelayMinutes(protein: Double, fat: Double) -> Double {
+        let units = fatProteinUnits(protein: protein, fat: fat)
+        if fat >= 30 || units >= 4 { return 110 }
+        if fat >= 15 || protein >= 25 || units >= 2 { return 80 }
+        return 50
+    }
+
+    static func tailDurationMinutes(protein: Double, fat: Double) -> Double {
+        min(max(110 + fatProteinUnits(protein: protein, fat: fat) * 55 + max(fat, 0) * 3.5, 90), 480)
     }
 }
 
@@ -800,6 +951,7 @@ struct ExperimentalPredictionModel: Sendable {
     static let carbRatioRange = 3.0...30.0
     static let insulinSensitivityRange = 10.0...180.0
     static let carbAbsorptionRange = 10.0...90.0
+    static let bodyWeightRange = 10.0...400.0
     /// Treatments older than this cannot move the forecast.
     static let lookBack: TimeInterval = 36 * 60 * 60
     static let stepMinutes = 5
@@ -813,6 +965,11 @@ struct ExperimentalPredictionModel: Sendable {
     var carbAbsorption = defaultCarbAbsorption
     var bolusInsulin: InsulinProfile = .aspart
     var basalInsulin: InsulinProfile = .glargineU100
+    var bodyWeightKg: Double?
+    /// Periods after midnight; before the first one the single values apply.
+    var periods: [ExperimentalPredictionPeriod] = []
+    var macrosEnabled = false
+    var timeZone = TimeZone.current
 
     init() {}
 
@@ -824,32 +981,63 @@ struct ExperimentalPredictionModel: Sendable {
         carbAbsorption = defaults.experimentalPredictionCarbAbsorption
         bolusInsulin = defaults.experimentalBolusInsulin
         basalInsulin = defaults.experimentalBasalInsulin
+        bodyWeightKg = defaults.experimentalBodyWeightKg
+        periods = defaults.experimentalPredictionPeriods
+        macrosEnabled = defaults.experimentalPredictionMacrosEnabled
     }
 
-    /// Modelled change from `baseline` to `date`, in the unit `sensitivity` is given in.
-    func treatmentDelta(_ treatment: ExperimentalTreatment, at date: Date, baseline: Date, sensitivity: Double) -> Double {
+    static func compact(_ value: Double) -> String {
+        value.rounded() == value ? String(Int(value)) : String(format: "%.1f", value)
+    }
+
+    /// Carb ratio, sensitivity (mg/dL) and absorption in force at `date`, as JugglucoNG
+    /// `PredictionModelProfile.parametersAt`: the last period starting at or before that minute.
+    func parameters(at date: Date) -> (carbRatio: Double, insulinSensitivityMgDl: Double, carbAbsorption: Double) {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        let minute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+        if let period = ExperimentalPredictionPeriod.sanitized(periods).last(where: { $0.startMinute <= minute }) {
+            return (period.carbRatio, period.insulinSensitivityMgDl, period.carbAbsorption)
+        }
+        return (carbRatio, insulinSensitivityMgDl, carbAbsorption)
+    }
+
+    /// Modelled change from `baseline` to `date`. The model parameters are those in force when the
+    /// treatment was logged, as in JugglucoNG; `toDisplay` converts mg/dL to the simulation unit.
+    func treatmentDelta(_ treatment: ExperimentalTreatment, at date: Date, baseline: Date, toDisplay: (Double) -> Double = { $0 }) -> Double {
         let elapsed = date.timeIntervalSince(treatment.date) / 60
         let elapsedAtBaseline = baseline.timeIntervalSince(treatment.date) / 60
+        let parameters = parameters(at: treatment.date)
+        let sensitivity = toDisplay(parameters.insulinSensitivityMgDl)
         switch treatment.kind {
         case .carbs:
             let grams = treatment.amount
             guard grams.isFinite, grams > 0 else { return 0 }
-            let absorption = min(max(grams / min(max(carbAbsorption, Self.carbAbsorptionRange.lowerBound), Self.carbAbsorptionRange.upperBound) * 60, 30), 360)
-            let totalRise = grams / max(carbRatio, 1) * sensitivity
-            return totalRise * (InsulinCurveMath.mealProgress(elapsedMinutes: elapsed, durationMinutes: absorption)
+            let absorptionRate = min(max(parameters.carbAbsorption, Self.carbAbsorptionRange.lowerBound), Self.carbAbsorptionRange.upperBound)
+            let absorption = min(max(grams / absorptionRate * 60, 30), 360)
+            let ratio = max(parameters.carbRatio, 1)
+            let carbRise = grams / ratio * sensitivity * (InsulinCurveMath.mealProgress(elapsedMinutes: elapsed, durationMinutes: absorption)
                 - InsulinCurveMath.mealProgress(elapsedMinutes: elapsedAtBaseline, durationMinutes: absorption))
+            guard macrosEnabled, let macros = treatment.macros else { return carbRise }
+            let tailGrams = ExperimentalFoodMath.tailEquivalentCarbs(protein: macros.protein, fat: macros.fat)
+            guard tailGrams > 0 else { return carbRise }
+            let delay = ExperimentalFoodMath.tailDelayMinutes(protein: macros.protein, fat: macros.fat)
+            let duration = ExperimentalFoodMath.tailDurationMinutes(protein: macros.protein, fat: macros.fat)
+            return carbRise + tailGrams / ratio * sensitivity * (InsulinCurveMath.mealProgress(elapsedMinutes: elapsed - delay, durationMinutes: duration)
+                - InsulinCurveMath.mealProgress(elapsedMinutes: elapsedAtBaseline - delay, durationMinutes: duration))
         case .bolus, .basalInjection:
             let units = treatment.amount
             guard units.isFinite, units > 0,
                   let insulin = treatment.insulin(bolusDefault: bolusInsulin, basalDefault: basalInsulin),
                   insulin.countsTowardPrediction else { return 0 }
-            let points = InsulinCurveCatalogue.curve(for: insulin, units: units)
+            let points = InsulinCurveCatalogue.curve(for: insulin, units: units, bodyWeightKg: bodyWeightKg)
             return -(units * sensitivity * (InsulinCurveMath.cumulativeFraction(points, elapsedMinutes: elapsed)
                 - InsulinCurveMath.cumulativeFraction(points, elapsedMinutes: elapsedAtBaseline)))
         case .exercise:
-            // xDrip logs no intensity, so JugglucoNG's unknown-intensity factor applies.
+            // Intensity from the editor's notes token; without one JugglucoNG's 0.5 applies.
             let duration = min(max(treatment.amount.isFinite ? treatment.amount : 30, 5), 240)
-            let oneHourDrop = sensitivity * 0.22 * 0.5
+            let oneHourDrop = sensitivity * 0.22 * (treatment.intensity?.factor ?? 0.5)
             return -oneHourDrop * (duration / 60) * (InsulinCurveMath.linearProgress(elapsedMinutes: elapsed, durationMinutes: duration)
                 - InsulinCurveMath.linearProgress(elapsedMinutes: elapsedAtBaseline, durationMinutes: duration))
         }
@@ -867,11 +1055,10 @@ struct ExperimentalPredictionModel: Sendable {
         let baseline = newest.date
         let horizon = TimeInterval(min(max(horizonMinutes, 30), 360) * 60)
         let relevant = treatments.filter { $0.date >= baseline.addingTimeInterval(-Self.lookBack) && $0.date <= baseline.addingTimeInterval(horizon) }
-        let sensitivity = toDisplay(insulinSensitivityMgDl)
         let points = GlucosePredictionKernel.simulate(
             history: history, isMmol: isMmol, trendMomentum: trendMomentum, horizonMinutes: horizonMinutes, stepMinutes: Self.stepMinutes,
             targetLow: toDisplay(targetLowMgDl), targetHigh: toDisplay(targetHighMgDl),
-            treatmentDeltaAt: { date in relevant.reduce(0) { $0 + treatmentDelta($1, at: date, baseline: baseline, sensitivity: sensitivity) } })
+            treatmentDeltaAt: { date in relevant.reduce(0) { $0 + treatmentDelta($1, at: date, baseline: baseline, toDisplay: toDisplay) } })
         guard isMmol else { return points }
         return points.map { GlucosePredictionPoint(date: $0.date, value: $0.value / ConstantsBloodGlucose.mgDlToMmoll,
                                                    confidence: $0.confidence, unclampedValue: $0.unclampedValue / ConstantsBloodGlucose.mgDlToMmoll) }
@@ -907,8 +1094,8 @@ enum InsulinActivityStack {
     private static let weeklyCurveMinutes = 3 * dayMinutes
 
     /// One dose's shape: steady-state curves are reduced to a single daily dose's action.
-    static func shape(for insulin: InsulinProfile, units: Double) -> [InsulinCurvePoint] {
-        let points = InsulinCurveCatalogue.curve(for: insulin, units: units)
+    static func shape(for insulin: InsulinProfile, units: Double, bodyWeightKg: Double? = nil) -> [InsulinCurvePoint] {
+        let points = InsulinCurveCatalogue.curve(for: insulin, units: units, bodyWeightKg: bodyWeightKg)
         guard insulin.evidence == .sourceSteadyState, let end = points.last?.minute, end <= weeklyCurveMinutes else { return points }
         let minutes = Array(Set(points.map(\.minute) + points.map { $0.minute - dayMinutes } + [0]))
             .filter { $0 >= 0 && $0 <= end }.sorted()
@@ -934,15 +1121,16 @@ enum InsulinActivityStack {
     }
 
     /// The stacked band over `dates`. Basal insulins sit at the bottom, then rapid ones.
-    static func band(treatments: [ExperimentalTreatment], dates: [Date], bolusDefault: InsulinProfile, basalDefault: InsulinProfile) -> Band {
+    static func band(treatments: [ExperimentalTreatment], dates: [Date], bolusDefault: InsulinProfile, basalDefault: InsulinProfile,
+                     bodyWeightKg: Double? = nil) -> Band {
         struct Dose { let date: Date; let units: Double; let shape: [InsulinCurvePoint] }
         var doses: [InsulinProfile: [Dose]] = [:]
         var shapes: [String: [InsulinCurvePoint]] = [:]
         for treatment in treatments where treatment.kind == .bolus || treatment.kind == .basalInjection {
             guard treatment.amount.isFinite, treatment.amount > 0,
                   let insulin = treatment.insulin(bolusDefault: bolusDefault, basalDefault: basalDefault) else { continue }
-            let key = "\(insulin.rawValue)-\(InsulinCurveCatalogue.definition(insulin).doseAxis == .units ? treatment.amount : 0)"
-            let doseShape = shapes[key] ?? shape(for: insulin, units: treatment.amount)
+            let key = "\(insulin.rawValue)-\(InsulinCurveCatalogue.definition(insulin).doseAxis == .fixed ? 0 : treatment.amount)"
+            let doseShape = shapes[key] ?? shape(for: insulin, units: treatment.amount, bodyWeightKg: bodyWeightKg)
             shapes[key] = doseShape
             doses[insulin, default: []].append(Dose(date: treatment.date, units: treatment.amount, shape: doseShape))
         }
@@ -996,6 +1184,7 @@ enum ExperimentalChartInputs {
                 defaults.experimentalInsulinsEnabled.description, model.horizonMinutes.description, model.trendMomentum.description,
                 model.carbRatio.description, model.insulinSensitivityMgDl.description, model.carbAbsorption.description,
                 model.bolusInsulin.rawValue, model.basalInsulin.rawValue, defaults.bloodGlucoseUnitIsMgDl.description,
+                model.bodyWeightKg?.description ?? "-", ExperimentalPredictionPeriod.encode(model.periods), model.macrosEnabled.description,
                 defaults.lowMarkValue.description, defaults.highMarkValue.description].joined(separator: "|")
     }
 
@@ -1038,7 +1227,8 @@ enum ExperimentalChartInputs {
             let bandEnd = wantsPrediction ? max(dataEnd, futureEnd) : dataEnd
             let dates = InsulinActivityStack.sampleDates(from: dataStart, to: bandEnd, treatments: treatments)
             let band = InsulinActivityStack.band(treatments: treatments, dates: dates,
-                                                 bolusDefault: model.bolusInsulin, basalDefault: model.basalInsulin)
+                                                 bolusDefault: model.bolusInsulin, basalDefault: model.basalInsulin,
+                                                 bodyWeightKg: model.bodyWeightKg)
             plots.insulin = band.layers.map { layer in
                 GlucoseChartExperimentalPlots.InsulinLayer(
                     id: layer.insulin.rawValue, name: layer.insulin.shortName, color: color(layer.insulin),

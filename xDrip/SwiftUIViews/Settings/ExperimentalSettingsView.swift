@@ -113,7 +113,22 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                           value: defaults.experimentalPredictionCarbAbsorption, unit: "g/h", fractionDigits: 0,
                           range: ExperimentalPredictionModel.carbAbsorptionRange, isEnabled: defaults.experimentalPredictionEnabled) { value in
                     UserDefaults.standard.experimentalPredictionCarbAbsorption = value
-                }
+                },
+                SettingsRow(id: "experimental.prediction.periods", title: ExperimentalTexts.text("predictionPeriods", "Time-of-day periods"),
+                            control: .custom(content: {
+                                AnyView(NavigationLink {
+                                    ExperimentalPredictionPeriodsView()
+                                } label: {
+                                    LabeledContent(ExperimentalTexts.text("predictionPeriods", "Time-of-day periods"),
+                                                   value: UserDefaults.standard.experimentalPredictionPeriods.isEmpty
+                                                    ? ExperimentalTexts.text("predictionPeriodsNone", "All day the same")
+                                                    : "\(UserDefaults.standard.experimentalPredictionPeriods.count + 1)")
+                                })
+                            })),
+                bodyWeightRow(),
+                SettingsRow(id: "experimental.prediction.macros", title: ExperimentalTexts.text("predictionMacros", "Protein and fat"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalPredictionMacrosEnabled },
+                                             setIsOn: { UserDefaults.standard.experimentalPredictionMacrosEnabled = $0 }))
             ]
         case .predictionAlert:
             return [
@@ -141,6 +156,35 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                            select: { UserDefaults.standard.experimentalBasalInsulin = $0 })
             ]
         }
+    }
+
+    /// Optional body weight; an empty entry clears it.
+    private func bodyWeightRow() -> SettingsRow {
+        let range = ExperimentalPredictionModel.bodyWeightRange
+        let current = UserDefaults.standard.experimentalBodyWeightKg
+        let rangeText = String(format: ExperimentalTexts.text("numberRange", "From %@ to %@ %@."),
+                               Self.numberText(range.lowerBound, fractionDigits: 0), Self.numberText(range.upperBound, fractionDigits: 0), "kg")
+        return SettingsRow(id: "experimental.prediction.bodyWeight", title: ExperimentalTexts.text("bodyWeight", "Body weight"),
+                           detail: current.map { "\(Self.numberText($0, fractionDigits: 1)) kg" } ?? ExperimentalTexts.text("notSet", "Not set"),
+                           accessory: .disclosure, reloadScope: .all,
+                           action: .textEntry {
+                               SettingsTextEntryContent(
+                                   title: ExperimentalTexts.text("bodyWeight", "Body weight"),
+                                   message: rangeText + " " + ExperimentalTexts.text("bodyWeightMessage", "Leave empty to use the study's reference dose."),
+                                   keyboardType: .decimalPad, text: current.map { Self.numberText($0, fractionDigits: 1) }, placeholder: nil,
+                                   fieldTitle: nil, unitText: "kg", actionTitle: Texts_Common.Ok, cancelTitle: Texts_Common.Cancel,
+                                   action: { entered in
+                                       let trimmed = entered.trimmingCharacters(in: .whitespacesAndNewlines)
+                                       UserDefaults.standard.experimentalBodyWeightKg = trimmed.isEmpty ? nil : Self.parse(trimmed)
+                                   },
+                                   cancel: nil,
+                                   validator: { entered in
+                                       let trimmed = entered.trimmingCharacters(in: .whitespacesAndNewlines)
+                                       if trimmed.isEmpty { return nil }
+                                       guard let value = Self.parse(trimmed), range.contains(value) else { return rangeText }
+                                       return nil
+                                   })
+                           })
     }
 
     private func insulinRow(id: String, title: String, choices: [InsulinProfile], selected: @escaping () -> InsulinProfile,
@@ -209,7 +253,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         case .predictionMain:
             return ExperimentalTexts.text("predictionMainFooter", "Follow the trend continues the recent rise or fall that your treatments do not explain, fading over about an hour. The forecast starts only from a reading at most 15 minutes old.")
         case .predictionModel:
-            return ExperimentalTexts.text("predictionModelFooter", "Insulin sensitivity: how far one unit lowers glucose. Carb ratio: grams covered by one unit. Absorption sets how long carbs take to act. Basal and premixed insulins are not part of the forecast, as in JugglucoNG.")
+            return ExperimentalTexts.text("predictionModelFooter", "Insulin sensitivity: how far one unit lowers glucose. Carb ratio: grams covered by one unit. Absorption sets how long carbs take to act. Periods change these by time of day; each treatment uses the values in force when it was logged. Body weight sharpens curves measured per kilogram (Fiasp, Levemir, regular insulin). Protein and fat add a late rise for carb entries that list them. Basal and premixed insulins are not part of the forecast, as in JugglucoNG.")
         case .predictionAlert:
             return ExperimentalTexts.text("predictedLowFooter", "Warns when the forecast falls below the alarm value within this time while glucose is still above it. Turn it on and set the value, sound and snooze in Settings > Alerts > Predicted Low. It uses the model above even when the prediction is not drawn.")
         case .insulins:
@@ -230,4 +274,85 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
     func completeSettingsViewRefreshNeeded(index: Int) -> Bool { false }
     func storeMessageHandler(messageHandler: @escaping ((String, String) -> Void)) {}
     func storeRowReloadClosure(rowReloadClosure: @escaping ((Int) -> Void)) {}
+}
+
+/// Edits the time-of-day periods of the prediction model (JugglucoNG `PredictionModelProfileScreen`).
+/// Midnight always uses the single values on the previous screen; up to seven more periods follow.
+struct ExperimentalPredictionPeriodsView: View {
+    @State private var periods = UserDefaults.standard.experimentalPredictionPeriods
+    private let isMgDl = UserDefaults.standard.bloodGlucoseUnitIsMgDl
+
+    var body: some View {
+        List {
+            Section(footer: Text(ExperimentalTexts.text("predictionPeriodsFooter", "From each start time until the next one these values replace the single ones. Before the first period, and when there are none, the single values apply."))) {
+                LabeledContent("00:00", value: summary(carbRatio: UserDefaults.standard.experimentalPredictionCarbRatio,
+                                                       sensitivityMgDl: UserDefaults.standard.experimentalPredictionInsulinSensitivityMgDl,
+                                                       absorption: UserDefaults.standard.experimentalPredictionCarbAbsorption))
+                // Index identity keeps a row stable while its start time is being edited.
+                ForEach(periods.indices, id: \.self) { index in
+                    let period = $periods[index]
+                    VStack(alignment: .leading, spacing: 8) {
+                        DatePicker(ExperimentalTexts.text("periodStart", "Starts at"), selection: Binding(
+                            get: { Self.date(minute: period.wrappedValue.startMinute) },
+                            set: { period.wrappedValue.startMinute = Self.minute(of: $0) }), displayedComponents: .hourAndMinute)
+                        numberField(ExperimentalTexts.text("predictionSensitivity", "Insulin sensitivity (per unit)"),
+                                    value: Binding(get: { isMgDl ? period.wrappedValue.insulinSensitivityMgDl : period.wrappedValue.insulinSensitivityMgDl * ConstantsBloodGlucose.mgDlToMmoll },
+                                                   set: { period.wrappedValue.insulinSensitivityMgDl = isMgDl ? $0 : $0 / ConstantsBloodGlucose.mgDlToMmoll }),
+                                    unit: isMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
+                        numberField(ExperimentalTexts.text("predictionCarbRatio", "Carb ratio (grams per unit)"), value: period.carbRatio, unit: "g")
+                        numberField(ExperimentalTexts.text("predictionAbsorption", "Carb absorption (grams per hour)"), value: period.carbAbsorption, unit: "g/h")
+                    }
+                }
+                .onDelete { periods.remove(atOffsets: $0); save() }
+            }
+            if periods.count < ExperimentalPredictionPeriod.maximumCount {
+                Button(ExperimentalTexts.text("periodAdd", "Add period")) { addPeriod() }
+            }
+        }
+        .navigationTitle(ExperimentalTexts.text("predictionPeriods", "Time-of-day periods"))
+        .onDisappear { save() }
+    }
+
+    private func numberField(_ title: String, value: Binding<Double>, unit: String) -> some View {
+        LabeledContent(title) {
+            HStack(spacing: 4) {
+                TextField("", value: value, format: .number.precision(.fractionLength(0...1)))
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 80)
+                Text(unit).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func summary(carbRatio: Double, sensitivityMgDl: Double, absorption: Double) -> String {
+        let sensitivity = isMgDl ? sensitivityMgDl : sensitivityMgDl * ConstantsBloodGlucose.mgDlToMmoll
+        return "\(ExperimentalSettingsViewModel.numberText(sensitivity, fractionDigits: isMgDl ? 0 : 1)) · 1:\(ExperimentalSettingsViewModel.numberText(carbRatio, fractionDigits: 1)) · \(ExperimentalSettingsViewModel.numberText(absorption, fractionDigits: 0)) g/h"
+    }
+
+    /// Splits the longest gap in the day, as JugglucoNG `suggestedSplitMinute`, inheriting its values.
+    private func addPeriod() {
+        let starts = [0] + periods.map(\.startMinute) + [1440]
+        let gaps = zip(starts, starts.dropFirst()).map { ($0, $1 - $0) }
+        guard let largest = gaps.max(by: { $0.1 < $1.1 }) else { return }
+        let start = min(max(((largest.0 + largest.1 / 2 + 15) / 30) * 30, 1), 1439)
+        let inherited = ExperimentalPredictionModel(defaults: .standard).parameters(at: Self.date(minute: start))
+        periods.append(ExperimentalPredictionPeriod(startMinute: start, carbRatio: inherited.carbRatio,
+                                                    insulinSensitivityMgDl: inherited.insulinSensitivityMgDl, carbAbsorption: inherited.carbAbsorption))
+        save()
+    }
+
+    private func save() {
+        periods = ExperimentalPredictionPeriod.sanitized(periods)
+        UserDefaults.standard.experimentalPredictionPeriods = periods
+    }
+
+    private static func date(minute: Int) -> Date {
+        Calendar.current.startOfDay(for: Date()).addingTimeInterval(TimeInterval(minute * 60))
+    }
+
+    private static func minute(of date: Date) -> Int {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (components.hour ?? 0) * 60 + (components.minute ?? 0)
+    }
 }

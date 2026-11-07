@@ -30,6 +30,19 @@ A dashed line to the right of the main chart, for 1–4 hours (default 2). It is
 Defaults are JugglucoNG's: sensitivity 54 mg/dL (3.0 mmol/L) per unit, carb ratio 10 g/U,
 absorption 35 g/h. It is an estimate for orientation, never a dosing tool.
 
+Model refinements (JugglucoNG `PredictionModelProfile`, `JournalHumanProfile`, `JournalFoodMath`):
+
+- **Time-of-day periods**: up to seven start times after midnight, each with its own sensitivity,
+  carb ratio and absorption. Each treatment uses the values in force when it was logged.
+- **Body weight** (10–400 kg, optional): curves measured per kilogram (Fiasp, Levemir, regular,
+  NovoMix) are interpolated at `units ÷ weight` instead of the study's reference dose.
+- **Protein and fat**: with the switch on, the treatment editor asks for protein and fat on a
+  carb entry (stored in its notes as `P:20 F:15`). They add a delayed carb-equivalent rise:
+  fat-protein units `(4·protein + 9·fat) ÷ 100`, 30–65 % of 10 g per unit, starting 50–110 min
+  after the meal and lasting 90–480 min.
+- **Exercise intensity**: the editor offers light, moderate or intense (notes `intensity:light`),
+  scaling the drop by 0.35, 0.65 or 1; not set keeps 0.5.
+
 ### Predicted low alert
 
 Settings → Alerts → **Predicted Low** (off by default) warns before a low: it fires when the
@@ -55,5 +68,4 @@ measured per kilogram use the study's reference dose.
   daily dose as `S(t) − S(t + 24 h)`. A curve ends where its source stopped measuring.
 - The IOB/COB numbers and curves of the Treatments settings are unchanged.
 
-Not ported yet: JugglucoNG's adaptive forecast, per-hour profiles, food macros and activity
-intensity.
+Not ported yet: JugglucoNG's adaptive forecast.
