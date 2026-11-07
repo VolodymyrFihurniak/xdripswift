@@ -34,6 +34,8 @@ struct AGPChartView: View {
     let emptyMessage: String
     let fixedPlotWidth: CGFloat?
     let usesTightRange: Bool
+    /// Experimental line style (Settings > Experimental): the day's readings as a connected line.
+    let drawsGlucoseAsLine: Bool
 
     init(
         points: [GlucoseReportAGPPoint],
@@ -43,7 +45,8 @@ struct AGPChartView: View {
         showsNowRule: Bool = false,
         emptyMessage: String,
         fixedPlotWidth: CGFloat? = nil,
-        usesTightRange: Bool = false
+        usesTightRange: Bool = false,
+        drawsGlucoseAsLine: Bool = false
     ) {
         self.points = points
         self.usesMgDl = usesMgDl
@@ -53,6 +56,7 @@ struct AGPChartView: View {
         self.emptyMessage = emptyMessage
         self.fixedPlotWidth = fixedPlotWidth
         self.usesTightRange = usesTightRange
+        self.drawsGlucoseAsLine = drawsGlucoseAsLine
     }
 
     var body: some View {
@@ -199,7 +203,9 @@ struct AGPChartView: View {
     }
 
     @ChartContentBuilder private var glucosePointMarks: some ChartContent {
-        if presentation == .landscapeComparison {
+        if presentation == .landscapeComparison && drawsGlucoseAsLine {
+            glucoseLineMarks
+        } else if presentation == .landscapeComparison {
             ForEach(glucosePoints) { point in
                 let isCurrentPoint = point.isLatest && showsNowRule
 
@@ -210,6 +216,35 @@ struct AGPChartView: View {
                 .symbolSize(isCurrentPoint ? 72 : 16)
                 .foregroundStyle(isCurrentPoint ? ConstantsAppColors.primaryText : glucosePointColor(valueMgDl: point.valueMgDl))
             }
+        }
+    }
+
+    /// The day's readings as the main chart's experimental line: coloured by range and broken at
+    /// gaps longer than JugglucoNG's 17 minutes. The newest reading keeps its larger dot.
+    @ChartContentBuilder private var glucoseLineMarks: some ChartContent {
+        let runs = GlucoseChartExperimentalPlots.lineRuns(
+            values: glucosePoints.map(\.valueMgDl),
+            dates: glucosePoints.map { Date(timeIntervalSinceReferenceDate: TimeInterval($0.minuteOfDay * 60)) },
+            color: glucosePointColor(valueMgDl:))
+        ForEach(runs) { run in
+            ForEach(run.points) { point in
+                LineMark(x: .value("Time", Int(point.date.timeIntervalSinceReferenceDate / 60)),
+                         y: .value("Today", converted(point.mgDl)),
+                         series: .value("Series", "landscape-glucose-\(run.id)"))
+                    .interpolationMethod(.monotone)
+                    .lineStyle(StrokeStyle(lineWidth: ConstantsGlucoseChartSwiftUI.experimentalCompactGlucoseLineWidth, lineCap: .round, lineJoin: .round))
+                    .foregroundStyle(run.color)
+            }
+            if run.points.count == 1, let point = run.points.first {
+                PointMark(x: .value("Time", Int(point.date.timeIntervalSinceReferenceDate / 60)), y: .value("Today", converted(point.mgDl)))
+                    .symbolSize(16)
+                    .foregroundStyle(run.color)
+            }
+        }
+        if showsNowRule, let latest = glucosePoints.first(where: \.isLatest) {
+            PointMark(x: .value("Time", latest.minuteOfDay), y: .value("Today", converted(latest.valueMgDl)))
+                .symbolSize(72)
+                .foregroundStyle(ConstantsAppColors.primaryText)
         }
     }
 

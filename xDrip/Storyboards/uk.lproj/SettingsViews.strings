@@ -4,40 +4,40 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// used in settings, section Info, title of the license setting
-"settingsviews_license" = "License";
+"settingsviews_license" = "Ліцензія";
 
 /// help settings, should the online help be translated automatically if needed
 "settingsviews_translateOnlineHelp" = "Перекласти документацію";
 
 /// dexcom share settings, where user can set the dexcom share account name
-"settingsviews_dexcomShareAccountName" = "Account Name";
+"settingsviews_dexcomShareAccountName" = "Ім’я облікового запису";
 
 /// 
 "settingsviews_showcoloredobjectives" = "Кольорові лінії";
 
 /// transmitter settings, just the words that explain that the settings is about transmitter type
-"settingsviews_transmittertype" = "Transmitter Type";
+"settingsviews_transmittertype" = "Тип трансмітера";
 
 /// home screen settings, high value
-"settingsviews_highValue" = "High Value";
+"settingsviews_highValue" = "Високе значення";
 
 
 /// general settings, when switching from master to follower, if confirmation is asked, this message will be shown.
-"warningChangeFromMasterToFollower" = "Switching from Master to Follower will stop your current sensor. Do you want to continue?";
+"warningChangeFromMasterToFollower" = "Перехід з основного режиму в режим спостерігача зупинить поточний сенсор. Продовжити?";
 
 /// name of setting for back ground color
-"m5stack_settingsviews_backGroundColor" = "Background Color";
+"m5stack_settingsviews_backGroundColor" = "Колір фону";
 
 /// M5 stack setting, brightness
-"m5stack_settingsviews_brightness" = "Screen Brightness";
+"m5stack_settingsviews_brightness" = "Яскравість екрана";
 
 "displayUnitInCalendarEvent" = "Одиниця";
 
 /// name of setting for text color
-"m5stack_settingsviews_textColor" = "Text Color";
+"m5stack_settingsviews_textColor" = "Колір тексту";
 
 /// transmitter settings, pop up that asks user to inter transmitter id
-"settingsviews_givetransmitterid" = "Enter Transmitter ID";
+"settingsviews_givetransmitterid" = "Введіть ID трансмітера";
 
 /// nightscout settings, where user can set the nightscout url
 "settingsviews_nightscoutUrl" = "URL";
@@ -46,70 +46,70 @@
 "settingsviews_multipleAppBadgeValueWith10" = "Бейдж програми x10";
 
 /// in Settings, section title for Trace
-"sectionTitleTrace" = "Issue Reporting";
+"sectionTitleTrace" = "Повідомлення про проблеми";
 
 /// dexcom share settings, pop up that asks user to enter dexcom share password
-"settingsviews_giveDexcomSharePassword" = "Give Dexcom Share Password";
+"settingsviews_giveDexcomSharePassword" = "Введіть пароль Dexcom Share";
 
 /// speak settings, where user can enable or disable speak readings
 "settingsviews_speakBgReadings" = "Промовляти глюкозу";
 
 /// general settings, literally master
-"settingsviews_master" = "Master";
+"settingsviews_master" = "Основний";
 
 /// speak settings, where user can enable or disable speak delta
-"settingsviews_speakDelta" = "Speak Delta";
+"settingsviews_speakDelta" = "Озвучувати різницю";
 
 /// nightscout settings, port to use
-"nightscoutPort" = "Port";
+"nightscoutPort" = "Порт";
 
 /// healthkit settings, section title
 "settingsviews_sectiontitlehealthkit" = "Apple Health";
 
 /// nightscout settings, title of row
-"uploadSensorStartTime" = "Upload Sensor Start Time";
+"uploadSensorStartTime" = "Відвантажувати час запуску сенсора";
 
 /// default text in email body, when user wants to send trace file.
-"emailbodyText" = "Problem Description: ";
+"emailbodyText" = "Опис проблеми: ";
 
 /// speak reading settings, text in pop up where user can select the language
-"settingsviews_speakreadingslanguageselection" = "Select Language";
+"settingsviews_speakreadingslanguageselection" = "Виберіть мову";
 
 /// In Settings, Alerts section, there's an option to test the volume of ios sound, this is the title of the row
 "volumeTestiOSSound" = "Коли тихий режим вимкнено";
 
 /// home screen settings, section title
-"settingsviews_sectiontitlehomescreen" = "Home Screen";
+"settingsviews_sectiontitlehomescreen" = "Головний екран";
 "settingsviews_mainChartHours" = "Часовий діапазон";
 
 /// If user has earlier denied access to calendar, and then tries to activate creation of events in calendar, this message will be shown
 
 /// When clicking the retention setting, a pop up asks for how many days should data be stored
-"settingsviews_housekeeperRetentionPeriodMessage" = "For how many days should data be stored? (Min 90, Max 365)\n\n(Recommended: 90 days)";
+"settingsviews_housekeeperRetentionPeriodMessage" = "Скільки днів зберігати дані? (Мін. 90, макс. 365)\n\n(Рекомендовано: 90 днів)";
 
 /// Housekeeper settings, section title
-"settingsviews_sectionTitleHousekeeper" = "Data Management";
+"settingsviews_sectionTitleHousekeeper" = "Керування даними";
 
 /// non fixed settings, title of the section
-"settingsviews_labelNonFixed" = "Multi-point Calibration";
+"settingsviews_labelNonFixed" = "Багатоточкове калібрування";
 
 
 /// nightscout settings, where user can enable or disable nightscout
 
 /// home screen settings, urgent high value
-"settingsviews_urgentHighValue" = "Urgent High Value";
+"settingsviews_urgentHighValue" = "Критично високе значення";
 
 /// statistics settings, use IFCC method for HbA1c?
-"settingsviews_useIFCCGMI" = "GMI in mmols/mol";
+"settingsviews_useIFCCGMI" = "GMI у ммоль/моль";
 
 /// dexcom share settings settings, where user can set dexcom serial number to be used for dexcom share upload
-"settingsviews_dexcomShareUploadSerialNumber" = "Receiver Serial Number";
+"settingsviews_dexcomShareUploadSerialNumber" = "Серійний номер приймача";
 
 /// for text in pop up where user can select bg unit
-"settingsviews_selectbgunit" = "Blood Glucose Units";
+"settingsviews_selectbgunit" = "Одиниці глюкози крові";
 
 /// statistics settings, section title
-"settingsviews_sectiontitlestatistics" = "Statistics";
+"settingsviews_sectiontitlestatistics" = "Статистика";
 
 /// dexcom share settings, where user can choose to use US url or not
 "settingsviews_useUSDexcomShareurl" = "Сервери US";
@@ -117,13 +117,13 @@
 /// healthkit settings, literally 'healthkit'
 
 /// In Settings, Alerts section, there's an option to test the volume settings, this is text explaining the test when clicking the row - this is for ios sound volume test
-"volumeTestiOSSoundExplanation" = "An alarm sound is now being played with the same volume that will be used for an Alarm Type with 'Override Mute' = Off\n\n(Also used always for Missed Reading alarms which use the iOS volume.)\n\nPress one of the volume buttons to stop the sound, then change the volume with the volume buttons to the desired volume and test again.";
+"volumeTestiOSSoundExplanation" = "Зараз відтворюється звук сигналу з тією гучністю, яку використовуватиме тип сигналу з «Ігнорувати беззвучний режим» = Вимк.\n\n(Так само завжди звучить сигнал пропущених показників, який використовує гучність iOS.)\n\nНатисніть одну з кнопок гучності, щоб зупинити звук, потім кнопками гучності встановіть потрібну гучність і перевірте знову.";
 
 /// statistics settings, show statistics on home screen
 "settingsviews_showStatistics" = "Статистика";
 
 /// alerting settings, row alert types
-"settingsviews_row_alert_types" = "Alarm Types";
+"settingsviews_row_alert_types" = "Типи сигналів";
 "settingsviews_volume_tests_section_title" = "Перевірити гучність сигналу";
 "settingsviews_alert_types_section_footer" = "Типи сигналів визначають поведінку сигналів, зокрема звук, вібрацію, відкладання та обхід тихого режиму.";
 "settingsviews_alerts_section_footer" = "Сигнали визначають, коли застосунок має повідомляти про рівні глюкози, пропущені показники та інші умови.";
@@ -133,13 +133,13 @@
 "settingsviews_issueReportTitle" = "Звіт про проблему";
 
 /// M5 stack bluetooth  settings, pop up that asks user to enter the password
-"m5stack_settingsviews_giveBluetoothPassword" = "Enter Bluetooth Password";
+"m5stack_settingsviews_giveBluetoothPassword" = "Введіть пароль Bluetooth";
 
 /* Enable the configured time schedule for uploads or spoken glucose readings. Does not enable the underlying feature; its master switch remains separate. */
 "settingsviews_enableSchedule" = "Увімкнути розклад";
 
 /// speak settings, where user can select the language
-"settingsviews_speakBgReadingslanguage" = "Language";
+"settingsviews_speakBgReadingslanguage" = "Мова";
 
 /// nightscout settings, where user can set the nightscout api key
 "settingsviews_nightscoutAPIKey" = "API_SECRET";
@@ -151,49 +151,49 @@
 
 
 /// When clicking the interval setting, a pop up asks for minimum number of minutes between two readings, this is the pop up message - this is used for setting the interval between two readings in BG notifications, Speak readings, Apple Watch
-"settingsviews_IntervalTitle" = "Notification Interval";
+"settingsviews_IntervalTitle" = "Інтервал сповіщень";
 
 /// If user is not allowed to give any app access to the Calendar, due to restrictions. And then tries to activate creation of events in calendar, this message will be shown
 
 /// transmitter settings, just the words that explain that the settings is about transmitter id
-"settingsviews_transmitterid" = "Transmitter ID";
+"settingsviews_transmitterid" = "ID трансмітера";
 
 /// home screen settings, urgent low value
-"settingsviews_urgentLowValue" = "Urgent Low Value";
+"settingsviews_urgentLowValue" = "Критично низьке значення";
 
 /// general settings, should reading be shown in app badge yes or no
 "settingsviews_labelShowReadingInAppBadge" = "Бейдж програми";
 
 /// In Settings, Alerts section, there's an option to test the volume settings, this is text explaining the test when clicking the row - this is for sound player volume test
-"volumeTestSoundPlayerExplanation" = "An alarm sound is now being played with the same volume that will be used for an Alarm Type with 'Override Mute' = On\n\n(Used for all alarms except Missed Reading alerts which always use the iOS volume.)\n\nChange the volume with the volume buttons and press OK when done.";
+"volumeTestSoundPlayerExplanation" = "Зараз відтворюється звук сигналу з тією гучністю, яку використовуватиме тип сигналу з «Ігнорувати беззвучний режим» = Увімк.\n\n(Застосовується до всіх сигналів, крім сигналу пропущених показників, який завжди використовує гучність iOS.)\n\nЗмініть гучність кнопками гучності й натисніть OK, коли закінчите.";
 
 /// alerting settings, section title
-"settingsviews_sectiontitlealerting" = "Alarms";
+"settingsviews_sectiontitlealerting" = "Сигнали";
 "settingsviews_prefer_large_snooze_screen" = "Великий екран відкладення";
 
 /// deloper settings, row title for OSLog - with OSLog enabled, a developer can view log information as explained here https://developer.apple.com/documentation/os/oslog
 "oslog" = "OSLog";
 
 /// transmitter settings, section title
-"settingsviews_sectiontitletransmitter" = "Transmitter";
+"settingsviews_sectiontitletransmitter" = "Трансмітер";
 
 /// used for editing schedule for Nightscout upload and Dexcom Share upload
-"editScheduleTimePickerSubtitle" = "Change: ";
+"editScheduleTimePickerSubtitle" = "Змінити: ";
 
 /// In Settings, Alerts section, there's an option to test the volume of the sound player, this is the title of the row
 "volumeTestSoundPlayer" = "Коли тихий режим увімкнено";
 
 /// speak settings, where enable or disable speak trend
-"settingsviews_speakTrend" = "Speak Trend";
+"settingsviews_speakTrend" = "Озвучувати тренд";
 
 /// dexcom share settings, pop up that asks user to enter dexcom share serial number
-"settingsviews_givedexcomShareUploadSerialNumber" = "Enter the Dexcom Receiver Serial Number";
+"settingsviews_givedexcomShareUploadSerialNumber" = "Введіть серійний номер приймача Dexcom";
 
 /// Housekeeper retention period, for how long to store data
-"settingsviews_housekeeperRetentionPeriod" = "Retention Period";
+"settingsviews_housekeeperRetentionPeriod" = "Період зберігання";
 
 /// When clicking the interval setting, a pop up asks for minimum number of minutes between two readings, this is the pop up message - this is used for setting the interval between two readings in BG notifications, Speak readings, Apple Watch
-"settingsviews_IntervalMessage" = "Minimum interval between two notifications";
+"settingsviews_IntervalMessage" = "Мінімальний інтервал між двома сповіщеннями";
 
 /// home screen settings, should the clock also be displayed when the screen is locked?
 "settingsviews_showClockWhenScreenIsLocked" = "Годинник";
@@ -202,26 +202,26 @@
 "settingsviews_sectiontitledexcomshareupload" = "Dexcom Share";
 
 /// user tries to send trace file but there's no native email account configured
-"emailNotConfigured" = "You must configure an e-mail account on your iOS device.";
+"emailNotConfigured" = "На пристрої iOS потрібно налаштувати обліковий запис електронної пошти.";
 
 /// statistics settings, how many days to use for calculations
-"settingsviews_daysToUseStatisticsMessage" = "Maximum days we should try to use to calculate the statistics?\n\n(Enter 0 to calculate today since midnight)";
+"settingsviews_daysToUseStatisticsMessage" = "За скільки днів щонайбільше рахувати статистику?\n\n(Введіть 0, щоб рахувати сьогодні від опівночі)";
 
 /// general settings, literally follower
-"settingsviews_follower" = "Follower";
+"settingsviews_follower" = "Спостерігач";
 
 /// nightscout settings, pop up that asks user to enter nightscout api key
 "settingsviews_giveNightscoutAPIKey" = "Enter your API_SECRET";
 
 
 /// treatments settings, section title
-"settingsviews_sectiontitletreatments" = "Treatments";
+"settingsviews_sectiontitletreatments" = "Лікування";
 
 /// nightscout settings, when clicking the cell, test the url and api key
 "testUrlAndAPIKey" = "Перевірити з’єднання";
 
 /// in Settings, to enable debug level in trace file
-"debugLevel" = "Include Debug Level";
+"debugLevel" = "Додати рівень налагодження";
 
 /// help settings, restart needed
 
@@ -232,13 +232,13 @@
 /// used in settings, section Info, title of the build setting
 
 /// used in settings, section Info, title of the version setting
-"settingsviews_Version" = "Version";
+"settingsviews_Version" = "Версія";
 
 /// treatments settings, show the treatments on main chart
 "settingsviews_showTreatments" = "Терапія";
 
 /// shown on top of the first settings screen, literally 'Settings'
-"settingsviews_settingstitle" = "Settings";
+"settingsviews_settingstitle" = "Налаштування";
 "settingsviews_glucoseDisplaySectionTitle" = "Загальні";
 "settingsviews_glucoseRangesSectionTitle" = "Діапазони глюкози";
 "settingsviews_alertsAndNotificationsSectionTitle" = "Оповіщення та сповіщення";
@@ -267,15 +267,15 @@
 "m5stack_settingsviews_sectiontitlebluetooth" = "Bluetooth";
 
 /// alerting settings, row alerts
-"settingsviews_row_alerts" = "Alarms";
+"settingsviews_row_alerts" = "Сигнали";
 
 /// transmitter settings, this is for the button, when clicked then user will be requested to give transmitter id. The only difference with settingsviews_transmitterid is that ':' is not added
-"settingsviews_transmitterid_text_for_button" = "Transmitter ID";
+"settingsviews_transmitterid_text_for_button" = "ID трансмітера";
 
 /// dexcom share settings, where user can select if readings should be uploaded to dexcom share yes or no
 
 /// nightscout or dexcom share settings, where user can select to edit the schedule
-"schedule" = "Schedule";
+"schedule" = "Розклад";
 
 /// general settings, should reading be shown in notification yes or no
 "settingsviews_showReadingInNotification" = "Сповіщення глюкози";
@@ -287,61 +287,61 @@
 "settingsviews_showtarget" = "Цільова лінія";
 
 /// nightscout  settings, pop up that asks user to enter nightscout url
-"settingsviews_giveNightscoutUrl" = "Enter your Nightscout URL";
+"settingsviews_giveNightscoutUrl" = "Введіть URL-адресу Nightscout";
 
 "displayDeltaInCalendarEvent" = "Дельта";
 
 /// weboop settings, title of the dialogs where user can select between xdrip or transmitter algorithm
-"settingsviews_labelWebOOP" = "xDrip or Transmitter Algorithm";
+"settingsviews_labelWebOOP" = "Алгоритм xDrip чи трансмітера";
 
 /// about settings, section title
-"settingsviews_sectiontitleAbout" = "About %@";
+"settingsviews_sectiontitleAbout" = "Про %@";
 
 /// Text in pop up shown when user wants to send the trace file
-"describeProblem" = "Explain why you need to send the trace file with as much detail as possible. If you have already reported your problem in the Facebook support group '%@', then mention your facebook name in the e-mail";
+"describeProblem" = "Якомога докладніше поясніть, навіщо надсилаєте файл трасування. Якщо ви вже повідомили про проблему в групі підтримки у Facebook «%@», укажіть у листі своє ім’я у Facebook";
 
 /// help settings, open the online help
-"settingsviews_showOnlineHelp" = "Open Online Help";
+"settingsviews_showOnlineHelp" = "Відкрити онлайн-довідку";
 
 /// home screen settings, low value
-"settingsviews_lowValue" = "Low Value";
+"settingsviews_lowValue" = "Низьке значення";
 
 /// deloper settings, row title for 'Smooth Libre Values?'
 
 /// shown on top of the first settings screen
-"m5stack_settingsviews_settingstitle" = "M5 Stack Settings";
+"m5stack_settingsviews_settingstitle" = "Налаштування M5 Stack";
 
 /// statistics settings, how many days to use for calculations
-"settingsviews_daysToUseStatisticsTitle" = "Days to Calculate";
+"settingsviews_daysToUseStatisticsTitle" = "Днів для розрахунку";
 
 "settingsviews_displayTrendInCalendarEvent" = "Тренд";
 
 /// In case user tries to send trace file via email but error occurs.
-"failedToSendEmail" = "Failed to Send Email";
+"failedToSendEmail" = "Не вдалося надіслати лист";
 
 /// speak settings, section title
 
 
 /// general settings, section title
-"settingsviews_sectiontitleNotifications" = "Notifications";
+"settingsviews_sectiontitleNotifications" = "Сповіщення";
 
 /// dexcom share settings, pop up that asks user to enter dexcom share account name
-"settingsviews_giveDexcomShareAccountName" = "Enter Dexcom Share Account Name";
+"settingsviews_giveDexcomShareAccountName" = "Введіть ім’я облікового запису Dexcom Share";
 
 /// When creating schedule for Nightscout or Dexcom Share upload, this is the top label text
-"timeScheduleViewTitle" = "On/Off Time Schedule";
+"timeScheduleViewTitle" = "Розклад увімкнення/вимкнення";
 
 /// When clicking the threshold setting, a pop up asks for the number of units under which a bolus should be considered a micro-bolus
-"settingsviews_smallBolusTreatmentThresholdMessage" = "Below how many units should we consider a bolus as a micro-bolus?\n\n(Recommended value: 1.0U)";
+"settingsviews_smallBolusTreatmentThresholdMessage" = "Скільки одиниць болюсу вважати мікроболюсом?\n\n(Рекомендоване значення: 1,0 ОД)";
 
 /// general settings, master or follower
-"settingsviews_masterorfollower" = "Master or Follower";
+"settingsviews_masterorfollower" = "Основний чи спостерігач";
 
 /// deloper settings, row title for NSLog - with NSLog enabled, a developer can view log information as explained here https://github.com/JohanDegraeve/xdripswift/wiki/NSLog
 "nslog" = "NSLog";
 
 /// home screen settings, target value
-"settingsviews_targetValue" = "Target Value";
+"settingsviews_targetValue" = "Цільове значення";
 
 /// help settings, section title
 
@@ -350,63 +350,63 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Settings screen for loop delay
-"Select Time" = "Select Time";
+"Select Time" = "Виберіть час";
 
 /// transmitter settings, to explain that the reset option only works for certain transmitters
-"settingsviews_resetDexcomTransmitterMessage" = "This option will attempt to reset your Anubis transmitter on the next connection.";
+"settingsviews_resetDexcomTransmitterMessage" = "Під час наступного підключення програма спробує скинути ваш трансмітер Anubis.";
 
 /// data source settings, keep-alive mode is set to aggressive
 "settingsviews_followerKeepAliveTypeAggressiveMessage" = "Підтримка активності is set to aggressive.\n\nWhen the app is not on screen, we will aggressively attempt to keep it running for you in the background so that BG updates are received and alarms can be triggered.\n\nThis mode has a very noticeable impact on the battery of your device and should only be used if absolutely necessary.";
 
 /// libre link up follower settings, no active sensor
-"settingsviews_libreLinkUpNoActiveSensor" = "No active sensor data";
+"settingsviews_libreLinkUpNoActiveSensor" = "Немає даних активного сенсора";
 
 /// data source settings, keep-alive mode is set to disabled
 "settingsviews_followerKeepAliveTypeDisabledMessage" = "Підтримка активності is disabled.\n\nWhen the app is not on screen, no alarms, app badges, notifications or BG updates will take place.\n\nThe app will remain sleeping until you open it again.\n\nThis mode has very little impact on the battery of your device.";
 
 /// Settings screen for loop delay, explanatory text for value
-"expanatoryTextSelectValue" = "Delay in minutes, applied to readings shared with OS-AID";
+"expanatoryTextSelectValue" = "Затримка в хвилинах для показників, що передаються в OS-AID";
 
 /// statistics settings, prefer time in tight range
-"settingsviews_timeInRangeTypeTightRange" = "Tight Range";
+"settingsviews_timeInRangeTypeTightRange" = "Вузький діапазон";
 
 /// data source settings, keep-alive mode is set to normal
-"settingsviews_followerKeepAliveTypeNormal" = "Normal";
+"settingsviews_followerKeepAliveTypeNormal" = "Звичайний";
 
 /// data source settings, keep-alive mode is set to aggressive
-"settingsviews_followerKeepAliveTypeAggressive" = "Aggressive";
+"settingsviews_followerKeepAliveTypeAggressive" = "Агресивний";
 
 /// statistics settings, prefer standard time in range
 "settingsviews_timeInRangeTypeStandardRange" = "Стандартний";
 
 /// statistics settings, the type of time in range selected
-"settingsviews_labelTimeInRangeType" = "Time In Range";
+"settingsviews_labelTimeInRangeType" = "Час у діапазоні";
 
 /// data source settings, enable background keep alive
 "settingsviews_labelfollowerKeepAliveType" = "Підтримка активності";
 
 /// this setting is required
-"settingsviews_valueIsRequired" = "⚠️ Required";
+"settingsviews_valueIsRequired" = "⚠️ Обов’язково";
 
 /// treatments settings, offset the carb treatments on main chart
 
 /// When clicking the interval setting, a pop up asks for minimum number of minutes between two calendar events, this is the pop up message - this is used for setting the interval between two calendar events, Speak readings, Apple Watch
 
 /// When user creates new loopdelay, with a timestamp that already exists - this is the warning text
-"warningLoopDelayAlreadyExists" = "There is already a loopDelay for this time.";
+"warningLoopDelayAlreadyExists" = "Для цього часу вже є затримка.";
 
 /// statistics settings, prefer user-defined range
-"settingsviews_timeInRangeTypeUserDefinedRange" = "User Range";
+"settingsviews_timeInRangeTypeUserDefinedRange" = "Ваш діапазон";
 
 /// CGM data source settings, section title
 "settingsviews_sectionTitleDataSource" = "Джерело даних";
 "settingsviews_dataSourceMasterDevicesFooter" = "Додайте сумісні пристрої на вкладці «Пристрої».";
 
 /// follower settings, pop up that asks user to enter their username
-"settingsviews_enterUsername" = "Enter your username";
+"settingsviews_enterUsername" = "Введіть ім’я користувача";
 
 /// data source settings, show that Nightscout is disabled
-"settingsviews_nightscoutNotEnabledRowText" = "Disabled";
+"settingsviews_nightscoutNotEnabledRowText" = "Вимкнено";
 
 /// data source settings, keep-alive mode is set to use an external heartbeat
 "settingsviews_followerKeepAliveTypeHeartbeatMessage" = "Підтримка активності is set to use an external heartbeat.\n\nWhen the app is not on screen, the external heartbeat will wake it up in the background so that BG updates are received and alarms can be triggered.\n\nMake sure you add a valid heartbeat device in the Bluetooth screen.\n\nThis mode has very little impact on the battery of your device but will only work if a valid heartbeat is running.";
@@ -417,19 +417,19 @@
 /// When clicking the event interval setting, a pop up asks for minimum number of minutes between two events, this is the pop up message - this is used for setting the interval between two calendar events
 
 /// data source settings, enable Nightscout in the Nightscout section
-"settingsviews_nightscoutNotEnabled" = "Nightscout is disabled\n\nTo upload BG values to Nightscout, you must enable it in the Nightscout section.";
+"settingsviews_nightscoutNotEnabled" = "Nightscout вимкнено\n\nЩоб відвантажувати значення глюкози в Nightscout, увімкніть його в розділі Nightscout.";
 
 /// screen dimming is disabled
-"settingsviews_screenLockDimmingTypeDisabled" = "Disabled";
+"settingsviews_screenLockDimmingTypeDisabled" = "Вимкнено";
 
 /// When clicking the speak interval setting, a pop up asks for minimum number of minutes between two speech events, this is the pop up message - this is used for setting the interval between two spoken bg announcements
-"settingsviews_SpeakIntervalTitle" = "Speak Interval";
+"settingsviews_SpeakIntervalTitle" = "Інтервал озвучування";
 
 /// libre link up follower settings, pop up that asks user to enter their region
-"settingsviews_libreLinkUpReAcceptNeeded" = "Need to accept terms";
+"settingsviews_libreLinkUpReAcceptNeeded" = "Потрібно прийняти умови";
 
 /// When clicking the interval setting, a pop up asks for minimum number of minutes between two bg announcements, this is the pop up message - this is used for setting the interval between two readings in BG announcements, Speak readings, Apple Watch
-"settingsviews_SpeakIntervalMessage" = "Minimum interval between two voice announcements";
+"settingsviews_SpeakIntervalMessage" = "Мінімальний інтервал між двома голосовими оголошеннями";
 
 /// home screen settings, should the mini-chart be shown
 "settingsviews_showMiniChart" = "Мініграфік";
@@ -439,37 +439,37 @@
 "settingsviews_followerPatientName" = "Псевдонім";
 
 /// data source settings, keep-alive mode is set to disabled
-"settingsviews_followerKeepAliveTypeDisabled" = "Disabled";
+"settingsviews_followerKeepAliveTypeDisabled" = "Вимкнено";
 
 /// screen dimming is dark
-"settingsviews_screenLockDimmingTypeDark" = "Dark";
+"settingsviews_screenLockDimmingTypeDark" = "Темно";
 
 /// screen dimming is dimmed
-"settingsviews_screenLockDimmingTypeDimmed" = "Dimmed";
+"settingsviews_screenLockDimmingTypeDimmed" = "Притемнено";
 
 /// When enabled, then it should be possible to run xDrip4iOS/Libre 2 in parallel with other app(s)
-"suppressUnLockPayLoad" = "Suppress Unlock Payload";
+"suppressUnLockPayLoad" = "Не надсилати дані розблокування";
 
 /// Settings screen for loop delay
-"Select Value" = "Select Value";
+"Select Value" = "Виберіть значення";
 
 /// Settings screen for loop delay, explanatory text for time
-"expanatoryTextSelectTime" = "As of what time should the value apply";
+"expanatoryTextSelectTime" = "З якого часу має діяти значення";
 
 /// data source settings, data source region
-"settingsviews_labelFollowerDataSourceRegion" = "Region";
+"settingsviews_labelFollowerDataSourceRegion" = "Регіон";
 
 /// data source settings, data source
 "settingsviews_labelFollowerDataSourceType" = "Джерело даних";
 
 /// data source settings, enable Nightscout upload
-"settingsviews_labelUploadDataToNightscout" = "Upload to Nightscout";
+"settingsviews_labelUploadDataToNightscout" = "Відвантажувати в Nightscout";
 
 /// data source settings, ask the user to enter the name of the person we are following if they want to - it's optional
-"settingsviews_followerPatientNameMessage" = "Here you can optionally write an alias for the person you are following.";
+"settingsviews_followerPatientNameMessage" = "Тут можна вказати псевдонім людини, за якою ви спостерігаєте.";
 
 /// follower settings, pop up that asks user to enter their password
-"settingsviews_enterPassword" = "Enter your password";
+"settingsviews_enterPassword" = "Введіть пароль";
 
 /// The user needs to update their calendar permissions
 
@@ -482,7 +482,7 @@
 /// Should loop data be shared only every 5 minutes
 
 /// screen dimming is very dark
-"settingsviews_screenLockDimmingTypeVeryDark" = "Very Dark";
+"settingsviews_screenLockDimmingTypeVeryDark" = "Дуже темно";
 
 // MARK: - Automatic Housekeeping
 "settingsviews_dataManagementStorageInfo" = "Сховище";
@@ -671,7 +671,7 @@
 "settingsviews_nightscoutImportBatchProgress" = "Пакет %1$d з %2$d";
 "settingsviews_nightscoutImportErrorServer" = "Nightscout повернув тимчасову помилку сервера (HTTP %d). Відновіть імпорт пізніше.";
 "settingsviews_nightscoutImportErrorUnexpectedStatus" = "Nightscout повернув неочікувану відповідь (HTTP %d).";
-"sensorNoiseSensitivity" = "Sensor Sensitivity";
+"sensorNoiseSensitivity" = "Чутливість до шуму сенсора";
 "sensorNoiseSensitivitySensitive" = "Чутливо";
 "sensorNoiseSensitivityNormal" = "Нормально";
 "sensorNoiseSensitivityPermissive" = "Допустимо";
@@ -760,7 +760,7 @@
 "therapy.smallCarbThreshold" = "Мало вугл.";
 "therapy.treatmentThresholdsExplanation" = "Значення болюсів і вуглеводів нижче порогів приховані на графіку. Поріг болюса також визначає малі болюси у списку терапії. «Ні» показує всі значення.";
 
-"settingsviews_useIFCCA1C" = "HbA1c in mmols/mol";
+"settingsviews_useIFCCA1C" = "HbA1c у ммоль/моль";
 
 "settingsviews_statisticsEstimate" = "Оцінка глюкози";
 
@@ -840,3 +840,267 @@
 "experimental.accuracyClear" = "Видалити записані прогнози";
 "experimental.predictionNightscout" = "Відвантажувати в Nightscout";
 "experimental.predictionNightscoutFooter" = "Кожні п’ять хвилин прогноз відвантажується як devicestatus у форматі OpenAPS, як це робить AAPS, тож Nightscout показує його лініями прогнозу (увімкніть плагін openaps). Недоступно, поки xDrip стежить за статусом AID із Nightscout. Болюси також передають вибраний інсулін у нотатках, а вуглеводи — білки й жири.";
+
+/* Fork: Ukrainian translation completed */
+"experimental.chartCursor" = "Лінійка на графіку";
+"experimental.iobValue" = "IOB %@";
+"experimental.cobValue" = "COB %@";
+"experimental.basalOnBoardValue" = "Базальний %@";
+"experimental.activeUntil" = "до %@";
+"experimental.unitsValue" = "%@ ОД";
+"experimental.gramsValue" = "%@ г";
+"experimental.cursorForecast" = "прогноз";
+"settingsviews_selectCategory" = "Виберіть категорію на бічній панелі";
+"settingsviews_glucoseRangesSectionFooter" = "Діапазони глюкози впливають лише на кольори основного графіка. Зі значеннями сигналів вони не пов’язані.";
+"settingsviews_issueReportSectionFooter" = "Не надсилайте звіт про проблему, якщо про це не попросив розробник xDrip4iOS, інакше звіт буде автоматично видалено.";
+"settingsviews_liveActivityDisabledInFollowerMode" = "Вимкнено в режимі спостерігача";
+"warningChangeFromMasterToFollowerDexcomShare" = "Перехід з основного режиму в режим спостерігача Dexcom Share зупинить поточний сенсор і вимкне «Відвантаження в Dexcom Share». Продовжити?";
+"warningChangeToFollowerDexcomShare" = "Перехід у режим спостерігача Dexcom Share вимкне «Відвантаження в Dexcom Share».";
+"settingsviews_labelTherapyDataSourceType" = "Помпа й лікування";
+"settingsviews_followerKeepAliveTypeContinuous" = "Безперервний";
+"settingsviews_followerKeepAliveTypeHeartbeat" = "Heartbeat";
+"settingsviews_followerKeepAliveTypeContinuousMessage" = "Підтримку роботи у фоні встановлено на «Безперервний».\n\nКоли програми немає на екрані, безперервно відтворюється беззвучний звук — це найсильніша спроба зберегти оновлення спостерігача й сигнали.\n\nЦей режим не гарантує, що iOS залишить програму активною. Він найбільше впливає на заряд батареї, тож вмикайте його, лише якщо «Агресивний» працює ненадійно.";
+"settingsviews_labelFollowerIs15DaySensor" = "Це Libre Plus?";
+"settingsviews_medtrumSelectedPatient" = "Вибраний пацієнт";
+"settingsviews_medtrumSelectPatient" = "Вибрати пацієнта";
+"settingsviews_medtrumSelectPatientFromList" = "Вибрати пацієнта зі списку";
+"settingsviews_homeScreenMainChartSectionFooter" = "Ці параметри визначають, як дані глюкози показуються на основному графіку.";
+"settingsviews_homeScreenScreenLockSectionTitle" = "Блокування екрана";
+"settingsviews_homeScreenScreenLockSectionFooter" = "Ці параметри визначають поведінку головного екрана, коли програма залишається відкритою або заблокованою.";
+"settingsviews_sensorHealthNotifications" = "Попередження про стан сенсора";
+"settingsviews_sensorHealthNotificationsFooter" = "Керує необов’язковими системними сповіщеннями про тривалий шум сенсора, рівний сигнал і тимчасові проблеми сенсора. Збій сенсора/трансмітера налаштовується разом з іншими сигналами. Банер на головному екрані, який можна закрити, залишається.";
+"settingsviews_urgentHighValueMessage" = "Введіть значення глюкози для критично високого порогу.";
+"settingsviews_highValueMessage" = "Введіть значення глюкози для високого порогу.";
+"settingsviews_targetValueMessage" = "Встановіть 0, щоб вимкнути ціль";
+"settingsviews_lowValueMessage" = "Введіть значення глюкози для низького порогу.";
+"settingsviews_urgentLowValueMessage" = "Введіть значення глюкози для критично низького порогу.";
+"settingsviews_smallBolusTreatmentThreshold" = "Поріг мікроболюсу:";
+"settingsviews_bluetoothDeviceName" = "Назва пристрою";
+"settingsviews_heartbeatLibreMessage" = "ВАЖЛИВО: спершу ОБОВ’ЯЗКОВО примусово закрийте основну програму (LibreLink, Medtrum тощо), а потім додавайте heartbeat.\n\nВведіть назву пристрою, як її показано в Налаштуваннях iPhone -> список пристроїв Bluetooth.\n\nПісля підключення основну програму можна знову відкрити, якщо потрібно.";
+"settingsviews_heartbeatG7Message" = "Введіть Bluetooth-назву Dexcom G7/ONE+/Stelo, як її показано в Налаштуваннях iPhone -> список пристроїв Bluetooth.";
+"settingsviews_resettransmitter" = "Трансмітер Anubis";
+"settingsviews_labelAlgorithmType" = "Тип алгоритму";
+"settingsviews_labelCalibrationTitle" = "Калібрування сенсора";
+"settingsviews_labelCalibrationType" = "Тип калібрування";
+"settingsviews_uploadReadingstoDexcomShareDisabledMessage" = "Відвантаження в Dexcom Share вимкнено, коли використовується режим спостерігача Dexcom Share";
+"settingsviews_nightscoutFollowType" = "Тип AID";
+"nightscoutFollowTypeNone" = "Немає";
+"nightscoutFollowTypeNoneExpanded" = "Немає (лише лікування)";
+"nightscoutFollowTypeLoop" = "Loop";
+"nightscoutFollowTypeLoopExpanded" = "Loop";
+"nightscoutFollowTypeOpenAPS" = "На основі OpenAPS";
+"nightscoutFollowTypeOpenAPSExpanded" = "OpenAPS/Trio/iAPS/AAPS";
+"enterNightscoutPortNumber" = "Введіть номер порту";
+"nightscoutToken" = "Токен";
+"giveNightscoutToken" = "Введіть токен";
+"openNightscout" = "Відкрити Nightscout";
+"settingsviews_showGitHub" = "GitHub";
+"m5stack_settingsviews_rotation" = "Поворот";
+"allowStandByHighContrast" = "Нічний режим StandBy";
+"forceStandByBigNumbers" = "Великі цифри в StandBy";
+"calendarEventsSectionTitle" = "Спільний календар";
+"createCalendarEvent" = "Спільний календар";
+"calenderId" = "Календар";
+"calendarShareAlias" = "Псевдонім";
+"calendarShareAliasMessage" = "Ця назва надсилається на пристрої спостерігачів.";
+"calendarShareConnectionFooter" = "Виберіть спільний календар, до якого мають доступ і пристрої спостерігачів. Для найкращої роботи рекомендовано спільний календар iCloud.";
+"calendarShareStatus" = "Стан спільного доступу";
+"calendarShareStatusFooter" = "«Додавати історію» включає в кожне повідомлення недавні 5-хвилинні показники, щоб спостерігачі могли заповнити пропущені значення. Для надійності вибирайте найменший обсяг історії, з яким усе добре працює.";
+"calendarEventPreview" = "Подія календаря";
+"calendarEventSettingsFooter" = "Ці параметри змінюють лише видиму назву події календаря.";
+"calendarShareIncludeHistory" = "Додавати історію";
+"calendarShareLastValue" = "Останнє значення";
+"calendarFollowHistoricalReadings" = "Попередні показники";
+"calendarFollowHistoricalCount" = "Кількість";
+"calendarFollowFirstHistoricalReading" = "Перший показник";
+"calendarFollowNoHistoricalData" = "Попередніх даних не знайдено";
+"calendarFollowCalendarFooter" = "Виберіть календар, яким поділився основний iPhone. Для найкращих результатів використовуйте спільний календар iCloud.";
+"calendarFollowStatusFooter" = "Спільний календар під час фонових оновлень зчитує закодовані нотатки останньої події з вибраного календаря.";
+"calendarFollowHistoricalReadingsFooter" = "Попередні показники з останнього повідомлення імпортуються, лише якщо їх немає на пристрої.";
+"infoCalendarAccessDeniedByUser" = "Потрібен повний доступ до календарів.\n\nВідкрийте Налаштування iPhone > Програми > %@ > Календарі й увімкніть повний доступ.";
+"infoCalendarAccessWriteOnly" = "Спільним календарем не можна користуватися, доки дозвіл на доступ до календаря не змінено з «Лише додавання подій» на «Повний доступ».\n\nВідкрийте Налаштування iPhone > Програми > %@ > Календарі й виберіть «Повний доступ».";
+"infoCalendarAccessRestricted" = "Ви не можете надати %@ доступ до календаря. Ймовірно, діють обмеження, наприклад батьківський контроль.";
+"settingsviews_displayVisualIndicatorInCalendarEvent" = "Візуальний індикатор";
+"settingsviews_CalenderIntervalTitle" = "Інтервал подій";
+"settingsviews_CalenderIntervalMessage" = "Мінімальний інтервал між двома подіями календаря";
+"infoContactsAccessDeniedByUser" = "Потрібен повний доступ до контактів.\n\nВідкрийте Налаштування iPhone > Програми > %@ > Контакти й увімкніть повний доступ.";
+"settingsviews_infoContactsAccessRestricted" = "Ви не можете надати %@ доступ до контактів. Ймовірно, діють обмеження, наприклад батьківський контроль.";
+"settingsviews_infoContactsAccessLimited" = "Надано лише обмежений доступ до контактів.\n\nВідкрийте Налаштування iPhone > Програми > %@ > Контакти й увімкніть повний доступ.";
+"settingsviews_contactImageSectionTitle" = "Зображення контакту";
+"settingsviews_useHighContrastContactImage" = "Високий контраст";
+"settingsviews_contactImageCreatedByString" = "Контакт автоматично створено програмою";
+"loopShare" = "Ділитися з OS-AID";
+"loopShareToLoop" = "Loop/iAPS";
+"loopShareToTrio" = "Trio";
+"settingsviews_loopShareMedtrumNano" = "Ділитися CGM помпи Medtrum Nano";
+"settingsviews_loopShareMedtrumNanoTitle" = "Ділитися CGM помпи Medtrum Nano не рекомендовано";
+"settingsviews_loopShareMedtrumNanoBlockedMessage" = "Через сумніви в точності категорично не рекомендовано передавати дані CGM помпи Medtrum Nano в програми OS-AID.\n\nДані CGM помпи Medtrum Nano не передаються, доки ви спеціально не ввімкнете параметр вище.";
+"settingsviews_loopShareMedtrumNanoEnabledMessage" = "Через сумніви в точності категорично не рекомендовано передавати дані CGM помпи Medtrum Nano в програми OS-AID.\n\nДані CGM помпи Medtrum Nano передаються, бо ви спеціально ввімкнули параметр вище й прийняли ризик.";
+"settingsviews_loopShareMedtrumNanoWarning" = "Через сумніви в точності категорично не рекомендовано передавати дані CGM помпи Medtrum Nano в програми OS-AID. Програми OS-AID можуть використовувати ці дані для рішень щодо дозування інсуліну, і неточні дані CGM можуть порушити їхню нормальну роботу.\n\nРекомендоване значення — «Вимк.». Вмикайте, лише якщо розумієте ризик і справді хочете передавати дані CGM помпи Medtrum Nano.";
+"settingsviews_loopShareMedtrumNanoConfirm" = "Я розумію — передавати CGM помпи Medtrum Nano";
+"settingsviews_loopShareSmoothedData" = "Передавати згладжені дані";
+"settingsviews_loopShareSmoothedDataDifferenceTitle" = "Передані значення можуть відрізнятися";
+"settingsviews_loopShareSmoothedDataDifferenceMessage" = "Згладжування глюкози ввімкнено, але OS-AID Share надсилає незгладжені дані, як того хочуть програми OS-AID.\n\nЗначення глюкози в %@ можуть відрізнятися від тих, що отримує програма OS-AID.\n\nЯкщо ділитеся даними з програмами OS-AID, подумайте про вимкнення згладжування на екрані коригувань.";
+"settingsviews_loopShareSmoothedDataEnabledTitle" = "Передаються згладжені дані";
+"settingsviews_loopShareSmoothedDataEnabledMessage" = "Передавати згладжені дані не рекомендовано: це може порушити нормальну роботу OS-AID.\n\nЗгладжені дані передаються, бо ви спеціально ввімкнули параметр вище й прийняли ризик.";
+"settingsviews_loopShareSmoothedDataWarning" = "Програми OS-AID, як-от Trio, очікують незгладжених даних глюкози зі спільної групи програм. Згладжені дані можуть змінити те, як програма AID тлумачить дані CGM, і порушити її нормальну роботу.\n\nРекомендоване значення — «Вимк.». Вмикайте, лише якщо розумієте ризик і справді хочете, щоб %@ передавала згладжені дані.";
+"settingsviews_loopShareSmoothedDataConfirm" = "Я розумію — передавати згладжені дані";
+"loopDelaysScreenTitle" = "Затримки OS-AID Share";
+"sensorNoiseSensitivityFooter" = "Визначає, наскільки суворо класифікується шум сенсора. «Чутлива» попереджає раніше, «Звичайна» — стандартні межі, «Поблажлива» — для сенсорів, які від природи стрибають сильніше. Збережені значення шуму не змінюються.";
+"libreLinkUpVersion" = "Версія LibreLinkUp";
+"libreLinkUpVersionMessage" = "Неправильне значення може призвести до блокування облікового запису LibreLinkUp.\n\nНе змінюйте цей параметр, якщо про це не попросив розробник xDrip4iOS.\n\nТипова версія: %@";
+"careLinkVersion" = "Версія CareLink";
+"careLinkVersionMessage" = "Неправильне значення може завадити CareLink завантажувати дані.\n\nНе змінюйте цей параметр, якщо про це не попросив розробник xDrip4iOS.\n\nТипова версія: %@";
+"followerVersionFormatMessage" = "Введіть версію у форматі 0.0.0.";
+"CAGEMaxHours" = "Максимум годин канюлі (CAGE)";
+"CAGEMaxHoursMessage" = "Через скільки годин канюлю вважати простроченою\n\nВведіть 0, щоб повернути типове значення %@ год";
+"settingsviews_storeFrequentReadingsInNightscout" = "Часте відвантаження в Nightscout";
+"settingsviews_storeFrequentReadingsInNightscoutMessage" = "Цей параметр скасовує 5-хвилинне обмеження й дозволяє відвантажувати в Nightscout значно частіші дані глюкози, наприклад щохвилинні значення Libre 2 Direct.\n\nВмикайте його, лише якщо вам справді потрібні частіші дані. Більшості користувачів варто залишити його вимкненим.";
+"settingsviews_storeFrequentReadingsInHealthKit" = "Частий запис у HealthKit";
+"settingsviews_storeFrequentReadingsInHealthKitMessage" = "Цей параметр скасовує 5-хвилинне обмеження й дозволяє записувати в Apple Health значно частіші дані, наприклад щохвилинні значення Libre 2 Direct.\n\nВмикайте його, лише якщо вам справді потрібні частіші дані. Більшості користувачів варто залишити його вимкненим.";
+"settingsviews_cleanDataDeviceStatus" = "Стан пристрою";
+"settingsviews_cleanDataDeviceStatusDeleted" = "Стан пристрою видалено";
+"settingsviews_nightscoutImportDeviceStatus" = "Стан пристрою";
+"settingsviews_nightscoutImportDeviceStatusAdded" = "Стан пристрою додано";
+"settingsviews_backupProfiles" = "Профілі";
+"settingsviews_backupDeviceStatusAdded" = "Стан пристрою додано";
+"settingsviews_backupDeviceStatusSkipped" = "Стан пристрою пропущено";
+"settingsviews_backupProfilesAdded" = "Профілі додано";
+"settingsviews_backupProfilesSkipped" = "Профілі пропущено";
+"settingsviews_followerSectionAccount" = "Обліковий запис";
+"settingsviews_followerSectionConnection" = "Підключення";
+"settingsviews_followerSectionProfile" = "Профіль";
+"settingsviews_followerSectionSensor" = "Сенсор";
+"settingsviews_followerSectionActivity" = "Активність";
+"settingsviews_followerSectionService" = "Сервіс";
+"settingsviews_followerSectionServer" = "Сервер";
+"settingsviews_followerSectionCalendar" = "Календар";
+"settingsviews_followerSectionLatestData" = "Останні дані";
+"settingsviews_followerLogIn" = "Увійти";
+"settingsviews_followerLogOut" = "Вийти";
+"settingsviews_followerRefresh" = "Оновити";
+"settingsviews_followerNotConfigured" = "Не налаштовано";
+"settingsviews_followerLogInRequired" = "Потрібно увійти";
+"settingsviews_followerAcceptTerms" = "Прийняти умови";
+"settingsviews_followerSelectPatient" = "Вибрати пацієнта";
+"settingsviews_followerConnected" = "Підключено";
+"settingsviews_followerStale" = "Застаріло";
+"settingsviews_followerConnectionFailed" = "Не вдалося підключитися";
+"settingsviews_followerServiceStatusTitle" = "Стан сервісу";
+"settingsviews_followerOperational" = "Працює";
+"settingsviews_followerDegraded" = "Працює з перебоями";
+"settingsviews_followerOutage" = "Не працює";
+"settingsviews_followerOptional" = "Необов’язково";
+"settingsviews_followerNever" = "Ніколи";
+"settingsviews_followerLastChecked" = "Остання перевірка";
+"settingsviews_followerFetchError" = "Помилка отримання";
+"settingsviews_followerNightscoutConfigurationRequired" = "Увімкніть Nightscout і введіть правильну URL-адресу сервера.";
+"settingsviews_followerCalendarSelectionRequired" = "Виберіть спільний календар для спостереження.";
+"settingsviews_followerCalendarConnected" = "Дані календаря надходять.";
+"settingsviews_followerCalendarWaiting" = "Очікування оновлення спільного календаря.";
+"settingsviews_followerCalendarNoData" = "Даних спільного календаря поки не знайдено.";
+"settingsviews_followerCalendarStale" = "Останні дані спільного календаря застаріли.";
+"settingsviews_followerCalendarReadError" = "Не вдалося прочитати вибраний календар.";
+"settingsviews_followerWaitingForFirstConnection" = "Очікування першого успішного підключення.";
+"settingsviews_followerLastAttemptFailed" = "Остання спроба підключення не вдалася.";
+"settingsviews_therapyDataSourceAutomatic" = "Автоматично";
+"settingsviews_therapyDataSourceNone" = "Немає";
+"settingsviews_followerRussia" = "Росія";
+"settingsviews_dexcomServer" = "Сервер Dexcom %@";
+"settingsviews_careLinkCredentialsFooter" = "Ім’я користувача й пароль необов’язкові: вони лише заповнюють сторінку входу Medtronic. Регіон визначає сервіс CareLink, якому належить цей обліковий запис. Для кожної програми чи пристрою використовуйте окремий обліковий запис спостерігача, щоб вхід CarePartner деінде не скасував цей сеанс.";
+"settingsviews_careLinkCredentialsRequiredFooter" = "Щоб підключити CareLink, увійдіть на сторінці Medtronic.";
+"settingsviews_careLinkDevice" = "Пристрій";
+"settingsviews_careLinkAccount" = "Обліковий запис";
+"settingsviews_careLinkRole" = "Роль";
+"settingsviews_careLinkPatient" = "Пацієнт";
+"settingsviews_careLinkAccountCountry" = "Країна облікового запису";
+"settingsviews_careLinkPump" = "Помпа";
+"settingsviews_careLinkSerialNumber" = "Серійний номер";
+"settingsviews_careLinkDataRoute" = "Шлях даних";
+"settingsviews_careLinkPumpBattery" = "Батарея помпи";
+"settingsviews_careLinkReservoir" = "Резервуар";
+"settingsviews_careLinkLastReading" = "Останній показник";
+"settingsviews_careLinkLastCheck" = "Остання перевірка";
+"settingsviews_careLinkSessionRefresh" = "Оновлення сеансу";
+"settingsviews_careLinkTherapyImport" = "Імпорт лікування";
+"settingsviews_careLinkNewTreatments" = "Нові записи лікування";
+"settingsviews_careLinkServiceReachable" = "Сервіс доступний";
+"settingsviews_careLinkUnitedStates" = "США";
+"settingsviews_careLinkOutsideUnitedStates" = "Поза США";
+"settingsviews_careLinkLogIn" = "Вхід у CareLink";
+"settingsviews_careLinkOutsideUnitedStatesLong" = "Поза Сполученими Штатами";
+"settingsviews_careLinkConnecting" = "Підключення...";
+"settingsviews_careLinkNoData" = "Немає даних";
+"settingsviews_careLinkActive" = "Активно";
+"settingsviews_careLinkRateLimited" = "Обмеження запитів";
+"settingsviews_careLinkError" = "Помилка";
+"settingsviews_careLinkSuspended" = "Призупинено";
+"settingsviews_careLinkDisconnected" = "Відключено";
+"settingsviews_careLinkPumpNotCommunicating" = "CareLink підключено, але помпа зараз не зв’язується з телефоном.";
+"settingsviews_careLinkNoGlucoseReadings" = "CareLink не повернув показників глюкози.";
+"settingsviews_careLinkLoginOpenFailed" = "Не вдалося відкрити вхід у CareLink.";
+"settingsviews_careLinkInvalidLoginResponse" = "CareLink повернув некоректну відповідь на вхід.";
+"settingsviews_careLinkLoginCancelled" = "Вхід у CareLink скасовано.";
+"settingsviews_careLinkLoginToContinue" = "Щоб продовжити, увійдіть у CareLink.";
+"settingsviews_careLinkUnsupportedAccount" = "Цей тип облікового запису CareLink не підтримується.";
+"settingsviews_careLinkPatientIdentityMissing" = "CareLink не повернув дані особистого облікового запису.";
+"settingsviews_careLinkSelectPatient" = "Виберіть пацієнта CareLink.";
+"settingsviews_careLinkSessionExpired" = "Сеанс CareLink завершився. Увійдіть знову.";
+"settingsviews_careLinkTemporarilyRateLimited" = "CareLink тимчасово обмежує кількість запитів.";
+"settingsviews_careLinkNoAccountGlucose" = "Для цього облікового запису CareLink немає даних глюкози.";
+"settingsviews_careLinkMalformedResponse" = "CareLink повернув дані, які не вдалося прочитати.";
+"settingsviews_careLinkOffline" = "CareLink недоступний.";
+"settingsviews_careLinkCredentialsRequired" = "Перед входом введіть ім’я користувача й пароль CareLink.";
+"settingsviews_careLinkRefreshing" = "Оновлення…";
+"settingsviews_careLinkNoLinkedPatients" = "До цього облікового запису CareLink не прив’язано пацієнтів.";
+"settingsviews_careLinkTherapy" = "Терапія";
+"settingsviews_careLinkDelivery" = "Введення";
+"settingsviews_careLinkReadiness" = "Готовність";
+"settingsviews_careLinkLowGlucoseSuspend" = "Зупинка при низькій глюкозі";
+"settingsviews_careLinkActiveInsulin" = "Активний інсулін";
+"settingsviews_careLinkBasalRate" = "Базальна швидкість";
+"settingsviews_careLinkSensorRemaining" = "Залишок сенсора";
+"settingsviews_careLinkLastPumpUpdate" = "Останнє оновлення помпи";
+"settingsviews_careLinkModel" = "Модель";
+"settingsviews_careLinkStatus" = "Стан";
+"settingsviews_careLinkBattery" = "Батарея";
+"settingsviews_careLinkCommunication" = "Зв’язок";
+"settingsviews_careLinkPumpConnected" = "Помпу підключено";
+"settingsviews_careLinkPumpInRange" = "Помпа в зоні дії";
+"settingsviews_careLinkLastCareLinkCheck" = "Остання перевірка CareLink";
+"settingsviews_careLinkReportedLimits" = "Повідомлені обмеження";
+"settingsviews_careLinkMaximumAutoBasal" = "Максимальний автобазал";
+"settingsviews_careLinkMaximumBolus" = "Максимальний болюс";
+"settingsviews_careLinkRegionMismatch" = "Цей вхід належить регіону %@, але вибрано %@. Увійдіть знову, щоб використовувати вибраний регіон.";
+"settingsviews_careLinkAccountRejected" = "CareLink відхилив цей вхід у регіоні %@. Увійдіть знову або спробуйте %@.";
+"settingsviews_careLinkHTTPError" = "CareLink повернув HTTP %d.";
+"settingsviews_medtrumPatientList" = "Список пацієнтів";
+"settingsviews_medtrumUsingCachedList" = "Використовується збережений список";
+"settingsviews_medtrumAccountType" = "Тип облікового запису";
+"settingsviews_medtrumCaregiver" = "Опікун";
+"settingsviews_medtrumPatient" = "Пацієнт";
+"settingsviews_medtrumPatientID" = "ID пацієнта: %d";
+"settingsviews_followerLastConnected" = "Останнє підключення %@.";
+"settingsviews_shareUploadAccountVerified" = "Обліковий запис перевірено";
+"settingsviews_shareUploadUnchecked" = "Не перевірено";
+"settingsviews_shareUploadPaused" = "Призупинено за розкладом";
+"settingsviews_shareUploadLocalOnly" = "Відвантаження в Dexcom Share доступне лише з локальним джерелом глюкози.";
+"settingsviews_shareUploadCheckFooter" = "«Перевірити підключення» перевіряє обліковий запис. Серійний номер приймача перевіряється під час відвантаження показників.";
+"settingsviews_shareUploadLastConnection" = "Останнє успішне підключення";
+"settingsviews_shareUploadLastUpload" = "Останнє успішне відвантаження";
+"settingsviews_shareUploadFailed" = "Відвантаження не вдалося";
+"settingsviews_shareUploadTooLarge" = "Dexcom Share відхилив завеликий пакет даних.";
+"settingsviews_shareUploadError" = "Помилка відвантаження";
+"settingsviews_shareUploadNever" = "Ще ні";
+"settingsviews_shareUploadReceiverNotAssigned" = "Цей приймач не прив’язано до вашого облікового запису Dexcom. Зареєструйте його в офіційному застосунку Dexcom.";
+"settingsviews_shareUploadConfigurationRequired" = "Введіть ім’я користувача, пароль і серійний номер приймача.";
+"experimental.predictionAdaptive" = "Адаптивний прогноз";
+"experimental.predictionAdaptiveModel" = "Навчена модель";
+"experimental.predictionAdaptiveRelearn" = "Перенавчити зараз";
+"experimental.predictionAdaptiveLearning" = "Навчається, потрібно 2 дні показників";
+"experimental.predictionAdaptiveReady" = "Навчено на показниках за %@ дн.";
+"experimental.predictionAdaptiveNotBetter" = "Поки не краща за «без змін», показано стандартний";
+"experimental.predictionAdaptiveFooter" = "Показує прогноз, навчений на ваших власних показниках, замість стандартного — пунктиром з крапок, до двох годин. Модель навчається на останніх чотирьох тижнях, перенавчається раз на добу й потребує двох днів показників; записані інсулін і вуглеводи вона не враховує. Поки модель не готова, після розриву даних чи в першу годину нового сенсора, а також поки вона не краща за «без змін», показується стандартний прогноз без тренду. Сигнал прогнозованої низької глюкози й Nightscout і далі використовують стандартний прогноз.";
+"experimental.accuracyStandard" = "Стандартний прогноз";
+"experimental.accuracyAdaptive" = "Адаптивний прогноз";
+"experimental.accuracyAdaptiveFooter" = "Записується з тих самих показників щоразу, коли адаптивна модель може відповісти, навіть якщо її прогноз не показано.";

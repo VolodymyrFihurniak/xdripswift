@@ -57,7 +57,7 @@ extension UserDefaults {
             guard let rawValue = string(forKey: Key.reportLanguage.rawValue),
                   let language = GlucoseReportLanguage(rawValue: rawValue)
             else {
-                return .english
+                return .defaultLanguage
             }
 
             return language

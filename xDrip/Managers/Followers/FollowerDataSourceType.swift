@@ -126,7 +126,7 @@ public enum FollowerDataSourceType: Int, CaseIterable {
         case .medtrumEasyView:
             return "Medtrum EasyView"
         case .calendar:
-            return "Shared Calendar"
+            return Texts_Common.sharedCalendar
         case .careLink:
             return "CareLink"
         }
@@ -144,7 +144,7 @@ public enum FollowerDataSourceType: Int, CaseIterable {
         case .medtrumEasyView:
             return "Medtrum"
         case .calendar:
-            return "Calendar"
+            return Texts_Common.calendar
         case .careLink:
             return "CareLink"
         }

@@ -229,7 +229,7 @@ final class BasalInjectionTests: XCTestCase {
         }
     }
 
-    @MainActor func testChartKeepsInjectionBelowBolusAndOutsideNoteSeries() async throws {
+    @MainActor func testChartKeepsInjectionOnTheBolusRowAndOutsideNoteSeries() async throws {
         let coreDataManager = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
         let treatmentDate = Date().addingTimeInterval(-60)
         _ = TreatmentEntry(date: treatmentDate, value: 3, treatmentType: .Insulin, nightscoutEventType: nil, enteredBy: "Test", nsManagedObjectContext: coreDataManager.mainManagedObjectContext)
@@ -246,7 +246,8 @@ final class BasalInjectionTests: XCTestCase {
         let bolus = try XCTUnwrap(state.treatmentPoints.boluses.first)
         XCTAssertEqual(state.treatmentPoints.basalInjections.count, 1)
         XCTAssertTrue(state.treatmentPoints.notes.isEmpty)
-        XCTAssertLessThan(injection.yValue, bolus.yValue)
+        // Basal injections sit beside the bolus, on its row; the chart shifts the marker sideways.
+        XCTAssertEqual(injection.yValue, bolus.yValue)
         XCTAssertEqual(injection.label, "20")
         XCTAssertEqual(bolus.label, "3")
         XCTAssertEqual(injection.notes, "Tresiba")

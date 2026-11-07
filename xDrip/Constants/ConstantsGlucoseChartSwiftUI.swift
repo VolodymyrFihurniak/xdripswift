@@ -41,11 +41,17 @@ enum ConstantsGlucoseChartSwiftUI {
     static let experimentalPredictionMinimumFutureSpan: TimeInterval = 30 * 60
     static let experimentalPredictionColor = Color(red: 0.55, green: 0.65, blue: 0.95).opacity(0.9)
     static let experimentalGlucoseLineWidth: CGFloat = 2.5
+    /// Widgets, Live Activity and the watch draw smaller charts.
+    static let experimentalCompactGlucoseLineWidth: CGFloat = 2
     /// Smallest top of the insulin activity scale, so a small dose is not drawn full height.
     static let experimentalInsulinMinimumScaleUnitsPerHour: Double = 2
     static let experimentalInsulinScaleHeadroom: Double = 1.1
     static let experimentalInsulinFillOpacity: Double = 0.28
     static let experimentalInsulinLineOpacity: Double = 0.8
+    /// JugglucoNG's chart cursor: a thin vertical line and a ring on the reading it points at.
+    static let cursorLineColor = Color.white.opacity(0.55)
+    static let cursorLineWidth: CGFloat = 1.5
+    static let cursorRingDiameter: CGFloat = 13
 
     static func xAxisDates(from startDate: Date, to endDate: Date, everyHours: Int) -> [Date] {
         // Keep labels anchored to real clock hours so a small scroll cannot switch between odd and

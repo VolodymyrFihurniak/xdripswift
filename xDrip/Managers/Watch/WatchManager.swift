@@ -425,6 +425,7 @@ final class WatchManager: NSObject, ObservableObject, @unchecked Sendable {
         }
 
         status.experimentalForecast = ExperimentalChartInputs.companionForecast()
+        status.experimentalGlucoseLine = UserDefaults.standard.experimentalGlucoseChartStyle == .line
 
         // let's set the state values if we're using a heartbeat
         if let timeStampOfLastHeartBeat = UserDefaults.standard.timeStampOfLastHeartBeat?.timeIntervalSince1970, let secondsUntilHeartBeatDisconnectWarning = UserDefaults.standard.secondsUntilHeartBeatDisconnectWarning {

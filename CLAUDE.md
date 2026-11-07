@@ -94,13 +94,32 @@ prediction periods/body weight/protein-fat/intensity (notes tokens `P:20 F:15`, 
 accuracy recorder (Application Support JSON, 14 days), Nightscout devicestatus forecast
 (`openaps.suggested.predBGs.IOB`, only when no AID status is followed), and
 `ExperimentalCompanionForecast` for widgets, Live Activity and watch (optional fields).
+The line style reaches widgets/Live Activity/watch through optional `experimentalGlucoseLine`
+fields and the landscape AGP chart through `AGPChartView(drawsGlucoseAsLine:)`. Chart cursor
+(`GlucoseChartCursor`, `GlucoseChartCursorGeometry` reported from the chart overlay, gesture in
+`RootHomeMainChartView`) and insulin on board (`InsulinActivityStack.remaining/onBoard`,
+`GlucoseChartExperimentalPlots.onBoardNow`) follow JugglucoNG `DashboardChart`/`JournalIobMath`.
+Adaptive prediction (`xDrip/Managers/Therapy/AdaptiveGlucoseForecast.swift`): JugglucoNG
+`AdaptiveGlucoseForecast` + `AdaptivePredictionStore`; model JSON in UserDefaults
+(`experimentalAdaptiveForecastModel`), daily refit on a private-queue context over 29 days of
+`BgReading` dictionaries; alerts and Nightscout stay on the standard forecast.
+
+## Localisation
+
+Ukrainian and English are complete; other languages are left as upstream has them. Every new
+user-facing string needs an English default in code **and** a `uk.lproj` entry (same format
+specifiers). SwiftUI `Text("literal")` looks the literal up in `Localizable.strings`, so add the
+literal as a key there (en + uk); a `String` parameter is shown verbatim, so wrap literals with
+`String(localized:)` or a `Texts_*` constant. Widgets only bundle `Common`/`HomeView`, the watch
+`Common`/`HomeView`/`WatchApp`. PDF reports translate in code (`GlucoseReportText.ukrainian`);
+speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strings`.
 
 ## Not ported (yet)
 
 JugglucoNG alternative glucose models (Balanced, Responsive, Adaptive V2), GS3 variant,
 Sibionics reset reminder and raw source-journal backup/recovery, NovoPen 6 / Echo Plus NFC import
 (JugglucoNG `NovoPen/opennov`, IEEE 11073 PHD over NFC Type 4 — needs CoreNFC ISO 7816
-entitlement and AIDs), adaptive forecast.
+entitlement and AIDs).
 
 ## Git
 

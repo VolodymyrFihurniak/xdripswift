@@ -118,6 +118,16 @@ final class GlucoseChartScrollCoordinator: ObservableObject {
         startDeceleration(velocityWidth: velocityWidth, chartWidth: chartWidth)
     }
 
+    /// Ends a touch that became the chart cursor before it panned: puts back the window the touch
+    /// started from and drops the drag, so no inertia follows.
+    func cancelDrag() {
+        if let dragStartEndDate {
+            publishEndDate(dragStartEndDate, force: true)
+        }
+        dragStartEndDate = nil
+        resetDragTracking()
+    }
+
     /// Moves the visible window directly within a fixed overview chart.
     ///
     /// Unlike the main-chart gesture, the overview itself does not scroll: the drag moves its

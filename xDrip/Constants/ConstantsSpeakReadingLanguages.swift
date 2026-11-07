@@ -16,6 +16,8 @@ enum ConstantsSpeakReadingLanguages: String, CaseIterable {
     case spanish_mexico = "Spanish (Mexico)/es-MX"
     case spanish_spain = "Spanish (Spain)/es-ES"
     case turkish = "Turkish/tr-TR"
+    /// Speaks the texts of uk.lproj/SpeakReading.strings with the system Ukrainian voice.
+    case ukrainian = "Ukrainian/uk"
     
     /// gets all language names and language codes in two arrays
     /// - returns:

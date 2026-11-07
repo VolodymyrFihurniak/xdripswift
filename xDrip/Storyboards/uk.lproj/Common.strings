@@ -4,113 +4,113 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// literal translation needed
-"common_minute" = "min";
+"common_minute" = "хв";
 
 /// literally password
-"common_password" = "Password";
+"common_password" = "Пароль";
 
 /// the words in range
-"common_statistics_inRange" = "In Range";
+"common_statistics_inRange" = "У діапазоні";
 
 /// the word HIGH, in capitals
-"common_high" = "HIGH";
+"common_high" = "ВИСОКИЙ";
 
 /// literally 'Cancel'
-"common_cancel" = "Cancel";
+"common_cancel" = "Скасувати";
 "common_close" = "Закрити";
 
 /// literally warning
-"warning" = "Warning!";
+"warning" = "Увага!";
 
 /// 
 "delete" = "Delete";
 
 /// literal translation needed
-"common_hour" = "hour";
+"common_hour" = "година";
 
 /// literal translation needed
-"common_minutes" = "mins";
+"common_minutes" = "хв";
 
 /// the word low
-"common_statistics_low" = "Low";
+"common_statistics_low" = "Низько";
 
 /// can be used in several screens, just the words Bloodglucose unit
-"common_bloodglucoseunit" = "Blood Glucose Unit";
+"common_bloodglucoseunit" = "Одиниця глюкози крові";
 
 /// literally 'OK'
 "common_Ok" = "OK";
 
 /// the word today
-"common_today" = "Today";
+"common_today" = "Сьогодні";
 
 /// literal translation needed
-"common_dayshort" = "d";
+"common_dayshort" = "д";
 
 /// mmol/l
-"common_mmol" = "mmol/L";
+"common_mmol" = "ммоль/л";
 
 /// literally add
-"add" = "Add";
+"add" = "Додати";
 
 /// literally yes, without capital
 "yes" = "Так";
 
 /// mg/dl
-"common_mgdl" = "mg/dL";
+"common_mgdl" = "мг/дл";
 
 /// white
-"white" = "white";
+"white" = "білий";
 
 
 /// on
-"on" = "On";
+"on" = "Увімк.";
 
 /// don't show again
-"common_dontshowagain" = "Don't Show Again";
+"common_dontshowagain" = "Більше не показувати";
 
 /// green
-"green" = "green";
+"green" = "зелений";
 
 /// the word LOW, in capitals
-"common_low" = "LOW";
+"common_low" = "НИЗЬКИЙ";
 
 /// yellow
-"yellow" = "yellow";
+"yellow" = "жовтий";
 
 /// literal translation needed
-"common_week" = "week";
+"common_week" = "тиждень";
 
 /// 
 "off" = "Off";
 
 /// literal translation needed
-"common_day" = "day";
+"common_day" = "день";
 
 /// for settings row, literally firmware
-"firmware" = "Firmware";
+"firmware" = "Прошивка";
 
 /// Where credentials need to be given, if either account or password is invalid (for the moment only applicable to Dexcom Share
-"invalidAccountOrPassword" = "Invalid account or password";
+"invalidAccountOrPassword" = "Неправильний обліковий запис або пароль";
 
 /// for settings row, literally hardware
-"hardware" = "Hardware";
+"hardware" = "Апаратна версія";
 
 /// the word average
-"common_statistics_average" = "Average";
+"common_statistics_average" = "Середнє";
 
 /// phrase HbA1c
 
 /// to show the sensor status
-"sensorStatus" = "Sensor Status";
+"sensorStatus" = "Стан сенсора";
 
 /// blood glucose unit in short, for text field title
-"common_bloodglucoseunit_short" = "BG Unit";
+"common_bloodglucoseunit_short" = "Одиниця ГК";
 
 /// literal translation needed
-"common_hours" = "hours";
+"common_hours" = "години";
 
 /// the word high
-"common_statistics_high" = "High";
+"common_statistics_high" = "Високо";
 
 /// coefficient of variation
 "common_statistics_gmiTrend" = "Тенденція GMI";
@@ -118,50 +118,50 @@
 "common_statistics_weekly" = "Щотижня";
 "common_statistics_daily" = "Щодня";
 "common_statistics_gmi" = "GMI";
-"common_statistics_cv" = "CV";
+"common_statistics_cv" = "КВ";
 
 /// literally update
-"update" = "Edit";
+"update" = "Редагувати";
 
 /// literal translation needed
-"common_days" = "days";
+"common_days" = "дні";
 "common_landscape_showAGPChartData" = "Показати дані графіка AGP:";
 "common_landscape_comparisonDays" = "%d днів";
 "common_landscape_comparisonNone" = "Немає";
 
 /// the word today
-"common_todayshort" = "Today";
+"common_todayshort" = "Сьогодні";
 
 /// literally no, without capital
-"no" = "No";
+"no" = "Ні";
 
 /// red
-"red" = "red";
+"red" = "червоний";
 
 /// general usage
-"unknown" = "Unknown";
+"unknown" = "Невідомо";
 
 /// literal translation needed
-"common_hourshort" = "h";
+"common_hourshort" = "год";
 
 /// literally default, will be the name of default alerttypes that will be created during initial app launch
-"common_default" = "Default";
+"common_default" = "Типово";
 
 /// name
-"name" = "Name";
+"name" = "Назва";
 
 /// whenever invalid value is given by user somewhere in a field
-"invalidValue" = "Invalid Value";
+"invalidValue" = "Некоректне значення";
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 /////   Translation needed - remove this header after translation                       /////
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// the words in tight range
-"common_statistics_inTightRange" = "Tight Range";
+"common_statistics_inTightRange" = "Вузький діапазон";
 
 /// the words in user range
-"common_statistics_userRange" = "User Range";
+"common_statistics_userRange" = "Ваш діапазон";
 
 // Local therapy accessibility
 "therapy.estimatedIOB" = "Оцінений активний інсулін";
@@ -196,3 +196,84 @@
 
 /* Status label, including Direct to Watch in Advanced Settings. */
 "common_enabled" = "Увімкнено";
+
+/* Fork: Ukrainian translation completed */
+"common_dismiss" = "Закрити";
+"common_username" = "Ім’я користувача";
+"common_minuteshort" = "хв";
+"black" = "чорний";
+"common_value" = "Значення";
+"common_enterValue" = "Введіть значення";
+"Off" = "вимк.";
+"Delete" = "Видалити";
+"common_statistics_title" = "Статистика";
+"common_statistics_period" = "Період";
+"common_statistics_summary" = "Підсумок";
+"common_statistics_trends" = "Тенденції";
+"common_statistics_report" = "Звіт";
+"common_statistics_section" = "Розділ";
+"common_statistics_timeInRange" = "Час у діапазоні";
+"common_statistics_timeInTightRange" = "Час у вузькому діапазоні";
+"common_statistics_averageGlucose" = "Середня глюкоза";
+"common_statistics_cgmEstimate" = "Оцінка за CGM";
+"common_statistics_dataCapture" = "Повнота даних";
+"common_statistics_targetLessThanOrEqual" = "Ціль <=%@";
+"common_statistics_targetGreaterThanOrEqual" = "Ціль >=%@";
+"common_statistics_ambulatoryGlucoseProfile" = "Амбулаторний профіль глюкози";
+"common_statistics_insufficientAGPData" = "Недостатньо даних для графіка перцентилів AGP";
+"common_statistics_waitingForGlucoseData" = "Очікування даних глюкози...";
+"common_statistics_insufficientData" = "Недостатньо даних";
+"common_statistics_estimatedA1cTrend" = "Тенденція оцінки HbA1c";
+"common_statistics_cvTrend" = "Тенденція КВ";
+"common_statistics_dailyPattern" = "Добовий профіль";
+"common_statistics_averageFormat" = "Середнє %@";
+"common_statistics_dailyPatternFooter" = "Стовпці показують щоденний відсоток часу в діапазоні %@. Пунктирна лінія позначає клінічну ціль 70%%.";
+"common_statistics_averageTDD" = "Середня добова доза";
+"common_statistics_averageCarbs" = "Середні вуглеводи";
+"common_report_periodFooter" = "Для клінічного звіту CGM рекомендовано 90 днів.";
+"common_statistics_tempBasalDelta" = "Зміна тимчасового базалу";
+"common_statistics_dailySummary" = "Підсумок за день";
+"common_statistics_bestDay" = "Найкращий день";
+"common_statistics_mostLow" = "Найбільше низьких";
+"common_statistics_mostHigh" = "Найбільше високих";
+"common_statistics_noDataTitle" = "Статистика недоступна";
+"common_statistics_noDataMessage" = "За цей період збережено недостатньо даних CGM.";
+"common_report_generateTitle" = "Створити звіт";
+"common_report_generatingStatus" = "Створення клінічного звіту...";
+"common_report_generationFailedTitle" = "Не вдалося створити звіт";
+"common_report_patientName" = "Ім’я пацієнта";
+"common_report_patientNamePlaceholder" = "Ім’я пацієнта";
+"common_report_patientID" = "ID пацієнта";
+"common_report_patientIDPlaceholder" = "Номер медичної картки / ID пацієнта";
+"common_report_notSet" = "Не задано";
+"common_report_patientSection" = "Пацієнт";
+"common_report_patientFooter" = "Дані пацієнта зберігаються лише на цьому пристрої й друкуються в заголовку звіту.";
+"common_report_period" = "Період звіту";
+"common_report_paperSize" = "Розмір паперу";
+"common_report_language" = "Мова";
+"common_report_passwordToOpen" = "Пароль для відкриття";
+"common_report_none" = "Немає";
+"common_report_options" = "Параметри звіту";
+"common_report_willBePasswordProtected" = "Звіт буде захищено паролем";
+"common_report_willNotBePasswordProtected" = "Звіт не буде захищено паролем";
+"common_report_passwordFieldPlaceholder" = "Пароль для відкриття PDF";
+"common_report_passwordConfirmationPlaceholder" = "Введіть пароль ще раз";
+"common_report_passwordFooter" = "Цей пароль використовується лише для наступного створеного PDF і не зберігається.";
+"common_report_notEnoughData" = "Недостатньо даних";
+"common_report_unableToPrepareTitle" = "Не вдалося підготувати звіт";
+"common_report_shareAccessibility" = "Поділитися звітом";
+"common_report_periodTitleFormat" = "Звіт за %d дн.";
+"common_report_patientPeriodTitleFormat" = "%@: %@";
+"common_report_passwordProtectionOpenError" = "Не вдалося відкрити PDF звіту, щоб захистити його паролем.";
+"common_report_passwordProtectionWriteError" = "Не вдалося створити PDF звіту, захищений паролем.";
+"common_disabled" = "Вимкнено";
+"common_notRequired" = "Не потрібно";
+"common_next" = "Далі";
+"common_checking" = "Перевірка...";
+"common_notAvailable" = "Недоступно";
+"quickactions_speak_readings" = "Озвучувати показники";
+"quickactions_stop_speaking_readings" = "Не озвучувати показники";
+"common_lastReadingAtFormat" = "Останній показник о %@";
+"common_noDataAvailable" = "Немає даних";
+"common_sharedCalendar" = "Спільний календар";
+"common_calendar" = "Календар";

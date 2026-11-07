@@ -10,10 +10,10 @@
 "treatments_new_entry" = "New Treatment";
 
 /// Exercise unit.
-"treatments_exercise_unit" = "min";
+"treatments_exercise_unit" = "хв";
 
 /// Insulin.
-"treatments_insulin" = "Bolus";
+"treatments_insulin" = "Болюс";
 
 /// 
 "treatments_sync_complete" = "Synchronization complete.";
@@ -22,16 +22,16 @@
 "treatments_carbs_with_unit" = "Carbs (g)";
 
 /// Insulin unit.
-"treatments_insulin_unit" = "U";
+"treatments_insulin_unit" = "ОД";
 
 /// 
 "treatments_success" = "Success";
 
 /// Carbs unit.
-"treatments_carbs_unit" = "g";
+"treatments_carbs_unit" = "г";
 
 /// Carbs.
-"treatments_carbs" = "Carbs";
+"treatments_carbs" = "Вуглеводи";
 
 /// 
 "treatments_exercise_with_unit" = "Exercise (min)";
@@ -40,13 +40,13 @@
 "treatments_insulin_with_unit" = "Insulin (U)";
 
 /// Exercise.
-"treatments_exercise" = "Exercise";
+"treatments_exercise" = "Фізичне навантаження";
 
 /// Title of treatments view.
-"treatments_title" = "Treatments";
+"treatments_title" = "Лікування";
 
 /// Blood Glucose Check
-"treatments_bgcheck" = "BG Check";
+"treatments_bgcheck" = "Вимір глюкометром";
 
 /// Literally a question mark, used as unknown abbreviation.
 "treatments_question_mark" = "?";
@@ -56,10 +56,10 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// warn about trying to set a future bg value
-"treatments_cannotStoreFutureBGCheck" = "You cannot store a BG Check in the future.\n\nIt will be stored at the actual time.";
+"treatments_cannotStoreFutureBGCheck" = "Не можна зберегти вимір глюкометром у майбутньому.\n\nЙого буде збережено з поточним часом.";
 
 /// filter the treatments by type
-"treatments_filterTreatmentsLabel" = "Filter";
+"treatments_filterTreatmentsLabel" = "Фільтр";
 "treatments_automaticBasal" = "Автоматична базальна подача";
 
 /* Section heading when choosing a new treatment type. */
@@ -73,3 +73,23 @@
 
 /* Footer shown when a new basal injection is prefilled from the previous entry. */
 "treatments_basalInjectionCopiedFooter" = "Дозу й тип базального інсуліну скопійовано з попереднього запису";
+
+/* Fork: Ukrainian translation completed */
+"treatments_basal_rate_unit" = "ОД/год";
+"treatments_basalRate" = "Тимчасовий базал";
+"treatments_siteChange" = "Заміна місця інфузії";
+"treatments_sensorStart" = "Запуск сенсора";
+"treatments_pumpBatteryChange" = "Заміна батареї помпи";
+"treatments_note" = "Нотатка";
+"treatments_enteredBy" = "Ким введено";
+"treatments_add_title" = "Додати запис";
+"treatments_edit_title" = "Редагувати запис";
+"treatments_noTreatmentsToShow" = "Немає записів за цю дату.";
+"treatments_type" = "Тип";
+"treatments_value" = "Значення";
+"treatments_notes" = "Нотатки";
+"treatments_notePlaceholder" = "Введіть нотатку";
+"treatments_deleteTreatment" = "Видалити запис";
+"treatments_invalidValueMessage" = "Введіть коректне значення, більше за нуль.";
+"treatments_invalidNoteMessage" = "Введіть нотатку.";
+"treatments_saveTreatment" = "Зберегти";

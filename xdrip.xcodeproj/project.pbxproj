@@ -439,6 +439,7 @@
 		C15D80D0E8DB47A6A9BE68DF /* TherapyMetricsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05272484BD024BDAAA341C1C /* TherapyMetricsSettingsView.swift */; };
 		91A95449E176B7608EA94683 /* ExperimentalSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57DC5CC6AB8F0B8B84EB06E1 /* ExperimentalSettingsView.swift */; };
 		2C229BAE87FD2F6384A8D7DD /* ExperimentalTherapy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 488707C346AA445BFFCEF57A /* ExperimentalTherapy.swift */; };
+		F0A870E01F7A5873CA43B0A8 /* AdaptiveGlucoseForecast.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A8F6242D143E2DC4F185FF /* AdaptiveGlucoseForecast.swift */; };
 		C2385D0CA6579919114B060A /* AlertTypesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 102D337E1C2160C7B03D5184 /* AlertTypesSettingsView.swift */; };
 		C606CA18273EF9F800BA199E /* DexcomG6InitialCalibrationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C606CA17273EF9F800BA199E /* DexcomG6InitialCalibrationPolicy.swift */; };
 		C859C6C1B4CE6B335D4C86E6 /* Libre3NFCActivationCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34D9952479A5C8B9A161631A /* Libre3NFCActivationCommandTests.swift */; };
@@ -937,6 +938,7 @@
 		DE8D7DE65157474CBFCF8FF0 /* TextsDirectWatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB7E2A44F504FB1A8940A2F /* TextsDirectWatch.swift */; };
 		D17EC7000000000000000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D17EC7000000000000000002 /* InfoPlist.strings */; };
 		B4BF525DF92C9A65870E9F3F /* TextsLibre3.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F5DB745379C8D9E0C71E5AD /* TextsLibre3.swift */; };
+		F0A74110454EA9E010E8A828 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = F0A7559C6A8FDE5D73BB2570 /* InfoPlist.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1343,6 +1345,7 @@
 		3C58142BB54891C87BB6CA2C /* ExperimentalFeaturesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExperimentalFeaturesTests.swift; sourceTree = "<group>"; };
 		57DC5CC6AB8F0B8B84EB06E1 /* ExperimentalSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExperimentalSettingsView.swift; sourceTree = "<group>"; };
 		488707C346AA445BFFCEF57A /* ExperimentalTherapy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExperimentalTherapy.swift; sourceTree = "<group>"; };
+		F0A8F6242D143E2DC4F185FF /* AdaptiveGlucoseForecast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveGlucoseForecast.swift; sourceTree = "<group>"; };
 		4D7B00013014000200000001 /* CGMG5SensorSessionDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMG5SensorSessionDetectionTests.swift; sourceTree = "<group>"; };
 		4D7C00013015000100000001 /* CalibrationReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationReadinessTests.swift; sourceTree = "<group>"; };
 		4D7D00013016000200000001 /* BluetoothPeripheralDisplayStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothPeripheralDisplayStatusTests.swift; sourceTree = "<group>"; };
@@ -2281,6 +2284,10 @@
 		3479253DE704C6F3868B55AB /* el */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "el"; path = "xDrip/Storyboards/el.lproj/Libre3.strings"; sourceTree = SOURCE_ROOT; };
 		E6A7CA4437EB565EFE31B175 /* sl */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "sl"; path = "xDrip/Storyboards/sl.lproj/Libre3.strings"; sourceTree = SOURCE_ROOT; };
 		4F5DB745379C8D9E0C71E5AD /* TextsLibre3.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextsLibre3.swift; sourceTree = "<group>"; };
+		F0A729E95B75670538E6A062 /* uk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = uk; path = uk.lproj/WatchApp.strings; sourceTree = "<group>"; };
+		F0A7C4F4D307B2D2A917C719 /* uk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = uk; path = uk.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F0A760D221028495AE4C1919 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F0A787455ECDA2BF0FC30BA9 /* uk */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = uk; path = uk.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2987,6 +2994,7 @@
 			children = (
 				5F219EC5BAAF4D5E924415FA /* TherapyMetricsManager.swift */,
 				488707C346AA445BFFCEF57A /* ExperimentalTherapy.swift */,
+				F0A8F6242D143E2DC4F185FF /* AdaptiveGlucoseForecast.swift */,
 			);
 			path = Therapy;
 			sourceTree = "<group>";
@@ -3346,6 +3354,7 @@
 				F8E6C79324CEC2E3007C1199 /* Snooze.strings */,
 				F8B48A9A22B2FA66009BCC01 /* SpeakReading.strings */,
 				D4AC54412778C82B0097FF10 /* Treatments.strings */,
+				F0A7559C6A8FDE5D73BB2570 /* InfoPlist.strings */,
 			);
 			path = Storyboards;
 			sourceTree = "<group>";
@@ -4697,6 +4706,7 @@
 				F824378D24CB7A9900BED341 /* Soft_Warm_Airy_Reassuring.caf in Resources */,
 				909CEF817B142EF554C59BA5 /* Libre3.strings in Resources */,
 				4141C53E4D9615D8F706F62F /* license.md in Resources */,
+				F0A74110454EA9E010E8A828 /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5364,6 +5374,7 @@
 				C15D80D0E8DB47A6A9BE68DF /* TherapyMetricsSettingsView.swift in Sources */,
 				91A95449E176B7608EA94683 /* ExperimentalSettingsView.swift in Sources */,
 				2C229BAE87FD2F6384A8D7DD /* ExperimentalTherapy.swift in Sources */,
+				F0A870E01F7A5873CA43B0A8 /* AdaptiveGlucoseForecast.swift in Sources */,
 				B3DBAE6F4DF8465BBF554DE4 /* TherapyMetricsManager.swift in Sources */,
 				4D20C0042FF1000100000001 /* RootHomeView.swift in Sources */,
 				4D21B0022FF8000100000001 /* RootHomeChartRange.swift in Sources */,
@@ -5650,6 +5661,7 @@
 				47EDD1542BDD8ADD00C5A286 /* de */,
 				47EDD1562BDF809800C5A286 /* nl */,
 				47EDD15B2BE0286000C5A286 /* fr */,
+				F0A729E95B75670538E6A062 /* uk */,
 			);
 			name = WatchApp.strings;
 			sourceTree = "<group>";
@@ -6110,6 +6122,16 @@
 				D17EC7000000000000000005 /* fr */,
 				D17EC7000000000000000006 /* de */,
 				D17EC7000000000000000007 /* nl */,
+				F0A7C4F4D307B2D2A917C719 /* uk */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		F0A7559C6A8FDE5D73BB2570 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F0A760D221028495AE4C1919 /* en */,
+				F0A787455ECDA2BF0FC30BA9 /* uk */,
 			);
 			name = InfoPlist.strings;
 			sourceTree = "<group>";

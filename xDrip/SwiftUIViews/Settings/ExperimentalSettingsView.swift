@@ -27,19 +27,20 @@ extension SettingsViewGroupedSettingsViewModel {
                     settingsScreen: { ExperimentalSettingsViewModel.insulinScreen }
                 )
             ],
-            leadingRows: { [ExperimentalSettingsViewModel.chartStyleRow()] }
+            leadingRows: { [ExperimentalSettingsViewModel.chartStyleRow(), ExperimentalSettingsViewModel.chartCursorRow()] }
         )
     }
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins }
+    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
         SettingsScreen(title: ExperimentalTexts.text("prediction", "Glucose prediction"),
                        introduction: { ExperimentalTexts.text("predictionIntroduction", "Experimental. A forecast of the next hours, drawn as a dashed line to the right of the main chart. It continues the recent trend and adds the effect of the carbs, boluses and exercise you log. It is an estimate only: never dose insulin from it.") },
-                       providers: { [ExperimentalSettingsViewModel(group: .predictionMain), ExperimentalSettingsViewModel(group: .predictionModel),
+                       providers: { [ExperimentalSettingsViewModel(group: .predictionMain), ExperimentalSettingsViewModel(group: .predictionAdaptive),
+                                     ExperimentalSettingsViewModel(group: .predictionModel),
                                      ExperimentalSettingsViewModel(group: .predictionAlert), ExperimentalSettingsViewModel(group: .predictionAccuracy),
                                      ExperimentalSettingsViewModel(group: .predictionNightscout)] })
     }
@@ -61,6 +62,13 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                         guard styles.indices.contains(index) else { return }
                         UserDefaults.standard.experimentalGlucoseChartStyle = styles[index]
                     }))
+    }
+
+    /// JugglucoNG's cursor on the main chart: time, glucose and the insulin on board at that moment.
+    static func chartCursorRow() -> SettingsRow {
+        SettingsRow(id: "experimental.chartCursor", title: ExperimentalTexts.text("chartCursor", "Chart cursor"),
+                    control: .toggle(isOn: { UserDefaults.standard.experimentalChartCursorEnabled },
+                                     setIsOn: { UserDefaults.standard.experimentalChartCursorEnabled = $0 }))
     }
 
     static func title(for style: ExperimentalGlucoseChartStyle) -> String {
@@ -94,6 +102,34 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                              setIsOn: { UserDefaults.standard.experimentalPredictionTrendMomentum = $0 }),
                             isEnabled: defaults.experimentalPredictionEnabled)
             ]
+        case .predictionAdaptive:
+            var rows = [
+                SettingsRow(id: "experimental.prediction.adaptive", title: ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalPredictionAdaptive },
+                                             setIsOn: { isOn in
+                                                 UserDefaults.standard.experimentalPredictionAdaptive = isOn
+                                                 if isOn, let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager {
+                                                     AdaptiveForecastStore.refreshIfDue(coreDataManager: coreDataManager)
+                                                 }
+                                             }),
+                            isEnabled: defaults.experimentalPredictionEnabled, reloadScope: .all)
+            ]
+            if defaults.experimentalPredictionAdaptive || AdaptiveForecastStore.model() != nil {
+                rows.append(SettingsRow(id: "experimental.prediction.adaptiveStatus",
+                                        title: ExperimentalTexts.text("predictionAdaptiveModel", "Learned model"),
+                                        detail: Self.adaptiveStatusText(AdaptiveForecastStore.status())))
+                rows.append(SettingsRow(id: "experimental.prediction.adaptiveRelearn",
+                                        title: ExperimentalTexts.text("predictionAdaptiveRelearn", "Relearn now"),
+                                        control: .custom(content: {
+                                            AnyView(Button(ExperimentalTexts.text("predictionAdaptiveRelearn", "Relearn now")) {
+                                                AdaptiveForecastStore.reset()
+                                                if let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager {
+                                                    AdaptiveForecastStore.refreshIfDue(coreDataManager: coreDataManager)
+                                                }
+                                            })
+                                        })))
+            }
+            return rows
         case .predictionModel:
             let isMgDl = defaults.bloodGlucoseUnitIsMgDl
             let unit = isMgDl ? Texts_Common.mgdl : Texts_Common.mmol
@@ -254,6 +290,19 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         value.formatted(.number.precision(.fractionLength(0...fractionDigits)))
     }
 
+    /// JugglucoNG's adaptive prediction summary: learning, learned from N days, or not better yet.
+    static func adaptiveStatusText(_ status: AdaptiveForecastStore.Status) -> String {
+        switch status {
+        case .learning:
+            return ExperimentalTexts.text("predictionAdaptiveLearning", "Learning, needs 2 days of readings")
+        case .ready(let trainingDays, _):
+            return String(format: ExperimentalTexts.text("predictionAdaptiveReady", "Learned from %@ days of readings"),
+                          numberText(trainingDays, fractionDigits: 0))
+        case .notBetter:
+            return ExperimentalTexts.text("predictionAdaptiveNotBetter", "Not better than no change yet, standard shown")
+        }
+    }
+
     static func minutesText(_ minutes: Int) -> String {
         DateComponentsFormatter.localizedString(from: DateComponents(minute: minutes), unitsStyle: .short) ?? "\(minutes)"
     }
@@ -261,6 +310,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
     func sectionTitle() -> String? {
         switch group {
         case .predictionMain, .insulins: return nil
+        case .predictionAdaptive: return ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction")
         case .predictionModel: return ExperimentalTexts.text("predictionModel", "Model")
         case .predictionAlert: return Texts_Alerts.predictedLowAlertTitle
         case .predictionAccuracy: return ExperimentalTexts.text("accuracyShow", "Prediction accuracy")
@@ -272,6 +322,8 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         switch group {
         case .predictionMain:
             return ExperimentalTexts.text("predictionMainFooter", "Follow the trend continues the recent rise or fall that your treatments do not explain, fading over about an hour. The forecast starts only from a reading at most 15 minutes old.")
+        case .predictionAdaptive:
+            return ExperimentalTexts.text("predictionAdaptiveFooter", "Draws a forecast learned from your own readings instead of the standard one, dotted, up to two hours. It learns from the last four weeks, relearns once a day and needs two days of readings; it ignores logged insulin and carbs. Until it is ready, after a gap or a new sensor's first hour, or while it is not better than no change, the standard forecast without the trend is drawn. The predicted low alert and Nightscout keep using the standard forecast.")
         case .predictionModel:
             return ExperimentalTexts.text("predictionModelFooter", "Insulin sensitivity: how far one unit lowers glucose. Carb ratio: grams covered by one unit. Absorption sets how long carbs take to act. Periods change these by time of day; each treatment uses the values in force when it was logged. Body weight sharpens curves measured per kilogram (Fiasp, Levemir, regular insulin). Protein and fat add a late rise for carb entries that list them. Basal and premixed insulins are not part of the forecast, as in JugglucoNG.")
         case .predictionAlert:
@@ -384,6 +436,7 @@ struct ExperimentalPredictionPeriodsView: View {
 /// Forecast error by horizon (JugglucoNG `PredictionAnalysisScreen`, simplified).
 struct ExperimentalPredictionAccuracyView: View {
     @State private var report: [HorizonAccuracy] = []
+    @State private var adaptiveReport: [HorizonAccuracy] = []
     @State private var forecastCount = 0
     @State private var isLoading = true
     private let isMgDl = UserDefaults.standard.bloodGlucoseUnitIsMgDl
@@ -395,28 +448,23 @@ struct ExperimentalPredictionAccuracyView: View {
             } else if forecastCount == 0 {
                 Text(ExperimentalTexts.text("accuracyEmpty", "No forecasts recorded yet. Turn on Record accuracy and come back after a few hours."))
             } else {
-                Section(footer: Text(String(format: ExperimentalTexts.text("accuracyCount", "%ld forecasts recorded. A horizon needs at least %ld compared forecasts to say much."),
+                Section(header: adaptiveReport.isEmpty ? nil : Text(ExperimentalTexts.text("accuracyStandard", "Standard forecast")),
+                        footer: Text(String(format: ExperimentalTexts.text("accuracyCount", "%ld forecasts recorded. A horizon needs at least %ld compared forecasts to say much."),
                                             forecastCount, PredictionAccuracy.minimumReliableCount))) {
-                    ForEach(report, id: \.horizonMinutes) { horizon in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(ExperimentalSettingsViewModel.minutesText(horizon.horizonMinutes)).font(.headline)
-                                Spacer()
-                                Text("n = \(horizon.count)").foregroundStyle(horizon.count < PredictionAccuracy.minimumReliableCount ? Color.orange : Color.secondary)
-                            }
-                            if horizon.count > 0 {
-                                Text(String(format: ExperimentalTexts.text("accuracyLine", "Error %@ · no change %@ · bias %@"),
-                                            glucose(horizon.meanAbsoluteError), glucose(horizon.noChangeMeanAbsoluteError), glucose(horizon.bias, signed: true)))
-                                    .font(.subheadline)
-                                    .foregroundStyle(horizon.meanAbsoluteError <= horizon.noChangeMeanAbsoluteError ? Color.primary : Color.orange)
-                            }
-                        }
+                    horizonRows(report)
+                }
+                // JugglucoNG records the adaptive forecast from the same reading, so the two compare.
+                if !adaptiveReport.isEmpty {
+                    Section(header: Text(ExperimentalTexts.text("accuracyAdaptive", "Adaptive forecast")),
+                            footer: Text(ExperimentalTexts.text("accuracyAdaptiveFooter", "Recorded from the same readings whenever the adaptive model could answer, whether or not it is drawn."))) {
+                        horizonRows(adaptiveReport)
                     }
                 }
                 Section {
                     Button(ExperimentalTexts.text("accuracyClear", "Delete recorded forecasts"), role: .destructive) {
                         PredictionAccuracyRecorder.clear()
                         report = []
+                        adaptiveReport = []
                         forecastCount = 0
                     }
                 }
@@ -424,6 +472,25 @@ struct ExperimentalPredictionAccuracyView: View {
         }
         .navigationTitle(ExperimentalTexts.text("accuracyShow", "Prediction accuracy"))
         .task { await load() }
+    }
+
+    @ViewBuilder
+    private func horizonRows(_ horizons: [HorizonAccuracy]) -> some View {
+        ForEach(horizons, id: \.horizonMinutes) { horizon in
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(ExperimentalSettingsViewModel.minutesText(horizon.horizonMinutes)).font(.headline)
+                    Spacer()
+                    Text("n = \(horizon.count)").foregroundStyle(horizon.count < PredictionAccuracy.minimumReliableCount ? Color.orange : Color.secondary)
+                }
+                if horizon.count > 0 {
+                    Text(String(format: ExperimentalTexts.text("accuracyLine", "Error %@ · no change %@ · bias %@"),
+                                glucose(horizon.meanAbsoluteError), glucose(horizon.noChangeMeanAbsoluteError), glucose(horizon.bias, signed: true)))
+                        .font(.subheadline)
+                        .foregroundStyle(horizon.meanAbsoluteError <= horizon.noChangeMeanAbsoluteError ? Color.primary : Color.orange)
+                }
+            }
+        }
     }
 
     private func glucose(_ mgDl: Double, signed: Bool = false) -> String {
@@ -436,7 +503,7 @@ struct ExperimentalPredictionAccuracyView: View {
     @MainActor
     private func load() async {
         let forecasts = PredictionAccuracyRecorder.load()
-        forecastCount = forecasts.count
+        forecastCount = forecasts.filter { !$0.isAdaptive }.count
         guard let earliest = forecasts.map(\.origin).min(), let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager else {
             isLoading = false
             return
@@ -444,7 +511,9 @@ struct ExperimentalPredictionAccuracyView: View {
         let readings = BgReadingsAccessor(coreDataManager: coreDataManager)
             .getLatestBgReadings(limit: nil, fromDate: earliest.addingTimeInterval(-60), forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
             .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
-        report = PredictionAccuracy.report(forecasts: forecasts, readings: readings)
+        report = PredictionAccuracy.report(forecasts: forecasts.filter { !$0.isAdaptive }, readings: readings)
+        let adaptive = forecasts.filter(\.isAdaptive)
+        adaptiveReport = adaptive.isEmpty ? [] : PredictionAccuracy.report(forecasts: adaptive, readings: readings)
         isLoading = false
     }
 }

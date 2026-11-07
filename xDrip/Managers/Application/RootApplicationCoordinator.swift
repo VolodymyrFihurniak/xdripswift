@@ -1496,6 +1496,8 @@ import AppIntents
                 // Experimental: keep the forecast made now to score it later against what happened.
                 // coreDataManager is already unwrapped by the guard at the top of this function.
                 PredictionAccuracyRecorder.recordIfDue(coreDataManager: coreDataManager)
+                // Experimental: the adaptive forecast relearns once a day, on a background queue.
+                AdaptiveForecastStore.refreshIfDue(coreDataManager: coreDataManager)
                 
                 calendarManager?.processNewReading(lastConnectionStatusChangeTimeStamp: lastConnectionStatusChangeTimeStamp())
                 
@@ -3020,6 +3022,7 @@ import AppIntents
                     
                     contentState.showIOBCOB = UserDefaults.standard.liveActivityShowIOBCOB
                     contentState.experimentalForecast = companionForecast
+                    contentState.experimentalGlucoseLine = UserDefaults.standard.experimentalGlucoseChartStyle == .line
                     contentState.sensorWarmupEndDate = sensorWarmupEndDate
                     if UserDefaults.standard.isMaster,
                        let transmitter = bluetoothPeripheralManager?.getCGMTransmitter() as? CGMG5Transmitter,
@@ -3041,6 +3044,7 @@ import AppIntents
                 var widgetSharedUserDefaultsModel = WidgetSharedUserDefaultsModel(bgReadingValues: bgReadingValues, bgReadingDatesAsDouble: bgReadingDatesAsDouble, isMgDl: UserDefaults.standard.bloodGlucoseUnitIsMgDl, slopeOrdinal: slopeOrdinal, deltaValueInUserUnit: deltaValueInUserUnit, urgentLowLimitInMgDl: UserDefaults.standard.urgentLowMarkValue, lowLimitInMgDl: UserDefaults.standard.lowMarkValue, highLimitInMgDl: UserDefaults.standard.highMarkValue, urgentHighLimitInMgDl: UserDefaults.standard.urgentHighMarkValue, dataSourceDescription: dataSourceDescription, followerPatientName: !UserDefaults.standard.isMaster ? UserDefaults.standard.followerPatientName : nil, aidStatus: aidStatus, therapyMetrics: nil, allowStandByHighContrast: UserDefaults.standard.allowStandByHighContrast, forceStandByBigNumbers: UserDefaults.standard.forceStandByBigNumbers)
                 
                 widgetSharedUserDefaultsModel.experimentalForecast = companionForecast
+                widgetSharedUserDefaultsModel.experimentalGlucoseLine = UserDefaults.standard.experimentalGlucoseChartStyle == .line
 
                 // store the model in the shared user defaults using a name that is uniquely specific to this copy of the app as installed on
                 // the user's device - this allows several copies of the app to be installed without cross-contamination of widget data

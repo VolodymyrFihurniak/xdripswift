@@ -44,6 +44,8 @@ struct WatchStatus: WatchPayload {
     var keepAliveIsDisabled: Bool = false
     /// Experimental forecast for the watch chart.
     var experimentalForecast: ExperimentalCompanionForecast?
+    /// Experimental line style for glucose on the watch chart.
+    var experimentalGlucoseLine: Bool?
 
     var aidStatus: AIDStatus?
     var therapyMetrics: TherapyMetricsSnapshot? = nil

@@ -109,6 +109,8 @@ struct GlucoseChartView: View {
     private var therapySeries = TherapyChartSeries()
     private var renderBasalDownwards = false
     private var experimentalPlotData = GlucoseChartExperimentalPlots()
+    private var cursorSelection: GlucoseChartCursor?
+    private var cursorGeometry: GlucoseChartCursorGeometry?
 
     // MARK: - Input Data
 
@@ -313,6 +315,23 @@ struct GlucoseChartView: View {
         var view = self
         view.experimentalPlotData = plots
         return view
+    }
+
+    /// The main chart's cursor, and the object the chart reports its plot area to so a touch can be
+    /// turned into a time and a glucose value.
+    func cursor(_ cursor: GlucoseChartCursor?, geometry: GlucoseChartCursorGeometry?) -> Self {
+        var view = self
+        view.cursorSelection = cursor
+        view.cursorGeometry = geometry
+        return view
+    }
+
+    /// Hands the plot area, in the cursor's coordinate space, to `cursorGeometry`. Returns nothing:
+    /// it is called from the overlay while the chart lays out.
+    private func reportCursorGeometry(plotRect: CGRect, in geometryProxy: GeometryProxy, xDomain: ClosedRange<Date>, yDomain: ClosedRange<Double>) {
+        guard let cursorGeometry else { return }
+        let origin = geometryProxy.frame(in: .named(GlucoseChartCursorGeometry.coordinateSpace)).origin
+        cursorGeometry.update(plotRect: plotRect.offsetBy(dx: origin.x, dy: origin.y), xDomain: xDomain, yDomain: yDomain)
     }
 
     /// The forecast is shown only while the chart ends at the present.
@@ -691,7 +710,9 @@ struct GlucoseChartView: View {
                      series: .value("Series", "experimental-prediction"))
                 .interpolationMethod(.monotone)
                 .foregroundStyle(ConstantsGlucoseChartSwiftUI.experimentalPredictionColor)
-                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [6, 4]))
+                .lineStyle(experimentalPlotData.predictionIsAdaptive
+                           ? StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: [0.1, 5])
+                           : StrokeStyle(lineWidth: 2, lineCap: .round, dash: [6, 4]))
                 .accessibilityLabel(ExperimentalChartTexts.prediction)
         }
     }
@@ -713,7 +734,9 @@ struct GlucoseChartView: View {
                              series: .value("Series", "glucose-line-\(run.id)"))
                         .interpolationMethod(.monotone)
                         .foregroundStyle(run.color)
-                        .lineStyle(StrokeStyle(lineWidth: ConstantsGlucoseChartSwiftUI.experimentalGlucoseLineWidth, lineCap: .round, lineJoin: .round))
+                        .lineStyle(StrokeStyle(lineWidth: usesMainChartYAxisContext ? ConstantsGlucoseChartSwiftUI.experimentalGlucoseLineWidth
+                                                    : ConstantsGlucoseChartSwiftUI.experimentalCompactGlucoseLineWidth,
+                                               lineCap: .round, lineJoin: .round))
                 }
             }
         }
@@ -910,8 +933,8 @@ struct GlucoseChartView: View {
                 // Note labels sit above basal lines and below dose treatments.
                 noteTreatmentMarks(points: visibleTreatmentPoints.notes)
 
-                // Draw basal injections first so overlapping carbs and boluses remain in front.
-                treatmentSymbolMarks(points: visibleTreatmentPoints.basalInjections, systemImage: GlucoseChartTreatmentStyle.basalInjectionSymbol, size: { _ in treatmentSymbolSize() * GlucoseChartTreatmentStyle.basalInjectionScale }, color: GlucoseChartTreatmentStyle.basalInjectionColor, labelPosition: .bottom)
+                // Basal injections share the bolus row; draw them first so carbs and boluses stay in front.
+                treatmentSymbolMarks(points: visibleTreatmentPoints.basalInjections, systemImage: GlucoseChartTreatmentStyle.basalInjectionSymbol, size: { _ in treatmentSymbolSize() * GlucoseChartTreatmentStyle.basalInjectionScale }, color: GlucoseChartTreatmentStyle.basalInjectionColor, labelPosition: .bottom, xOffset: { basalInjectionOffset($0, boluses: visibleTreatmentPoints.boluses) })
                 treatmentSymbolMarks(points: visibleTreatmentPoints.carbs, systemImage: GlucoseChartTreatmentStyle.carbsSymbol, size: carbsSymbolSizing.size, color: GlucoseChartTreatmentStyle.carbsColor, labelPosition: .top, minimumLabelValue: smallCarbTreatmentThreshold)
                 treatmentSymbolMarks(points: visibleTreatmentPoints.boluses, systemImage: GlucoseChartTreatmentStyle.bolusSymbol, size: bolusSymbolSizing.size, color: GlucoseChartTreatmentStyle.bolusColor, labelPosition: .bottom, minimumLabelValue: smallBolusTreatmentThreshold)
             }
@@ -953,8 +976,9 @@ struct GlucoseChartView: View {
                 }
             }
 
-            // Main glucose points, or the experimental connected line.
-            if experimentalPlotData.drawsGlucoseAsLine && usesMainChartYAxisContext {
+            // Main glucose points, or the experimental connected line (main chart, widgets,
+            // Live Activity and watch; the mini overview chart keeps its points).
+            if experimentalPlotData.drawsGlucoseAsLine {
                 glucoseLineMarks()
             } else {
                 ForEach(bgReadingValues.indices, id: \.self) { index in
@@ -969,6 +993,22 @@ struct GlucoseChartView: View {
             // Experimental forecast from the newest reading, kept inside the y-domain.
             if showsPrediction {
                 predictionMarks(endDate: experimentalXScaleEndDate, domain: domain)
+            }
+
+            // JugglucoNG's cursor: a vertical line at the chosen moment and a ring on its reading.
+            if usesMainChartYAxisContext, let cursor = cursorSelection {
+                RuleMark(x: .value("Cursor", cursor.date))
+                    .lineStyle(StrokeStyle(lineWidth: ConstantsGlucoseChartSwiftUI.cursorLineWidth))
+                    .foregroundStyle(ConstantsGlucoseChartSwiftUI.cursorLineColor)
+                if let mgDl = cursor.mgDl {
+                    PointMark(x: .value("Time", cursor.date), y: .value("BG", min(max(mgDl, domain.lowerBound), domain.upperBound)))
+                        .symbol {
+                            Circle()
+                                .fill(cursor.isForecast ? ConstantsGlucoseChartSwiftUI.experimentalPredictionColor : bgColor(bgValueInMgDl: mgDl))
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .frame(width: ConstantsGlucoseChartSwiftUI.cursorRingDiameter, height: ConstantsGlucoseChartSwiftUI.cursorRingDiameter)
+                        }
+                }
             }
 
             // Calibration and BG check markers sit above glucose points.
@@ -1157,9 +1197,11 @@ struct GlucoseChartView: View {
                 if usesMainChartYAxisContext {
                     if #available(iOS 17.0, watchOS 10.0, *) {
                         if let plotFrame = chartProxy.plotFrame {
+                            let _ = reportCursorGeometry(plotRect: geometryProxy[plotFrame], in: geometryProxy, xDomain: xScaleDomain, yDomain: domain)
                             mainChartPlotBorder(plotRect: geometryProxy[plotFrame], overlaySize: geometryProxy.size)
                         }
                     } else {
+                        let _ = reportCursorGeometry(plotRect: geometryProxy[chartProxy.plotAreaFrame], in: geometryProxy, xDomain: xScaleDomain, yDomain: domain)
                         mainChartPlotBorder(plotRect: geometryProxy[chartProxy.plotAreaFrame], overlaySize: geometryProxy.size)
                     }
                 }
@@ -1288,7 +1330,7 @@ struct GlucoseChartView: View {
     /// on custom symbols can be displaced from the mark. An overlay preserves the symbol's
     /// size and data position while anchoring the label to its actual top or bottom edge.
     /// Boluses and carbs pass their own label thresholds; values equal to the threshold remain visible.
-    private func treatmentSymbolMarks(points: [GlucoseChartTreatmentPoint], systemImage: String?, size: @escaping (Double) -> Double, color: Color, labelPosition: VerticalAlignment?, verticalLabel: Bool = false, minimumLabelValue: Double? = nil) -> some ChartContent {
+    private func treatmentSymbolMarks(points: [GlucoseChartTreatmentPoint], systemImage: String?, size: @escaping (Double) -> Double, color: Color, labelPosition: VerticalAlignment?, verticalLabel: Bool = false, minimumLabelValue: Double? = nil, xOffset: @escaping (GlucoseChartTreatmentPoint) -> Double = { _ in 0 }) -> some ChartContent {
         ForEach(points) { point in
             PointMark(x: .value("Time", point.date), y: .value("BG", point.yValue))
                 .symbol {
@@ -1316,8 +1358,21 @@ struct GlucoseChartView: View {
                             .offset(y: labelPosition == .bottom ? 4 : -4)
                         }
                     }
+                    .offset(x: xOffset(point))
                 }
         }
+    }
+
+    /// Moves a basal injection sideways when a bolus marker on the same row would cover it,
+    /// so the two insulins sit side by side: before the bolus when injected earlier, else after it.
+    private func basalInjectionOffset(_ point: GlucoseChartTreatmentPoint, boluses: [GlucoseChartTreatmentPoint]) -> Double {
+        guard let nearest = boluses.min(by: { abs($0.date.timeIntervalSince(point.date)) < abs($1.date.timeIntervalSince(point.date)) }) else { return 0 }
+        let pointsPerSecond = chartWidth / max(visibleEndDate.timeIntervalSince(visibleStartDate), 60)
+        let basalSize = treatmentSymbolSize() * GlucoseChartTreatmentStyle.basalInjectionScale
+        let gap = (bolusSymbolSizing.size(for: nearest.treatmentValue) + basalSize) / 2 + 2
+        let distance = point.date.timeIntervalSince(nearest.date) * pointsPerSecond
+        guard abs(distance) < gap else { return 0 }
+        return (distance < 0 ? -gap : gap) - distance
     }
 
     /// Resolve marker ranges at render time so cached treatments respond immediately to scale changes.
@@ -1576,6 +1631,8 @@ struct GlucoseChartExperimentalPlots {
         let date: Date
         let bottom: Double
         let top: Double
+        /// Units of this insulin still to act at `date`.
+        var onBoard: Double = 0
         var id: TimeInterval { date.timeIntervalSince1970 }
     }
 
@@ -1584,6 +1641,19 @@ struct GlucoseChartExperimentalPlots {
         let name: String
         let color: Color
         let points: [InsulinPoint]
+        /// Rapid, regular and NPH insulins make up IOB; basal and premixed ones are shown apart.
+        var countsTowardIOB = true
+    }
+
+    /// What one insulin still has to deliver at a moment.
+    struct OnBoard: Identifiable {
+        let id: String
+        let name: String
+        let color: Color
+        let countsTowardIOB: Bool
+        let units: Double
+        /// When its last dose stops acting; nil where only the amount is known.
+        var activeUntil: Date?
     }
 
     struct LinePoint: Identifiable {
@@ -1603,7 +1673,11 @@ struct GlucoseChartExperimentalPlots {
 
     var prediction: [PredictionPoint] = []
     var insulin: [InsulinLayer] = []
+    /// Every insulin still on board now, largest first, whatever window the chart shows.
+    var onBoardNow: [OnBoard] = []
     var drawsGlucoseAsLine = false
+    /// The forecast is JugglucoNG's adaptive one: drawn dotted, as its forecast comparison does.
+    var predictionIsAdaptive = false
     /// Lets widgets, Live Activity and the watch draw the forecast; the app's main chart always may.
     var showsInCompactCharts = false
 
@@ -1612,8 +1686,18 @@ struct GlucoseChartExperimentalPlots {
         insulin.compactMap { layer in
             let points = layer.points.filter { $0.date >= start && $0.date <= end }
             guard points.contains(where: { $0.top - $0.bottom > 0.0001 }) else { return nil }
-            return InsulinLayer(id: layer.id, name: layer.name, color: layer.color, points: points)
+            return InsulinLayer(id: layer.id, name: layer.name, color: layer.color, points: points, countsTowardIOB: layer.countsTowardIOB)
         }
+    }
+
+    /// Each insulin's units still on board at `date`, read from the nearest sample within five minutes.
+    func onBoard(at date: Date) -> [OnBoard] {
+        insulin.compactMap { layer in
+            guard let nearest = layer.points.min(by: { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }),
+                  abs(nearest.date.timeIntervalSince(date)) <= 5 * 60, nearest.onBoard > 0.005 else { return nil }
+            return OnBoard(id: layer.id, name: layer.name, color: layer.color, countsTowardIOB: layer.countsTowardIOB, units: nearest.onBoard)
+        }
+        .sorted { $0.units > $1.units }
     }
 
     /// The forecast up to `end`, ending exactly at `end` when it runs past it.
@@ -1654,16 +1738,64 @@ struct GlucoseChartExperimentalPlots {
     }
 }
 
+/// A moment chosen with the main chart's cursor, and the glucose read there.
+struct GlucoseChartCursor: Equatable {
+    let date: Date
+    let mgDl: Double?
+    /// True when the value comes from the experimental forecast rather than a reading.
+    var isForecast = false
+}
+
+/// Where the main chart's plot area sits and what time and glucose it spans, so a touch can be
+/// turned into a moment and a moment into a position. The chart writes it while it lays out; it
+/// is a plain object, so writing it does not trigger another redraw.
+final class GlucoseChartCursorGeometry {
+    static let coordinateSpace = "glucoseChartCursor"
+
+    private(set) var plotRect: CGRect = .zero
+    private(set) var xDomain: ClosedRange<Date>?
+    private(set) var yDomain: ClosedRange<Double>?
+
+    func update(plotRect: CGRect, xDomain: ClosedRange<Date>, yDomain: ClosedRange<Double>) {
+        self.plotRect = plotRect
+        self.xDomain = xDomain
+        self.yDomain = yDomain
+    }
+
+    /// The time under `x`, clamped to the plot area.
+    func date(atX x: CGFloat) -> Date? {
+        guard let xDomain, plotRect.width > 0 else { return nil }
+        let fraction = min(max((x - plotRect.minX) / plotRect.width, 0), 1)
+        return xDomain.lowerBound.addingTimeInterval(Double(fraction) * xDomain.upperBound.timeIntervalSince(xDomain.lowerBound))
+    }
+
+    func x(for date: Date) -> CGFloat? {
+        guard let xDomain, plotRect.width > 0 else { return nil }
+        let span = xDomain.upperBound.timeIntervalSince(xDomain.lowerBound)
+        guard span > 0 else { return nil }
+        return plotRect.minX + CGFloat(date.timeIntervalSince(xDomain.lowerBound) / span) * plotRect.width
+    }
+
+    func y(forMgDl value: Double) -> CGFloat? {
+        guard let yDomain, plotRect.height > 0, yDomain.upperBound > yDomain.lowerBound else { return nil }
+        let fraction = (value - yDomain.lowerBound) / (yDomain.upperBound - yDomain.lowerBound)
+        return plotRect.maxY - CGFloat(fraction) * plotRect.height
+    }
+}
+
 /// The experimental forecast as it crosses to widgets, Live Activity and the watch: a start and
 /// five-minute mg/dL values, compact enough for ActivityKit's payload limit.
 struct ExperimentalCompanionForecast: Codable, Hashable {
     var startAsDouble: Double
     var valuesMgDl: [Double]
+    /// True for the adaptive forecast; optional so older payloads still decode.
+    var isAdaptive: Bool?
     static let stepSeconds: TimeInterval = 5 * 60
 
     var plots: GlucoseChartExperimentalPlots {
         var plots = GlucoseChartExperimentalPlots()
         plots.showsInCompactCharts = true
+        plots.predictionIsAdaptive = isAdaptive ?? false
         plots.prediction = valuesMgDl.enumerated().map {
             GlucoseChartExperimentalPlots.PredictionPoint(
                 date: Date(timeIntervalSince1970: startAsDouble + Double($0.offset) * Self.stepSeconds), mgDl: $0.element)
@@ -1676,6 +1808,7 @@ struct ExperimentalCompanionForecast: Codable, Hashable {
         guard let dictionary = dictionary as? [String: Any], let start = dictionary["startAsDouble"] as? Double,
               let values = dictionary["valuesMgDl"] as? [Double], values.count > 1 else { return nil }
         self.init(startAsDouble: start, valuesMgDl: values)
+        isAdaptive = dictionary["isAdaptive"] as? Bool
     }
 
     init(startAsDouble: Double, valuesMgDl: [Double]) {

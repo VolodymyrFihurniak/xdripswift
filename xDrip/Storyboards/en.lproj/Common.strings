@@ -159,3 +159,9 @@
 
 /* Switch title when the surrounding screen or section identifies the feature */
 "common_enable" = "Enable";
+"quickactions_speak_readings" = "Speak readings";
+"quickactions_stop_speaking_readings" = "Stop speaking readings";
+"common_lastReadingAtFormat" = "Last reading at %@";
+"common_noDataAvailable" = "No Data Available";
+"common_sharedCalendar" = "Shared Calendar";
+"common_calendar" = "Calendar";

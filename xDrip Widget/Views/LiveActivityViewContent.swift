@@ -99,7 +99,7 @@ struct LiveActivityViewContentState: View {
                 GeometryReader { chartGeometry in
                     ZStack {
                         GlucoseChartView(glucoseChartType: .liveActivity, bgReadingValues: state.bgReadingValues, bgReadingDates: state.bgReadingDates, isMgDl: state.isMgDl, urgentLowLimitInMgDl: state.urgentLowLimitInMgDl, lowLimitInMgDl: state.lowLimitInMgDl, highLimitInMgDl: state.highLimitInMgDl, urgentHighLimitInMgDl: state.urgentHighLimitInMgDl, liveActivityType: .normal, hoursToShowScalingHours: nil, glucoseCircleDiameterScalingHours: nil, overrideChartHeight: nil, overrideChartWidth: max(chartGeometry.size.width, 0), highContrast: nil)
-                            .experimentalPlots(state.experimentalForecast?.plots ?? GlucoseChartExperimentalPlots())
+                            .experimentalPlots(state.experimentalPlots)
 
                         if state.warnUserToOpenApp {
                             VStack(alignment: .center) {
@@ -164,7 +164,7 @@ struct LiveActivityViewContentState: View {
 
                     GeometryReader { chartGeometry in
                         GlucoseChartView(glucoseChartType: .liveActivity, bgReadingValues: state.bgReadingValues, bgReadingDates: state.bgReadingDates, isMgDl: state.isMgDl, urgentLowLimitInMgDl: state.urgentLowLimitInMgDl, lowLimitInMgDl: state.lowLimitInMgDl, highLimitInMgDl: state.highLimitInMgDl, urgentHighLimitInMgDl: state.urgentHighLimitInMgDl, liveActivityType: .large, hoursToShowScalingHours: nil, glucoseCircleDiameterScalingHours: nil, overrideChartHeight: nil, overrideChartWidth: max(chartGeometry.size.width, 0), highContrast: nil)
-                            .experimentalPlots(state.experimentalForecast?.plots ?? GlucoseChartExperimentalPlots())
+                            .experimentalPlots(state.experimentalPlots)
                     }
                     .frame(height: ConstantsGlucoseChartSwiftUI.viewHeightLiveActivityLarge)
                     .padding(.horizontal, 15)
@@ -189,7 +189,7 @@ struct LiveActivityViewContentState: View {
 
                         Spacer(minLength: 8)
 
-                        Text("Last reading at \(state.bgReadingDate?.formatted(date: .omitted, time: .shortened) ?? "--:--")")
+                        Text(String(format: Texts_Common.lastReadingAtFormat, state.bgReadingDate?.formatted(date: .omitted, time: .shortened) ?? "--:--"))
                             .font(.caption)
                             .foregroundStyle(Color("colorSecondary"))
                             .lineLimit(1)

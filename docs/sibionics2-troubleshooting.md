@@ -49,9 +49,9 @@ The standard Battery Service level is read at each connection and every 6 hours 
 
 ## Calibration methods
 
-xDrip+ uses xDrip's own weighted calibration. The JugglucoNG methods are ports of JugglucoNG's `CalibrationMath`, which its Sibionics driver applies to the stock value through the integrated calibration lane:
+xDrip+ uses xDrip's own weighted calibration. The other methods are shown by name only; they are ports of JugglucoNG's `CalibrationMath`, which its Sibionics driver applies to the stock value through the integrated calibration lane:
 
-- **Weighted OLS** (JugglucoNG default): recency-weighted regression, slope 0.65–1.35, with a small pull towards the nearest fingerstick.
+- **Weighted regression** (default): recency-weighted regression, slope 0.65–1.35, with a small pull towards the nearest fingerstick.
 - **Median slope**: Theil-Sen style median over the twelve fingersticks nearest in time.
 - **Robust regression**: Huber-style reweighting that discounts outlying fingersticks.
 - **Elastic interpolation**: a local fit weighted by glucose proximity, blended with the robust trend.

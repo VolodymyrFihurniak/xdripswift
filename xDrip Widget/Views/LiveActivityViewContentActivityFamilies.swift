@@ -117,6 +117,7 @@ struct LiveActivityViewContentActivityFamiliesState: View {
                     overrideChartWidth: max(chartGeometry.size.width - 20, 0),
                     highContrast: nil
                 )
+                .experimentalPlots(state.experimentalLinePlots)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
         }

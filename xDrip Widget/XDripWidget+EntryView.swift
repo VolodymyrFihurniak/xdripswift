@@ -47,7 +47,7 @@ extension XDripWidget {
                 case .accessoryRectangular:
                     accessoryRectangularView
                 default:
-                    Text("No Data Available")
+                    Text(Texts_Common.noDataAvailable)
                 }
 
                 if showsKeepAliveDisabledMessage,

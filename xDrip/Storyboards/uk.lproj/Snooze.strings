@@ -4,7 +4,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// row text for overview snooze. Not snoozed alarm
-"not_snoozed" = "Not snoozed";
+"not_snoozed" = "Не відкладено";
 
 /// row text for overview snooze. Snoozed alarm, until .. followed by timestamp
-"snoozed_until" = "Snoozed until";
+"snoozed_until" = "Відкладено до";

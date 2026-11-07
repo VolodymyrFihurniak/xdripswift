@@ -4,10 +4,15 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// transmitter id given by user has invalid characters, allowed characters are a-z, A-Z, 0-9
-"error_message_Dexcom_transmitter_id_invalid_characters" = "The Transmitter ID should only contain characters a-z, A-Z or 0-9";
+"error_message_Dexcom_transmitter_id_invalid_characters" = "ID трансмітера може містити лише символи a-z, A-Z або 0-9";
 
 /// error message for the case where Dexcom G5 transmitter id given by user doesn't have 6 characters
-"error_message_transmitter_id_should_have_length_6" = "The Transmitter ID should be 6 characters long";
+"error_message_transmitter_id_should_have_length_6" = "ID трансмітера має складатися з 6 символів";
 
 /// error message for the case where Dexcom G5 transmitter id given by user doesn't have 5 characters
-"error_message_transmitter_id_should_have_length_5" = "The Transmitter ID should be 5 characters long";
+"error_message_transmitter_id_should_have_length_5" = "ID трансмітера має складатися з 5 символів";
+
+/* Fork: Ukrainian translation completed */
+"error_message_DexcomG7TypeTransmitterIDWrongPattern" = "ID трансмітера має починатися з DX";
+"error_message_transmitter_id_should_have_maximum_length_6" = "ID трансмітера має складатися щонайбільше з 6 символів";
+"error_message_DexcomG7TransmitterShouldStartWithDX" = "ID трансмітера Dexcom G7/ONE+/Stelo має починатися з «DX»";

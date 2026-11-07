@@ -219,6 +219,74 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertTrue(dates.contains(start.addingTimeInterval(3600)))
     }
 
+    // MARK: Insulin on board
+
+    func testInsulinOnBoardFallsFromTheDoseToZero() {
+        let shape = InsulinActivityStack.shape(for: .aspart, units: 6)
+        XCTAssertEqual(InsulinActivityStack.remaining(units: 6, shape: shape, minutes: 0), 6, accuracy: 1e-9)
+        // Python port of JugglucoNG JournalIobMath.remainingCurveFraction over the aspart curve.
+        XCTAssertEqual(InsulinActivityStack.remaining(units: 6, shape: shape, minutes: 60), 4.5093, accuracy: 0.001)
+        XCTAssertEqual(InsulinActivityStack.remaining(units: 6, shape: shape, minutes: 120), 2.6429, accuracy: 0.001)
+        XCTAssertEqual(InsulinActivityStack.remaining(units: 6, shape: shape, minutes: -5), 0)
+        XCTAssertEqual(InsulinActivityStack.remaining(units: 6, shape: shape, minutes: 360), 0)
+    }
+
+    func testOnBoardGroupsByInsulinAndEndsWithTheLastDose() throws {
+        let treatments = [ExperimentalTreatment(date: start, amount: 6, kind: .bolus, notes: nil),
+                          ExperimentalTreatment(date: start.addingTimeInterval(3600), amount: 6, kind: .bolus, notes: "NovoRapid"),
+                          ExperimentalTreatment(date: start, amount: 20, kind: .basalInjection, notes: nil),
+                          // Logged for later: not on board yet.
+                          ExperimentalTreatment(date: start.addingTimeInterval(3 * 3600), amount: 4, kind: .bolus, notes: nil)]
+        let onBoard = InsulinActivityStack.onBoard(treatments: treatments, at: start.addingTimeInterval(2 * 3600),
+                                                   bolusDefault: .aspart, basalDefault: .glargineU100)
+        XCTAssertEqual(Set(onBoard.map(\.insulin)), [.aspart, .glargineU100])
+        let aspart = try XCTUnwrap(onBoard.first { $0.insulin == .aspart })
+        XCTAssertEqual(aspart.units, 2.6429 + 4.5093, accuracy: 0.002)
+        XCTAssertEqual(aspart.activeUntil, start.addingTimeInterval(3600 + 360 * 60))
+        XCTAssertEqual(onBoard.map(\.units), onBoard.map(\.units).sorted(by: >))
+    }
+
+    func testBandCarriesTheInsulinOnBoard() throws {
+        let treatments = [ExperimentalTreatment(date: start, amount: 6, kind: .bolus, notes: nil)]
+        let dates = InsulinActivityStack.sampleDates(from: start, to: start.addingTimeInterval(3 * 3600), treatments: treatments)
+        let band = InsulinActivityStack.band(treatments: treatments, dates: dates, bolusDefault: .aspart, basalDefault: .glargineU100)
+        let index = try XCTUnwrap(dates.firstIndex(of: start.addingTimeInterval(3600)))
+        XCTAssertEqual(band.layers[0].onBoard[index], 4.5093, accuracy: 0.001)
+        XCTAssertEqual(band.layers[0].onBoard[0], 6, accuracy: 1e-9)
+    }
+
+    func testPlotsReadTheInsulinOnBoardNearestTheCursor() {
+        var plots = GlucoseChartExperimentalPlots()
+        plots.insulin = [GlucoseChartExperimentalPlots.InsulinLayer(
+            id: "aspart", name: "NovoRapid", color: .blue,
+            points: [GlucoseChartExperimentalPlots.InsulinPoint(date: start, bottom: 0, top: 1, onBoard: 3),
+                     GlucoseChartExperimentalPlots.InsulinPoint(date: start.addingTimeInterval(300), bottom: 0, top: 1, onBoard: 2.8)],
+            countsTowardIOB: true)]
+        XCTAssertEqual(plots.onBoard(at: start.addingTimeInterval(200)).map(\.units), [2.8])
+        XCTAssertTrue(plots.onBoard(at: start.addingTimeInterval(3600)).isEmpty)
+    }
+
+    // MARK: Chart cursor
+
+    func testCursorFindsTheNearestReading() {
+        let dates = [0, 5, 10, 15].map { start.addingTimeInterval(TimeInterval($0 * 60)) }
+        XCTAssertEqual(RootHomeMainChartView.nearestIndex(in: dates, to: start.addingTimeInterval(7 * 60)), 1)
+        XCTAssertEqual(RootHomeMainChartView.nearestIndex(in: dates, to: start.addingTimeInterval(8 * 60)), 2)
+        XCTAssertEqual(RootHomeMainChartView.nearestIndex(in: dates, to: start.addingTimeInterval(-60)), 0)
+        XCTAssertEqual(RootHomeMainChartView.nearestIndex(in: dates, to: start.addingTimeInterval(99 * 60)), 3)
+        XCTAssertNil(RootHomeMainChartView.nearestIndex(in: [], to: start))
+    }
+
+    func testCursorGeometryMapsTimeAndGlucose() {
+        let geometry = GlucoseChartCursorGeometry()
+        XCTAssertNil(geometry.date(atX: 10))
+        geometry.update(plotRect: CGRect(x: 10, y: 0, width: 200, height: 100), xDomain: start...start.addingTimeInterval(3600), yDomain: 40...240)
+        XCTAssertEqual(geometry.date(atX: 110), start.addingTimeInterval(1800))
+        XCTAssertEqual(geometry.date(atX: -50), start)
+        XCTAssertEqual(geometry.x(for: start.addingTimeInterval(900)), 60)
+        XCTAssertEqual(geometry.y(forMgDl: 140), 50)
+    }
+
     // MARK: Chart helpers
 
     func testGlucoseLineBreaksAtGapsAndChangesColourWithTheRange() {
@@ -397,5 +465,195 @@ final class ExperimentalFeaturesTests: XCTestCase {
         let aboutIndex = try XCTUnwrap(sections.firstIndex { $0.id == SettingsRootSection.about.rawValue * 10 })
         XCTAssertLessThan(index, aboutIndex)
         XCTAssertEqual(sections[index].section().rows.map(\.id), ["experimental.chartStyle", "experimental.prediction", "experimental.insulins"])
+    }
+}
+
+/// JugglucoNG `AdaptiveGlucoseForecastTests`: the adaptive forecast learns only from the past,
+/// needs two days before it answers, never reads across a sensor change or a gap, survives a save
+/// and load, and on data with a learnable pattern beats assuming no change. The expectations were
+/// checked with a Python port of the Swift code on the same generated data.
+final class AdaptiveGlucoseForecastTests: XCTestCase {
+    private let utc = TimeZone(identifier: "UTC")!
+    private let start: TimeInterval = 1_800_000_000
+    private let minute: TimeInterval = 60
+    private let day: TimeInterval = 24 * 60 * 60
+
+    /// SplitMix64, so the generated history is the same on every run and in the Python check.
+    private struct SplitMix64 {
+        var state: UInt64
+        mutating func next() -> UInt64 {
+            state &+= 0x9E37_79B9_7F4A_7C15
+            var z = state
+            z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+            z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+            return z ^ (z >> 31)
+        }
+        mutating func between(_ low: Double, _ high: Double) -> Double {
+            low + (high - low) * (Double(next() >> 11) * 0x1p-53)
+        }
+    }
+
+    /// Five-minute readings of a mean-reverting process with momentum: glucose drifts toward 130
+    /// and a move tends to continue for a while.
+    private func history(days: Double, seed: UInt64 = 1, sensorChangeAt: TimeInterval? = nil) -> AdaptiveHistory {
+        var rng = SplitMix64(state: seed)
+        let count = Int(days * 24 * 12)
+        var glucose = 130.0, velocity = 0.0
+        var times: [TimeInterval] = [], values: [Double] = []
+        for index in 0..<count {
+            velocity = 0.85 * velocity + 0.02 * (130.0 - glucose) + rng.between(-2.5, 2.5) + 1.5 * sin(2 * Double.pi * Double(index) / 288.0)
+            glucose += velocity
+            times.append(start + Double(index) * 5 * minute)
+            values.append(min(max(glucose, 40), 400))
+        }
+        let sensors: [String?] = times.map { time in sensorChangeAt.map { time >= $0 } == true ? "B" : "A" }
+        return AdaptiveHistory.of(times: times, mgDl: values, sensors: sensors)
+    }
+
+    private func date(_ seconds: TimeInterval) -> Date { Date(timeIntervalSince1970: seconds) }
+
+    private func keeping(_ history: AdaptiveHistory, _ keep: (TimeInterval) -> Bool) -> AdaptiveHistory {
+        let indices = history.times.indices.filter { keep(history.times[$0]) }
+        return AdaptiveHistory(times: indices.map { history.times[$0] }, mgDl: indices.map { history.mgDl[$0] },
+                               segment: indices.map { history.segment[$0] })
+    }
+
+    func testNoModelBeforeTwoDaysOfHistory() throws {
+        let short = history(days: 1.5)
+        XCTAssertNil(AdaptiveGlucoseForecast.fit(short, now: date(try XCTUnwrap(short.times.last)), timeZone: utc))
+        let model = try XCTUnwrap(AdaptiveGlucoseForecast.fit(history(days: 2.5), now: date(start + 2.5 * day), timeZone: utc))
+        XCTAssertEqual(model.trainingRows, 701)
+        XCTAssertNil(model.holdoutRMSE, "fewer than four days: nothing held back")
+    }
+
+    func testItLearnsOnlyFromOutcomesBeforeNow() throws {
+        let now = start + 5 * day
+        let past = history(days: 6)
+        // Same past, a different future after `now`: the fitted model must be identical.
+        let altered = AdaptiveHistory(times: past.times, mgDl: zip(past.times, past.mgDl).map { $0.0 <= now ? $0.1 : $0.1 * 0.5 + 60 },
+                                      segment: past.segment)
+        let a = try XCTUnwrap(AdaptiveGlucoseForecast.fit(past, now: date(now), timeZone: utc))
+        let b = try XCTUnwrap(AdaptiveGlucoseForecast.fit(altered, now: date(now), timeZone: utc))
+        XCTAssertEqual(a, b)
+    }
+
+    func testItBeatsNoChangeOnALearnablePattern() throws {
+        let train = history(days: 10, seed: 3)
+        let model = try XCTUnwrap(AdaptiveGlucoseForecast.fit(train, now: date(try XCTUnwrap(train.times.last)), timeZone: utc))
+        XCTAssertNotNil(model.holdoutRMSE, "holdout checked on 10 days")
+        XCTAssertTrue(model.isReliable)
+
+        // Fresh data from the same process, never seen in training.
+        let test = history(days: 3, seed: 9)
+        let k30 = try XCTUnwrap(model.horizons.firstIndex(of: 30))
+        var squaredModel = 0.0, squaredNoChange = 0.0, count = 0
+        for index in 24..<(test.count - 6) {
+            guard let deltas = AdaptiveGlucoseForecast.forecastDeltas(model, history: test, origin: date(test.times[index]), timeZone: utc),
+                  let delta = deltas[k30] else { continue }
+            let actual = test.mgDl[index + 6] - test.mgDl[index]
+            squaredModel += (delta - actual) * (delta - actual)
+            squaredNoChange += actual * actual
+            count += 1
+        }
+        XCTAssertGreaterThan(count, 500)
+        // The Python port measures 0.43 here.
+        XCTAssertLessThan(squaredModel, squaredNoChange * 0.9)
+    }
+
+    func testFeaturesNeverReachAcrossASensorChange() throws {
+        let change = start + 3 * day
+        let changed = history(days: 4, sensorChangeAt: change)
+        let model = try XCTUnwrap(AdaptiveGlucoseForecast.fit(changed, now: date(start + 4 * day - 10 * minute), timeZone: utc))
+        // Within the new sensor's first hour the past hour belongs to the old sensor: no answer.
+        XCTAssertNil(AdaptiveGlucoseForecast.forecastDeltas(model, history: changed, origin: date(change + 30 * minute), timeZone: utc))
+        XCTAssertNotNil(AdaptiveGlucoseForecast.forecastDeltas(model, history: changed, origin: date(change + 65 * minute), timeZone: utc))
+    }
+
+    func testAGapLeavesNoFeaturesUntilAnHourOfReadingsIsBack() throws {
+        let gapStart = start + 2 * day
+        let gapped = keeping(history(days: 3)) { !(gapStart...(gapStart + 3 * 60 * minute)).contains($0) }
+        let model = try XCTUnwrap(AdaptiveGlucoseForecast.fit(history(days: 3), now: date(start + 3 * day - 10 * minute), timeZone: utc))
+        let firstAfter = gapStart + 3 * 60 * minute + 5 * minute
+        XCTAssertNil(AdaptiveGlucoseForecast.forecastDeltas(model, history: gapped, origin: date(firstAfter), timeZone: utc))
+        XCTAssertNotNil(AdaptiveGlucoseForecast.forecastDeltas(model, history: gapped, origin: date(firstAfter + 60 * minute), timeZone: utc))
+    }
+
+    func testAHoleInsideTheHourIsCaughtEvenWhenEverySpotLookupLands() throws {
+        // Readings at t−60 and from t−35 on: the 5/15/30/60-minute lookups all find values, but
+        // 25 minutes of the hour are missing, so the features must not be formed.
+        let full = history(days: 3)
+        let t = full.times[full.count - 40]
+        let holed = keeping(full) { $0 <= t - 60 * minute || $0 >= t - 35 * minute }
+        let model = try XCTUnwrap(AdaptiveGlucoseForecast.fit(full, now: date(try XCTUnwrap(full.times.last)), timeZone: utc))
+        XCTAssertNotNil(AdaptiveGlucoseForecast.forecastDeltas(model, history: full, origin: date(t), timeZone: utc))
+        XCTAssertNil(AdaptiveGlucoseForecast.forecastDeltas(model, history: holed, origin: date(t), timeZone: utc))
+    }
+
+    func testASavedModelLoadsBackTheSame() throws {
+        let model = try XCTUnwrap(AdaptiveGlucoseForecast.fit(history(days: 5), now: date(start + 5 * day - 10 * minute), timeZone: utc))
+        let loaded = try XCTUnwrap(AdaptiveForecastModel.decode(model.encoded()))
+        XCTAssertEqual(loaded, model)
+        let other = AdaptiveForecastModel(version: 99, trainedAt: model.trainedAt, horizons: model.horizons, means: model.means,
+                                          scales: model.scales, weights: model.weights, trainingRows: model.trainingRows,
+                                          trainingDays: model.trainingDays, holdoutRMSE: model.holdoutRMSE,
+                                          holdoutNoChangeRMSE: model.holdoutNoChangeRMSE)
+        XCTAssertNil(AdaptiveForecastModel.decode(other.encoded()), "another version is not loaded")
+        XCTAssertNil(AdaptiveForecastModel.decode(Data("garbage".utf8)))
+    }
+
+    func testReliabilityAllowsTwoPercentOverNoChange() {
+        func model(_ holdout: Double?, _ noChange: Double?) -> AdaptiveForecastModel {
+            AdaptiveForecastModel(version: 1, trainedAt: Date(), horizons: [30], means: [], scales: [], weights: [nil], trainingRows: 0,
+                                  trainingDays: 0, holdoutRMSE: holdout, holdoutNoChangeRMSE: noChange)
+        }
+        XCTAssertTrue(model(nil, nil).isReliable)
+        XCTAssertTrue(model(10, 9.9).isReliable)
+        XCTAssertFalse(model(10.2, 9.9).isReliable)
+    }
+
+    func testPointsFollowTheHorizonWithTheStandardConfidenceRamp() throws {
+        let origin = date(start)
+        let points = try XCTUnwrap(AdaptiveGlucoseForecast.points(baseline: (origin, 100), deltas: Array(repeating: 10, count: 24),
+                                                                   horizons: AdaptiveGlucoseForecast.horizons, horizonMinutes: 30))
+        XCTAssertEqual(points.count, 7)
+        XCTAssertEqual(points.last?.date, origin.addingTimeInterval(30 * minute))
+        XCTAssertEqual(points.last?.value, 110)
+        XCTAssertEqual(points[3].confidence, 0.88 - 0.62 * sqrt(0.5), accuracy: 1e-12)
+        XCTAssertEqual(points[6].confidence, 0.26, accuracy: 1e-12)
+        // At most two hours, whatever the forecast length; values clamped like the chart's.
+        let low = try XCTUnwrap(AdaptiveGlucoseForecast.points(baseline: (origin, 100), deltas: Array(repeating: -100, count: 24),
+                                                                horizons: AdaptiveGlucoseForecast.horizons, horizonMinutes: 240))
+        XCTAssertEqual(low.count, 25)
+        XCTAssertEqual(low.last?.value, 18)
+        XCTAssertEqual(low.last?.unclampedValue, 0)
+    }
+
+    func testGaussianSolve() {
+        let x = AdaptiveGlucoseForecast.gaussianSolve([[2, 1], [1, 3]], [3, 5])
+        XCTAssertEqual(x[0], 0.8, accuracy: 1e-12)
+        XCTAssertEqual(x[1], 1.4, accuracy: 1e-12)
+    }
+
+    func testChartReadingsNewerThanTheStoreJoinTheNewestSensor() {
+        var readings = AdaptiveReadings(times: [start, start + 300], mgDl: [100, 110], sensors: ["s1", "s1"])
+        readings.appendNewer(dates: [date(start + 300), date(start + 600), date(start + 900)], values: [110, 120, 130],
+                             until: date(start + 600))
+        XCTAssertEqual(readings.times, [start, start + 300, start + 600])
+        XCTAssertEqual(readings.mgDl, [100, 110, 120])
+        XCTAssertEqual(readings.sensors, ["s1", "s1", "s1"])
+    }
+
+    func testWithoutAModelTheStandardForecastWithoutTrendIsShown() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "AdaptiveGlucoseForecastTests"))
+        defaults.removePersistentDomain(forName: "AdaptiveGlucoseForecastTests")
+        let standard = [GlucosePredictionPoint(date: date(start), value: 100, confidence: 1, unclampedValue: 100),
+                        GlucosePredictionPoint(date: date(start + 300), value: 101, confidence: 0.8, unclampedValue: 101)]
+        var askedMomentum: Bool?
+        let shown = AdaptiveForecastStore.shownForecast(readings: AdaptiveReadings(), standard: { askedMomentum = $0; return standard },
+                                                        horizonMinutes: 120, defaults: defaults, now: date(start + 300))
+        XCTAssertFalse(shown.isAdaptive)
+        XCTAssertEqual(shown.points, standard)
+        XCTAssertEqual(askedMomentum, false)
+        XCTAssertEqual(AdaptiveForecastStore.status(defaults: defaults), .learning)
     }
 }

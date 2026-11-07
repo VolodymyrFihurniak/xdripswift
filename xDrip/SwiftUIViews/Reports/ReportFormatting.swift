@@ -98,6 +98,10 @@ enum GlucoseReportFormatting {
     static func hoursPerDay(minutes totalMinutes: Int, language: GlucoseReportLanguage) -> String {
         let hours = totalMinutes / 60
         let minutes = totalMinutes % 60
+        if language == .ukrainian {
+            return hours == 0 ? "\(minutes) хв/добу" : "\(hours) год \(minutes) хв/добу"
+        }
+
         let daySuffix = language == .spanish ? "día" : "day"
 
         if hours == 0 {

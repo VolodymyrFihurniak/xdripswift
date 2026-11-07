@@ -55,8 +55,14 @@ enum GlucoseReportLanguage: String, CaseIterable, Identifiable {
     case german = "de"
     case italian = "it"
     case portuguese = "pt"
+    case ukrainian = "uk"
 
     var id: String { rawValue }
+
+    /// The report language when none was chosen: Ukrainian on a Ukrainian device, else English.
+    static var defaultLanguage: GlucoseReportLanguage {
+        Locale.preferredLanguages.first?.hasPrefix("uk") == true ? .ukrainian : .english
+    }
 
     var title: String {
         switch self {
@@ -74,6 +80,8 @@ enum GlucoseReportLanguage: String, CaseIterable, Identifiable {
             return "Italiano"
         case .portuguese:
             return "Português"
+        case .ukrainian:
+            return "Українська"
         }
     }
 
@@ -97,6 +105,8 @@ enum GlucoseReportLanguage: String, CaseIterable, Identifiable {
             return key.italian
         case .portuguese:
             return key.portuguese
+        case .ukrainian:
+            return key.ukrainian
         }
     }
 
@@ -1191,6 +1201,82 @@ enum GlucoseReportText {
         case .footerGeneratedFormat: return "Gerado por %@ (%@) a partir de dados MCG armazenados localmente."
         case .pageFormat: return "Página %d de %d"
         case .periodReportFormat: return "Relatório de %d dias"
+        }
+    }
+
+    var ukrainian: String {
+        switch self {
+        case .continuousGlucoseMonitoringReport: return "Звіт безперервного моніторингу глюкози"
+        case .generatedFormat: return "Створено %@"
+        case .patient: return "Пацієнт"
+        case .patientID: return "ID пацієнта"
+        case .dateRange: return "Період"
+        case .units: return "Одиниці"
+        case .timeInRange: return "Час у діапазоні"
+        case .timeInTightRange: return "Час у вузькому діапазоні"
+        case .low: return "Низько"
+        case .inRange: return "У діапазоні"
+        case .tightRange: return "Вузький діапазон"
+        case .high: return "Високо"
+        case .timeInRangeSource: return "Межі: міжнародний консенсус щодо часу в діапазоні"
+        case .timeInTightRangeSource: return "Межі: клінічне визначення часу у вузькому діапазоні"
+        case .ambulatoryGlucoseProfile: return "Амбулаторний профіль глюкози"
+        case .insufficientAGPData: return "Недостатньо даних для графіка перцентилів AGP"
+        case .averageGlucose: return "Середня глюкоза"
+        case .consensusEstimate: return "консенсусна оцінка"
+        case .targetLessThanOrEqual: return "ціль <=%@"
+        case .targetGreaterThanOrEqual: return "ціль >=%@"
+        case .targetLessThan: return "ціль <%@"
+        case .readings: return "Показники"
+        case .timeBelowRange: return "Час нижче діапазону"
+        case .timeAboveRange: return "Час вище діапазону"
+        case .dailyPatternSummary: return "Підсумок добового профілю"
+        case .bestTIR: return "Найкращий TIR"
+        case .lowestAverage: return "Найнижче сер."
+        case .highestAverage: return "Найвище сер."
+        case .trendAnalysis: return "Аналіз тенденцій"
+        case .gmi: return "GMI"
+        case .lowerIsGenerallyBetter: return "Зазвичай що нижче, то краще"
+        case .cv: return "КВ"
+        case .daily: return "Щодня"
+        case .threeDay: return "3 дні"
+        case .weekly: return "Щотижня"
+        case .insufficientData: return "Недостатньо даних"
+        case .gmiFootnote: return "GMI розраховано за даними CGM; його слід тлумачити як оцінку, а не як лабораторний результат HbA1c."
+        case .cgmSystemAndReportQuality: return "Система CGM і якість звіту"
+        case .cgmSource: return "Джерело даних"
+        case .storedCGMReadings: return "Збережені показники CGM"
+        case .sensorsInPeriod: return "Сенсорів за період"
+        case .averageSensorDurationFormat: return "у середньому %@ на сенсор"
+        case .calibrations: return "Калібрування"
+        case .firstReading: return "Перший показник"
+        case .lastReading: return "Останній показник"
+        case .dataCapture: return "Повнота даних"
+        case .automatedInsulinDelivery: return "Дані OS-AID/циклу"
+        case .aidSystem: return "Система"
+        case .pump: return "Помпа"
+        case .loopingTime: return "Успішність циклу"
+        case .averageTDD: return "Середня добова доза"
+        case .averageCarbs: return "Середні вуглеводи"
+        case .pumpSuspension: return "Зупинка помпи"
+        case .reservoir: return "Резервуар"
+        case .battery: return "Батарея"
+        case .loopingOverview: return "Огляд циклу"
+        case .scheduledBasalProfile: return "Запланований базальний профіль"
+        case .basalProfile: return "Базальний профіль"
+        case .tempBasalDelta: return "Зміна тимчасового базалу"
+        case .scheduledBasal: return "Запланований базал"
+        case .deliveredBasal: return "Введений базал"
+        case .profile: return "Профіль"
+        case .carbRatio: return "Вуглеводний коефіцієнт"
+        case .sensitivity: return "Чутливість до інсуліну"
+        case .loopalyzerPeriodFormat: return "Останні %d дн."
+        case .loopalyzerFootnote: return "Подання в стилі Loopalyzer за мотивами звітів Nightscout. Середні за кілька днів можуть згладжувати реакції на їжу та корекції, тому період аналізу обмежено 3 днями. Для глибшого аналізу скористайтеся функцією Loopalyzer у Nightscout."
+        case .careLinkCarbChartTitle: return "Введені вуглеводи. CareLink не надає COB."
+        case .reportInterpretationNote: return "Цей звіт підсумовує збережені показники CGM для клінічного огляду. Це не відображення лікування в реальному часі; тлумачити його слід разом із лікарями користувача."
+        case .footerGeneratedFormat: return "Створено %@ (%@) з даних CGM, збережених на пристрої."
+        case .pageFormat: return "Сторінка %d з %d"
+        case .periodReportFormat: return "Звіт за %d дн."
         }
     }
 }

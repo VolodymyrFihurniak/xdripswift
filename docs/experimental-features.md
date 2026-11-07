@@ -1,14 +1,35 @@
 # Experimental features
 
-Settings → **Experimental features**. Everything here is off by default and only changes the
-main chart on the Home screen; widgets, the watch, alerts, Nightscout and AID sharing are not
-affected. The models are ported from JugglucoNG (see `THIRD_PARTY_NOTICES.md`).
+Settings → **Experimental features**. Everything here is off by default except the chart cursor,
+and mostly changes the main chart on the Home screen; where a feature reaches widgets, the
+watch, alerts or Nightscout, its section says so. AID sharing is never affected. The models are
+ported from JugglucoNG (see `THIRD_PARTY_NOTICES.md`).
 
 ## Glucose on the chart
 
 **Points** is xDrip's usual one dot per reading. **Line** joins the readings in their range
 colour, as JugglucoNG does. The line breaks where two readings are more than 17 minutes apart
 (JugglucoNG `GlucoseChartGap`), so missing data still looks missing.
+
+The choice also applies to the home screen and lock screen widgets, the Live Activity (Dynamic
+Island, Smart Stack and CarPlay included), the watch app and the rotated day-comparison chart
+(landscape, and the iPad AGP view). Companions pick it up with the next reading. The small
+overview chart under the main chart keeps its dots.
+
+## Chart cursor
+
+JugglucoNG's scrub cursor, on by default. Touch the glucose line (within 26 points; JugglucoNG
+uses 32 dp), or hold a finger still anywhere on the main chart for 0.4 s, then slide. A thin
+vertical line and a ring mark the nearest reading within 15 minutes, or the forecast point to
+the right of the newest reading. A card above the chart shows:
+
+- the time (with the weekday when it is not today) and the glucose;
+- IOB and every insulin still on board at that moment, with the experimental insulins on;
+  otherwise xDrip's own IOB and COB when the Treatments curves are shown;
+- the bolus, basal injection and carbs logged at that moment.
+
+The cursor stays after the finger lifts; the next touch, a pinch or a double tap clears it.
+Each new reading under the finger gives a light haptic tick.
 
 ## Glucose prediction
 
@@ -47,6 +68,33 @@ Model refinements (JugglucoNG `PredictionModelProfile`, `JournalHumanProfile`, `
   after the meal and lasting 90–480 min.
 - **Exercise intensity**: the editor offers light, moderate or intense (notes `intensity:light`),
   scaling the drop by 0.35, 0.65 or 1; not set keeps 0.5.
+
+### Adaptive prediction
+
+JugglucoNG's adaptive ("personal") forecast (`AdaptiveGlucoseForecast`), off by default. It
+learns from your own readings what the standard model assumes: how much of the recent movement
+tends to carry on, and how strongly glucose drifts back toward your own average.
+
+- One ridge regression (λ = 1) per horizon, every 5 minutes out to 2 hours, predicting the
+  change from the current reading. Eight features from CGM history only: the change over the
+  last 5, 15, 30 and 60 minutes, the distance from the 24-hour mean, the level and the time of
+  day. Logged insulin and carbs are not used (on JugglucoNG's data they made it worse).
+- Trained on the last 28 days on a 5-minute grid, from the displayed value; it needs 576 rows
+  (two days) before it answers. A value is never read across a sensor change or a gap longer
+  than 2.5 readings, and the hour behind a reading must be continuous, so a new sensor's first
+  hour and the hour after a gap have no adaptive forecast.
+- With four days or more, the last two days are held back once: if the model's 30-minute error
+  there is more than 2 % worse than assuming no change, it is not used.
+- It relearns once a day on a background queue (after a new reading, or when the chart asks);
+  a fit that found too little data is retried after six hours. **Relearn now** forgets the model.
+  The model is stored in the app's settings; **Learned model** shows learning, learned from N
+  days, or not better than no change yet.
+- Drawn dotted, at most 2 hours ahead, also on widgets, Live Activity and the watch. When it
+  cannot answer, the standard forecast without the trend momentum is drawn instead, as
+  JugglucoNG does. The predicted low alert and the Nightscout upload always use the standard
+  forecast; the chart cursor reads whichever is drawn.
+- With **Record accuracy** on, the adaptive forecast from the same reading is recorded too, and
+  **Prediction accuracy** shows the two side by side.
 
 ### Prediction accuracy
 
@@ -90,6 +138,14 @@ measured per kilogram use the study's reference dose.
   dose's layer adds up to the dose. Steady-state curves (Toujeo, Tresiba) are reduced to one
   daily dose as `S(t) − S(t + 24 h)`. A curve ends where its source stopped measuring.
 - A legend at the top left of the main chart names the colour of each insulin in view.
+- **Insulin on board** (JugglucoNG `JournalIobMath`): each dose's remaining units are the share
+  of its action curve still to come, all of it at the injection and none once the curve ends.
+  The shapes are the chart band's, so what is left matches the area still to be drawn. The card
+  at the top left of the main chart shows IOB of the rapid insulins (the ones that count toward
+  the forecast) and the basal insulin still on board now; a tap lists each insulin with its
+  units and when its last dose stops acting. The chart cursor shows the same at any moment.
+- On the chart, a basal injection sits on the bolus row and is moved sideways when a bolus
+  marker would cover it. The treatment editor and the Treatments filters list basal right
+  after bolus.
 - The IOB/COB numbers and curves of the Treatments settings are unchanged.
 
-Not ported yet: JugglucoNG's adaptive forecast.
