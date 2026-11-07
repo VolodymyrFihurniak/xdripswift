@@ -55,7 +55,7 @@ extension XDripWidget.EntryView {
                 
                 Spacer()
                 
-                Text("Last reading at \(entry.widgetState.bgReadingDate?.formatted(date: .omitted, time: .shortened) ?? "--:--")")
+                Text(String(format: Texts_Common.lastReadingAtFormat, entry.widgetState.bgReadingDate?.formatted(date: .omitted, time: .shortened) ?? "--:--"))
                     .font(.caption)
                     .foregroundStyle(.colorSecondary)
             }

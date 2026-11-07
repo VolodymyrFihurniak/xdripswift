@@ -273,3 +273,7 @@
 "common_notAvailable" = "Недоступно";
 "quickactions_speak_readings" = "Озвучувати показники";
 "quickactions_stop_speaking_readings" = "Не озвучувати показники";
+"common_lastReadingAtFormat" = "Останній показник о %@";
+"common_noDataAvailable" = "Немає даних";
+"common_sharedCalendar" = "Спільний календар";
+"common_calendar" = "Календар";

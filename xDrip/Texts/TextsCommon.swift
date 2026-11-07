@@ -551,4 +551,14 @@ class Texts_Common {
     static let notAvailable = {
         return NSLocalizedString("common_notAvailable", tableName: filename, bundle: Bundle.main, value: "Not Available", comment: "not available")
     }()
+
+    /// Widgets and Live Activity; %@ is the time of the reading.
+    static let lastReadingAtFormat = NSLocalizedString("common_lastReadingAtFormat", tableName: filename, bundle: .main, value: "Last reading at %@", comment: "Widget and Live Activity footer with the time of the last reading")
+
+    /// Follower data source that reads a shared calendar.
+    static let sharedCalendar = NSLocalizedString("common_sharedCalendar", tableName: filename, bundle: .main, value: "Shared Calendar", comment: "Follower data source name")
+
+    static let calendar = NSLocalizedString("common_calendar", tableName: filename, bundle: .main, value: "Calendar", comment: "Short follower data source name")
+
+    static let noDataAvailable = NSLocalizedString("common_noDataAvailable", tableName: filename, bundle: .main, value: "No Data Available", comment: "Widget family without content")
 }

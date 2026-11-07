@@ -29,9 +29,9 @@ struct AIDStatusView: View {
         var name: String {
             switch self {
             case .deviceStatus:
-                return "Device Status"
+                return String(localized: "Device Status")
             case .profile:
-                return "Profile"
+                return String(localized: "Profile")
             }
         }
     }
@@ -94,29 +94,29 @@ struct AIDStatusView: View {
                         Section(header: Text("System Status")) {
                             // if more than a few seconds difference between the last connection and last loop date, then show the connection separately
                             if deviceStatus.lastLoopDate.timeIntervalSince(deviceStatus.createdAt) > 5 {
-                                row(title: "Last cycle", data: "\(deviceStatus.createdAt.formatted(date: .omitted, time: .shortened)) (\(deviceStatus.createdAt.daysAndHoursAgo(appendAgo: true)))")
+                                row(title: String(localized: "Last cycle"), data: "\(deviceStatus.createdAt.formatted(date: .omitted, time: .shortened)) (\(deviceStatus.createdAt.daysAndHoursAgo(appendAgo: true)))")
                             }
                             
                             // show the last loop date only if it exists
                             if deviceStatus.lastLoopDate != .distantPast {
-                                row(title: "Last loop", data: "\(deviceStatus.lastLoopDate.formatted(date: .omitted, time: .shortened)) (\(deviceStatus.lastLoopDate.daysAndHoursAgo(appendAgo: true)))")
+                                row(title: String(localized: "Last loop"), data: "\(deviceStatus.lastLoopDate.formatted(date: .omitted, time: .shortened)) (\(deviceStatus.lastLoopDate.daysAndHoursAgo(appendAgo: true)))")
                                 
                                 // if not, show the nil string rather than just hiding the row. This gives context.
                             } else {
-                                row(title: "Last loop", data: nilString)
+                                row(title: String(localized: "Last loop"), data: nilString)
                             }
                             
                             // show the active profile if available (AAPS)
                             if let activeProfile = deviceStatus.activeProfile {
-                                row(title: "Active profile", data: activeProfile)
+                                row(title: String(localized: "Active profile"), data: activeProfile)
                             }
                             
                             // show the override enabled if application (Loop)
                             if let overrideIsActive = deviceStatus.overrideActive, overrideIsActive, let overrideName = deviceStatus.overrideName {
                                 if let overrideMaxValue = deviceStatus.overrideMaxValue, let overrideMinValue = deviceStatus.overrideMinValue {
-                                    row(title: "Override", data: "\(overrideName) (\(overrideMinValue.mgDlToMmolAndToString(mgDl: isMgDl))-\(overrideMaxValue.mgDlToMmolAndToString(mgDl: isMgDl)))")
+                                    row(title: String(localized: "Override"), data: "\(overrideName) (\(overrideMinValue.mgDlToMmolAndToString(mgDl: isMgDl))-\(overrideMaxValue.mgDlToMmolAndToString(mgDl: isMgDl)))")
                                 } else {
-                                    row(title: "Override", data: "\(overrideName)")
+                                    row(title: String(localized: "Override"), data: "\(overrideName)")
                                 }
                             }
                             
@@ -134,7 +134,7 @@ struct AIDStatusView: View {
                         
                         Section(header: Text("Uploader")) {
                             if let deviceName = deviceStatus.deviceName() {
-                                row(title: "Device", data: deviceName)
+                                row(title: String(localized: "Device"), data: deviceName)
                             }
                             
                             HStack {
@@ -160,51 +160,51 @@ struct AIDStatusView: View {
                         }
                         
                         Section(header: Text("\(deviceStatus.systemName() ?? "AID") Specific")) {
-                            row(title: "Basal rate", data: (deviceStatus.rate?.round(toDecimalPlaces: 2).description ?? "-") + " U/hr")
+                            row(title: String(localized: "Basal rate"), data: (deviceStatus.rate?.round(toDecimalPlaces: 2).description ?? "-") + " " + Texts_TreatmentsView.basalRateUnit)
                             
-                            row(title: "Duration", data: (deviceStatus.duration?.description ?? "-") + " mins")
+                            row(title: String(localized: "Duration"), data: (deviceStatus.duration?.description ?? "-") + " " + Texts_TreatmentsView.exerciseUnit)
                             
                             if let bolusVolume = deviceStatus.bolusVolume {
-                                row(title: "Auto-bolus given", data: bolusVolume.round(toDecimalPlaces: 2).description + " U")
+                                row(title: String(localized: "Auto-bolus given"), data: bolusVolume.round(toDecimalPlaces: 2).description + " " + Texts_TreatmentsView.insulinUnit)
                             }
                             
-                            row(title: "IOB", data: (deviceStatus.iob?.round(toDecimalPlaces: 2).stringWithoutTrailingZeroes ?? nilString) + " U")
+                            row(title: String(localized: "IOB"), data: (deviceStatus.iob?.round(toDecimalPlaces: 2).stringWithoutTrailingZeroes ?? nilString) + " " + Texts_TreatmentsView.insulinUnit)
                             
-                            row(title: "COB", data: (deviceStatus.cob?.round(toDecimalPlaces: 0).stringWithoutTrailingZeroes ?? nilString) + " g")
+                            row(title: String(localized: "COB"), data: (deviceStatus.cob?.round(toDecimalPlaces: 0).stringWithoutTrailingZeroes ?? nilString) + " " + Texts_TreatmentsView.carbsUnit)
                             
                             if let isf = deviceStatus.isf {
-                                row(title: "ISF", data: isf.round(toDecimalPlaces: 0).stringWithoutTrailingZeroes)
+                                row(title: String(localized: "ISF"), data: isf.round(toDecimalPlaces: 0).stringWithoutTrailingZeroes)
                             }
                             
                             if let sensitivityRatio = deviceStatus.sensitivityRatio {
-                                row(title: "Autosens", data: sensitivityRatio.round(toDecimalPlaces: 1).description)
+                                row(title: String(localized: "Autosens"), data: sensitivityRatio.round(toDecimalPlaces: 1).description)
                             }
                             
                             if let tdd = deviceStatus.tdd {
-                                row(title: "TDD", data: tdd.round(toDecimalPlaces: 1).description + " U")
+                                row(title: String(localized: "TDD"), data: tdd.round(toDecimalPlaces: 1).description + " " + Texts_TreatmentsView.insulinUnit)
                             }
                             
                             if let currentTarget = deviceStatus.currentTarget {
-                                row(title: "Current target", data: "\(currentTarget.mgDlToMmolAndToString(mgDl: isMgDl)) \(isMgDl ? Texts_Common.mgdl : Texts_Common.mmol)")
+                                row(title: String(localized: "Current target"), data: "\(currentTarget.mgDlToMmolAndToString(mgDl: isMgDl)) \(isMgDl ? Texts_Common.mgdl : Texts_Common.mmol)")
                             }
                             
                             if let eventualBG = deviceStatus.eventualBG {
-                                row(title: "Eventual BG", data: "\(eventualBG.mgDlToMmolAndToString(mgDl: isMgDl)) \(isMgDl ? Texts_Common.mgdl : Texts_Common.mmol)")
+                                row(title: String(localized: "Eventual BG"), data: "\(eventualBG.mgDlToMmolAndToString(mgDl: isMgDl)) \(isMgDl ? Texts_Common.mgdl : Texts_Common.mmol)")
                             }
                             
                             if let insulinReq = deviceStatus.insulinReq {
-                                row(title: "Required insulin", data: insulinReq.round(toDecimalPlaces: 2).description + " U")
+                                row(title: String(localized: "Required insulin"), data: insulinReq.round(toDecimalPlaces: 2).description + " " + Texts_TreatmentsView.insulinUnit)
                             }
                         }
                         
                         Section(header: Text("Pump")) {
                             // show the pump type if available
                             if let pumpModel = deviceStatus.pumpModel {
-                                row(title: "Model", data: "\(deviceStatus.pumpManufacturer ?? "") \(pumpModel)")
+                                row(title: String(localized: "Model"), data: "\(deviceStatus.pumpManufacturer ?? "") \(pumpModel)")
                             }
                             
                             if let pumpStatus = deviceStatus.pumpStatus {
-                                row(title: "Status", data: pumpStatus.capitalized)
+                                row(title: String(localized: "Status"), data: pumpStatus.capitalized)
                             }
                             
                             HStack {
@@ -222,19 +222,19 @@ struct AIDStatusView: View {
                             }
                             
                             if let pumpReservoir = deviceStatus.pumpReservoir, pumpReservoir == ConstantsNightscout.omniPodReservoirFlagNumber {
-                                row(title: Texts_HomeView.pumpReservoir, data: "50+ U")
+                                row(title: Texts_HomeView.pumpReservoir, data: "50+ " + Texts_TreatmentsView.insulinUnit)
                                 
                             } else {
                                 if let pumpReservoir = deviceStatus.pumpReservoir {
                                     // show one decimal place if available when less than 10 units
-                                    row(title: Texts_HomeView.pumpReservoir, data: (pumpReservoir.round(toDecimalPlaces: pumpReservoir < ConstantsHomeView.pumpReservoirUrgent ? 1 : 0).stringWithoutTrailingZeroes) + " U")
+                                    row(title: Texts_HomeView.pumpReservoir, data: (pumpReservoir.round(toDecimalPlaces: pumpReservoir < ConstantsHomeView.pumpReservoirUrgent ? 1 : 0).stringWithoutTrailingZeroes) + " " + Texts_TreatmentsView.insulinUnit)
                                 } else {
-                                    row(title: Texts_HomeView.pumpReservoir, data: nilString + " U")
+                                    row(title: Texts_HomeView.pumpReservoir, data: nilString + " " + Texts_TreatmentsView.insulinUnit)
                                 }
                             }
                             
                             if let baseBasalRate = deviceStatus.baseBasalRate {
-                                row(title: "Scheduled basal rate", data: baseBasalRate.round(toDecimalPlaces: 1).description + " U/hr")
+                                row(title: String(localized: "Scheduled basal rate"), data: baseBasalRate.round(toDecimalPlaces: 1).description + " " + Texts_TreatmentsView.basalRateUnit)
                             }
                         }
                         
@@ -254,10 +254,10 @@ struct AIDStatusView: View {
                         
                         // Diagnostic timestamps
                         Section(header: Text("Debug")) {
-                            row(title: "Last Nightscout check", data: deviceStatus.lastCheckedDate.formatted(date: .omitted, time: .standard))
-                            row(title: "Last device status update", data: deviceStatus.updatedDate.formatted(date: .omitted, time: .standard))
-                            row(title: "Created at", data: deviceStatus.createdAt.formatted(date: .omitted, time: .standard))
-                            row(title: "Last loop date", data: deviceStatus.lastLoopDate.formatted(date: .omitted, time: .standard))
+                            row(title: String(localized: "Last Nightscout check"), data: deviceStatus.lastCheckedDate.formatted(date: .omitted, time: .standard))
+                            row(title: String(localized: "Last device status update"), data: deviceStatus.updatedDate.formatted(date: .omitted, time: .standard))
+                            row(title: String(localized: "Created at"), data: deviceStatus.createdAt.formatted(date: .omitted, time: .standard))
+                            row(title: String(localized: "Last loop date"), data: deviceStatus.lastLoopDate.formatted(date: .omitted, time: .standard))
                         }
                         
                     }
@@ -274,23 +274,23 @@ struct AIDStatusView: View {
                     List {
                         Section(header: Text("Current Profile Information")) {
                             if let profileName = profile.profileName {
-                                row(title: "Name", data: profileName)
+                                row(title: String(localized: "Name"), data: profileName)
                             }
                             
-                            row(title: "Started", data: profile.startDate != .distantPast ? "\(profile.startDate.daysAndHoursAgo(appendAgo: true))" : nilString)
+                            row(title: String(localized: "Started"), data: profile.startDate != .distantPast ? "\(profile.startDate.daysAndHoursAgo(appendAgo: true))" : nilString)
                             
-                            row(title: "Stored by", data: profile.enteredBy ?? nilString)
+                            row(title: String(localized: "Stored by"), data: profile.enteredBy ?? nilString)
                             
-                            row(title: "Timezone", data: profile.timezone ?? nilString)
+                            row(title: String(localized: "Timezone"), data: profile.timezone ?? nilString)
                             
                             if let isMgDl = profile.isMgDl {
-                                row(title: "Units", data: isMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
+                                row(title: String(localized: "Units"), data: isMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
                             }
                             
                             if let dia = profile.dia {
-                                row(title: "DIA", data: "\(dia.stringWithoutTrailingZeroes) \(Texts_Common.hours)")
+                                row(title: String(localized: "DIA"), data: "\(dia.stringWithoutTrailingZeroes) \(Texts_Common.hours)")
                             } else {
-                                row(title: "DIA", data: nilString)
+                                row(title: String(localized: "DIA"), data: nilString)
                             }
                         }
                         

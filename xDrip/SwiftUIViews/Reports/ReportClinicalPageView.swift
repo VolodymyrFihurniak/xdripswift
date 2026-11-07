@@ -127,16 +127,16 @@ struct GlucoseReportClinicalPageView: View {
 
     private var eventAnalysis: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Event Analysis")
+            sectionTitle(eventText("Event Analysis", "Аналіз подій"))
 
             HStack(spacing: 8) {
-                eventTile(title: "Hypoglycaemia", value: "\(analytics.lowEventCount)", detail: "<70 mg/dL events", rate: eventsPerWeek(analytics.lowEventCount), indicatorColor: GlucoseReportColors.low)
-                eventTile(title: "Clinically Significant Low", value: "\(analytics.veryLowEventCount)", detail: "<54 mg/dL events", rate: eventsPerWeek(analytics.veryLowEventCount), indicatorColor: GlucoseReportColors.veryLow)
-                eventTile(title: "Hyperglycaemia", value: "\(analytics.highEventCount)", detail: ">180 mg/dL events", rate: eventsPerWeek(analytics.highEventCount), indicatorColor: GlucoseReportColors.high)
-                eventTile(title: "Marked Hyperglycaemia", value: "\(analytics.veryHighEventCount)", detail: ">250 mg/dL events", rate: eventsPerWeek(analytics.veryHighEventCount), indicatorColor: GlucoseReportColors.veryHigh)
+                eventTile(title: eventText("Hypoglycaemia", "Гіпоглікемія"), value: "\(analytics.lowEventCount)", detail: eventText("<70 mg/dL events", "подій <70 мг/дл"), rate: eventsPerWeek(analytics.lowEventCount), indicatorColor: GlucoseReportColors.low)
+                eventTile(title: eventText("Clinically Significant Low", "Клінічно значуща гіпоглікемія"), value: "\(analytics.veryLowEventCount)", detail: eventText("<54 mg/dL events", "подій <54 мг/дл"), rate: eventsPerWeek(analytics.veryLowEventCount), indicatorColor: GlucoseReportColors.veryLow)
+                eventTile(title: eventText("Hyperglycaemia", "Гіперглікемія"), value: "\(analytics.highEventCount)", detail: eventText(">180 mg/dL events", "подій >180 мг/дл"), rate: eventsPerWeek(analytics.highEventCount), indicatorColor: GlucoseReportColors.high)
+                eventTile(title: eventText("Marked Hyperglycaemia", "Виражена гіперглікемія"), value: "\(analytics.veryHighEventCount)", detail: eventText(">250 mg/dL events", "подій >250 мг/дл"), rate: eventsPerWeek(analytics.veryHighEventCount), indicatorColor: GlucoseReportColors.veryHigh)
             }
 
-            Text("Events are counted as separated excursions when readings cross a threshold and are more than 15 minutes from the previous matching excursion.")
+            Text(verbatim: eventText("Events are counted as separated excursions when readings cross a threshold and are more than 15 minutes from the previous matching excursion.", "Подією вважається окремий вихід за поріг, якщо показники перетинають його більш ніж через 15 хвилин після попереднього такого виходу."))
                 .font(.system(size: 8))
                 .foregroundStyle(GlucoseReportColors.secondaryText)
         }
@@ -234,7 +234,12 @@ struct GlucoseReportClinicalPageView: View {
     private func eventsPerWeek(_ count: Int) -> String {
         let weeks = max(Double(configuration.period.rawValue) / 7.0, 1)
         let rate = Double(count) / weeks
-        return "\(rate.round(toDecimalPlaces: 1).stringWithoutTrailingZeroes)/week"
+        return "\(rate.round(toDecimalPlaces: 1).stringWithoutTrailingZeroes)/" + eventText("week", "тиждень")
+    }
+
+    /// The event analysis is in English for every report language except Ukrainian.
+    private func eventText(_ english: String, _ ukrainian: String) -> String {
+        configuration.language == .ukrainian ? ukrainian : english
     }
 }
 
@@ -289,6 +294,8 @@ private struct GlucoseReportDailyGlucoseProfilesPageView: View {
             return "Glucosio giorno per giorno"
         case .portuguese:
             return "Glicose dia a dia"
+        case .ukrainian:
+            return "Глюкоза день за днем"
         case .english:
             return "Day-by-Day Glucose"
         }
@@ -308,6 +315,8 @@ private struct GlucoseReportDailyGlucoseProfilesPageView: View {
             return "Ultimi \(displayProfiles.count) giorni"
         case .portuguese:
             return "Últimos \(displayProfiles.count) dias"
+        case .ukrainian:
+            return "Останні \(displayProfiles.count) дн."
         case .english:
             return "Last \(displayProfiles.count) days"
         }
@@ -330,6 +339,8 @@ private struct GlucoseReportDailyGlucoseProfilesPageView: View {
             return "I grafici usano limiti clinici standardizzati: Basso <\(low), In intervallo \(low)-\(high), Alto >\(high). Questi limiti possono differire dalle impostazioni dell’app."
         case .portuguese:
             return "Os gráficos usam limites clínicos padronizados: Baixo <\(low), No intervalo \(low)-\(high), Alto >\(high). Estes limites podem diferir das definições da app."
+        case .ukrainian:
+            return "Графіки використовують стандартизовані клінічні межі: низько <\(low), у діапазоні \(low)-\(high), високо >\(high). Ці межі можуть відрізнятися від діапазону, заданого в програмі."
         case .english:
             return "Charts use standardized clinical glucose range limits: Low <\(low), In Range \(low)-\(high), High >\(high). These limits may differ from the in-app user range settings."
         }

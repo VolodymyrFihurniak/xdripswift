@@ -189,7 +189,7 @@ struct LiveActivityViewContentState: View {
 
                         Spacer(minLength: 8)
 
-                        Text("Last reading at \(state.bgReadingDate?.formatted(date: .omitted, time: .shortened) ?? "--:--")")
+                        Text(String(format: Texts_Common.lastReadingAtFormat, state.bgReadingDate?.formatted(date: .omitted, time: .shortened) ?? "--:--"))
                             .font(.caption)
                             .foregroundStyle(Color("colorSecondary"))
                             .lineLimit(1)
