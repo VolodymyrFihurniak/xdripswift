@@ -2468,6 +2468,7 @@ struct TroubleshootingLogReportBuilder {
         case .sensorTransmitterFailure: return "Sensor/Transmitter Failure"
         case .sensorEndingSoon: return "Sensor ending soon"
         case .sensorExpectedExpiry: return "Expected sensor expiry"
+        case .predictedLow: return "Predicted low"
         }
     }
 

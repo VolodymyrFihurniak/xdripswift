@@ -235,6 +235,32 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertEqual(points.map(\.mgDl), [100, 105, 107.5])
     }
 
+    // MARK: Predicted low alert
+
+    private func forecast(_ values: [Double]) -> [GlucosePredictionPoint] {
+        values.enumerated().map { GlucosePredictionPoint(date: start.addingTimeInterval(TimeInterval($0.offset * 5 * 60)), value: $0.element, confidence: 1, unclampedValue: $0.element) }
+    }
+
+    func testPredictedLowFiresOnlyWithinTheLeadTimeAndWhileStillAbove() throws {
+        let points = forecast([95, 90, 85, 78, 72, 68])
+        XCTAssertNil(PredictedLowAlert.crossing(forecast: points, currentMgDl: 95, thresholdMgDl: 70, leadMinutes: 20))
+        let crossing = try XCTUnwrap(PredictedLowAlert.crossing(forecast: points, currentMgDl: 95, thresholdMgDl: 70, leadMinutes: 25))
+        XCTAssertEqual(crossing.minutes, 25)
+        XCTAssertEqual(crossing.mgDl, 68)
+        // Already below: the ordinary low alert covers it.
+        XCTAssertNil(PredictedLowAlert.crossing(forecast: points, currentMgDl: 65, thresholdMgDl: 70, leadMinutes: 30))
+        XCTAssertNil(PredictedLowAlert.crossing(forecast: [], currentMgDl: 95, thresholdMgDl: 70, leadMinutes: 30))
+    }
+
+    func testPredictedLowIsANewDisabledByDefaultGlucoseAlert() {
+        XCTAssertEqual(AlertKind.predictedLow.rawValue, 16)
+        XCTAssertTrue(AlertKind.predictedLow.defaultIsDisabled())
+        XCTAssertTrue(AlertKind.predictedLow.valueIsABgValue())
+        XCTAssertEqual(AlertKind.predictedLow.defaultAlertValue(), ConstantsDefaultAlertLevels.low)
+        let kinds = AlertKind.visibleAlertKinds(for: .Libre2)
+        XCTAssertEqual(kinds.firstIndex(of: .predictedLow), (kinds.firstIndex(of: .low) ?? -2) + 1)
+    }
+
     // MARK: Settings
 
     func testSettingsDefaultsAndClamping() {

@@ -33,13 +33,14 @@ extension SettingsViewGroupedSettingsViewModel {
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionModel, insulins }
+    enum Group { case predictionMain, predictionModel, predictionAlert, insulins }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
         SettingsScreen(title: ExperimentalTexts.text("prediction", "Glucose prediction"),
                        introduction: { ExperimentalTexts.text("predictionIntroduction", "Experimental. A forecast of the next hours, drawn as a dashed line to the right of the main chart. It continues the recent trend and adds the effect of the carbs, boluses and exercise you log. It is an estimate only: never dose insulin from it.") },
-                       providers: { [ExperimentalSettingsViewModel(group: .predictionMain), ExperimentalSettingsViewModel(group: .predictionModel)] })
+                       providers: { [ExperimentalSettingsViewModel(group: .predictionMain), ExperimentalSettingsViewModel(group: .predictionModel),
+                                     ExperimentalSettingsViewModel(group: .predictionAlert)] })
     }
 
     static var insulinScreen: SettingsScreen {
@@ -114,6 +115,18 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                     UserDefaults.standard.experimentalPredictionCarbAbsorption = value
                 }
             ]
+        case .predictionAlert:
+            return [
+                SettingsRow(id: "experimental.predictedLow.lead", title: ExperimentalTexts.text("predictedLowLead", "Warn ahead by"), accessory: .none,
+                            control: .menu(options: {
+                                let selected = UserDefaults.standard.experimentalPredictedLowLeadMinutes
+                                return PredictedLowAlert.leadChoices.map { SettingsMenuOption(title: Self.minutesText($0), isSelected: $0 == selected) }
+                            }, selectOption: { index in
+                                let choices = PredictedLowAlert.leadChoices
+                                guard choices.indices.contains(index) else { return }
+                                UserDefaults.standard.experimentalPredictedLowLeadMinutes = choices[index]
+                            }))
+            ]
         case .insulins:
             return [
                 SettingsRow(id: "experimental.insulins.enabled", title: ExperimentalTexts.text("insulinsShow", "Show insulin activity on the chart"),
@@ -187,6 +200,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         switch group {
         case .predictionMain, .insulins: return nil
         case .predictionModel: return ExperimentalTexts.text("predictionModel", "Model")
+        case .predictionAlert: return Texts_Alerts.predictedLowAlertTitle
         }
     }
 
@@ -196,6 +210,8 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("predictionMainFooter", "Follow the trend continues the recent rise or fall that your treatments do not explain, fading over about an hour. The forecast starts only from a reading at most 15 minutes old.")
         case .predictionModel:
             return ExperimentalTexts.text("predictionModelFooter", "Insulin sensitivity: how far one unit lowers glucose. Carb ratio: grams covered by one unit. Absorption sets how long carbs take to act. Basal and premixed insulins are not part of the forecast, as in JugglucoNG.")
+        case .predictionAlert:
+            return ExperimentalTexts.text("predictedLowFooter", "Warns when the forecast falls below the alarm value within this time while glucose is still above it. Turn it on and set the value, sound and snooze in Settings > Alerts > Predicted Low. It uses the model above even when the prediction is not drawn.")
         case .insulins:
             return ExperimentalTexts.text("insulinsFooter", "The chart shows how fast each insulin is working, in units per hour, stacked in its own colour along the bottom. A curve ends where its source stopped measuring; nothing is extrapolated.")
         }

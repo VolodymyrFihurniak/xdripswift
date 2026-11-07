@@ -22,6 +22,9 @@ enum ConstantsNotifications {
         static let fastDropAlert = "fastDropAlert"
         /// fast rise
         static let fastRiseAlert = "fastRiseAlert"
+
+        /// experimental predicted low alert
+        static let predictedLowAlert = "predictedLowAlert"
         /// phone battery low
         static let phoneBatteryLow = "phoneBatteryLow"
         /// not looping

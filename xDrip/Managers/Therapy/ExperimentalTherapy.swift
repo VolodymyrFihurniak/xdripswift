@@ -89,6 +89,15 @@ extension UserDefaults {
         set { set(newValue, forKey: ExperimentalKey.predictionAbsorption) }
     }
 
+    /// How far ahead the predicted low alert looks, in minutes.
+    var experimentalPredictedLowLeadMinutes: Int {
+        get {
+            let stored = integer(forKey: "experimentalPredictedLowLeadMinutes")
+            return PredictedLowAlert.leadChoices.contains(stored) ? stored : PredictedLowAlert.defaultLeadMinutes
+        }
+        set { set(newValue, forKey: "experimentalPredictedLowLeadMinutes") }
+    }
+
     /// Draws each insulin's activity along the bottom of the main chart.
     var experimentalInsulinsEnabled: Bool {
         get { bool(forKey: ExperimentalKey.insulinsEnabled) }
@@ -619,6 +628,29 @@ struct ExperimentalTreatment: Sendable, Hashable {
     }
 }
 
+extension ExperimentalTreatment {
+    /// Fetches the treatments in a window on `context`'s queue (the caller must be on it).
+    static func fetch(from start: Date, to end: Date, in context: NSManagedObjectContext, policy: DataFlowPolicy) -> [ExperimentalTreatment]? {
+        let request = TreatmentEntry.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "date >= %@ AND date <= %@ AND (treatmentdeleted == NO OR treatmentdeleted == nil) AND treatmentType IN %@",
+            start as NSDate, end as NSDate,
+            [TreatmentType.Insulin.rawValue, TreatmentType.BasalInjection.rawValue, TreatmentType.Carbs.rawValue, TreatmentType.Exercise.rawValue])
+        request.sortDescriptors = [NSSortDescriptor(key: "date", ascending: true)]
+        return (try? context.fetch(request))?.filter { TherapyMetricsManager.includesTherapyTreatment($0, policy: policy) }.compactMap { entry -> ExperimentalTreatment? in
+            let kind: ExperimentalTreatment.Kind
+            switch entry.treatmentType {
+            case .Insulin: kind = .bolus
+            case .BasalInjection: kind = .basalInjection
+            case .Carbs: kind = .carbs
+            case .Exercise: kind = .exercise
+            default: return nil
+            }
+            return ExperimentalTreatment(date: entry.date, amount: entry.value, kind: kind, notes: entry.notes)
+        }
+    }
+}
+
 extension TherapyMetricsManager {
     /// Boluses, basal injections, carbs and exercise in a window, from the sources the IOB/COB
     /// estimate also uses. Returns nil when Core Data is not available.
@@ -630,26 +662,38 @@ extension TherapyMetricsManager {
             let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
             context.persistentStoreCoordinator = coordinator
             context.perform {
-                let request = TreatmentEntry.fetchRequest()
-                request.predicate = NSPredicate(
-                    format: "date >= %@ AND date <= %@ AND (treatmentdeleted == NO OR treatmentdeleted == nil) AND treatmentType IN %@",
-                    start as NSDate, end as NSDate,
-                    [TreatmentType.Insulin.rawValue, TreatmentType.BasalInjection.rawValue, TreatmentType.Carbs.rawValue, TreatmentType.Exercise.rawValue])
-                request.sortDescriptors = [NSSortDescriptor(key: "date", ascending: true)]
-                let result = (try? context.fetch(request))?.filter { Self.includesTherapyTreatment($0, policy: policy) }.compactMap { entry -> ExperimentalTreatment? in
-                    let kind: ExperimentalTreatment.Kind
-                    switch entry.treatmentType {
-                    case .Insulin: kind = .bolus
-                    case .BasalInjection: kind = .basalInjection
-                    case .Carbs: kind = .carbs
-                    case .Exercise: kind = .exercise
-                    default: return nil
-                    }
-                    return ExperimentalTreatment(date: entry.date, amount: entry.value, kind: kind, notes: entry.notes)
-                }
-                continuation.resume(returning: result)
+                continuation.resume(returning: ExperimentalTreatment.fetch(from: start, to: end, in: context, policy: policy))
             }
         }
+    }
+}
+
+// MARK: - Predicted low alert
+
+/// The experimental alert that warns before the forecast reaches the low value.
+enum PredictedLowAlert {
+    static let leadChoices = [15, 20, 25, 30, 45]
+    static let defaultLeadMinutes = 20
+
+    /// The first forecast point within `leadMinutes` below the threshold, while the current
+    /// reading is still at or above it (a current low is the low alert's job).
+    static func crossing(forecast: [GlucosePredictionPoint], currentMgDl: Double, thresholdMgDl: Double,
+                         leadMinutes: Int) -> (minutes: Int, mgDl: Double)? {
+        guard currentMgDl >= thresholdMgDl, let baseline = forecast.first?.date else { return nil }
+        let limit = baseline.addingTimeInterval(TimeInterval(leadMinutes * 60))
+        guard let point = forecast.dropFirst().first(where: { $0.date <= limit && $0.value < thresholdMgDl }) else { return nil }
+        return (Int((point.date.timeIntervalSince(baseline) / 60).rounded()), point.value)
+    }
+
+    /// Treatments the forecast needs, fetched on the main context for the alert check.
+    static func treatments(in context: NSManagedObjectContext, now: Date = Date()) -> [ExperimentalTreatment] {
+        var result: [ExperimentalTreatment] = []
+        context.performAndWait {
+            result = ExperimentalTreatment.fetch(from: now.addingTimeInterval(-ExperimentalPredictionModel.lookBack),
+                                                 to: now.addingTimeInterval(6 * 60 * 60), in: context,
+                                                 policy: UserDefaults.standard.dataFlowPolicy) ?? []
+        }
+        return result
     }
 }
 

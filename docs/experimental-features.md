@@ -30,6 +30,14 @@ A dashed line to the right of the main chart, for 1–4 hours (default 2). It is
 Defaults are JugglucoNG's: sensitivity 54 mg/dL (3.0 mmol/L) per unit, carb ratio 10 g/U,
 absorption 35 g/h. It is an estimate for orientation, never a dosing tool.
 
+### Predicted low alert
+
+Settings → Alerts → **Predicted Low** (off by default) warns before a low: it fires when the
+forecast falls below the alarm value within the lead time (15–45 minutes, default 20, set in
+Experimental features → Glucose prediction) while glucose is still above that value. Once glucose
+is below it, the ordinary Low alarm takes over. Sound, schedule and snooze work as for every alarm.
+The alert uses the prediction model even when the forecast is not drawn on the chart.
+
 ## Insulins
 
 Each insulin has its own action curve from JugglucoNG's catalogue (model version 3): Fiasp,

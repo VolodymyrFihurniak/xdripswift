@@ -584,3 +584,5 @@
 "experimental.sectionTitle" = "Experimental features";
 "settingsviews_nightscoutUploadEveryReading" = "Upload Every Reading";
 "settingsviews_nightscoutUploadEveryReadingFooter" = "Upload Every Reading sends each new glucose value to Nightscout as soon as it arrives, every minute with 1-minute sensors. Off, at most one reading per 5 minutes is uploaded.";
+"experimental.predictedLowLead" = "Warn ahead by";
+"experimental.predictedLowFooter" = "Warns when the forecast falls below the alarm value within this time while glucose is still above it. Turn it on and set the value, sound and snooze in Settings > Alerts > Predicted Low. It uses the model above even when the prediction is not drawn.";
