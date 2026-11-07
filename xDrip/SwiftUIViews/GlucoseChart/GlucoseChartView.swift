@@ -710,7 +710,9 @@ struct GlucoseChartView: View {
                      series: .value("Series", "experimental-prediction"))
                 .interpolationMethod(.monotone)
                 .foregroundStyle(ConstantsGlucoseChartSwiftUI.experimentalPredictionColor)
-                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, dash: [6, 4]))
+                .lineStyle(experimentalPlotData.predictionIsAdaptive
+                           ? StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: [0.1, 5])
+                           : StrokeStyle(lineWidth: 2, lineCap: .round, dash: [6, 4]))
                 .accessibilityLabel(ExperimentalChartTexts.prediction)
         }
     }
@@ -1674,6 +1676,8 @@ struct GlucoseChartExperimentalPlots {
     /// Every insulin still on board now, largest first, whatever window the chart shows.
     var onBoardNow: [OnBoard] = []
     var drawsGlucoseAsLine = false
+    /// The forecast is JugglucoNG's adaptive one: drawn dotted, as its forecast comparison does.
+    var predictionIsAdaptive = false
     /// Lets widgets, Live Activity and the watch draw the forecast; the app's main chart always may.
     var showsInCompactCharts = false
 
@@ -1784,11 +1788,14 @@ final class GlucoseChartCursorGeometry {
 struct ExperimentalCompanionForecast: Codable, Hashable {
     var startAsDouble: Double
     var valuesMgDl: [Double]
+    /// True for the adaptive forecast; optional so older payloads still decode.
+    var isAdaptive: Bool?
     static let stepSeconds: TimeInterval = 5 * 60
 
     var plots: GlucoseChartExperimentalPlots {
         var plots = GlucoseChartExperimentalPlots()
         plots.showsInCompactCharts = true
+        plots.predictionIsAdaptive = isAdaptive ?? false
         plots.prediction = valuesMgDl.enumerated().map {
             GlucoseChartExperimentalPlots.PredictionPoint(
                 date: Date(timeIntervalSince1970: startAsDouble + Double($0.offset) * Self.stepSeconds), mgDl: $0.element)
@@ -1801,6 +1808,7 @@ struct ExperimentalCompanionForecast: Codable, Hashable {
         guard let dictionary = dictionary as? [String: Any], let start = dictionary["startAsDouble"] as? Double,
               let values = dictionary["valuesMgDl"] as? [Double], values.count > 1 else { return nil }
         self.init(startAsDouble: start, valuesMgDl: values)
+        isAdaptive = dictionary["isAdaptive"] as? Bool
     }
 
     init(startAsDouble: Double, valuesMgDl: [Double]) {

@@ -69,6 +69,33 @@ Model refinements (JugglucoNG `PredictionModelProfile`, `JournalHumanProfile`, `
 - **Exercise intensity**: the editor offers light, moderate or intense (notes `intensity:light`),
   scaling the drop by 0.35, 0.65 or 1; not set keeps 0.5.
 
+### Adaptive prediction
+
+JugglucoNG's adaptive ("personal") forecast (`AdaptiveGlucoseForecast`), off by default. It
+learns from your own readings what the standard model assumes: how much of the recent movement
+tends to carry on, and how strongly glucose drifts back toward your own average.
+
+- One ridge regression (λ = 1) per horizon, every 5 minutes out to 2 hours, predicting the
+  change from the current reading. Eight features from CGM history only: the change over the
+  last 5, 15, 30 and 60 minutes, the distance from the 24-hour mean, the level and the time of
+  day. Logged insulin and carbs are not used (on JugglucoNG's data they made it worse).
+- Trained on the last 28 days on a 5-minute grid, from the displayed value; it needs 576 rows
+  (two days) before it answers. A value is never read across a sensor change or a gap longer
+  than 2.5 readings, and the hour behind a reading must be continuous, so a new sensor's first
+  hour and the hour after a gap have no adaptive forecast.
+- With four days or more, the last two days are held back once: if the model's 30-minute error
+  there is more than 2 % worse than assuming no change, it is not used.
+- It relearns once a day on a background queue (after a new reading, or when the chart asks);
+  a fit that found too little data is retried after six hours. **Relearn now** forgets the model.
+  The model is stored in the app's settings; **Learned model** shows learning, learned from N
+  days, or not better than no change yet.
+- Drawn dotted, at most 2 hours ahead, also on widgets, Live Activity and the watch. When it
+  cannot answer, the standard forecast without the trend momentum is drawn instead, as
+  JugglucoNG does. The predicted low alert and the Nightscout upload always use the standard
+  forecast; the chart cursor reads whichever is drawn.
+- With **Record accuracy** on, the adaptive forecast from the same reading is recorded too, and
+  **Prediction accuracy** shows the two side by side.
+
 ### Prediction accuracy
 
 **Record accuracy** keeps the forecast every five minutes for 14 days (a file in Application
@@ -122,4 +149,3 @@ measured per kilogram use the study's reference dose.
   after bolus.
 - The IOB/COB numbers and curves of the Treatments settings are unchanged.
 
-Not ported yet: JugglucoNG's adaptive forecast.

@@ -99,6 +99,10 @@ fields and the landscape AGP chart through `AGPChartView(drawsGlucoseAsLine:)`. 
 (`GlucoseChartCursor`, `GlucoseChartCursorGeometry` reported from the chart overlay, gesture in
 `RootHomeMainChartView`) and insulin on board (`InsulinActivityStack.remaining/onBoard`,
 `GlucoseChartExperimentalPlots.onBoardNow`) follow JugglucoNG `DashboardChart`/`JournalIobMath`.
+Adaptive prediction (`xDrip/Managers/Therapy/AdaptiveGlucoseForecast.swift`): JugglucoNG
+`AdaptiveGlucoseForecast` + `AdaptivePredictionStore`; model JSON in UserDefaults
+(`experimentalAdaptiveForecastModel`), daily refit on a private-queue context over 29 days of
+`BgReading` dictionaries; alerts and Nightscout stay on the standard forecast.
 
 ## Localisation
 
@@ -115,7 +119,7 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 JugglucoNG alternative glucose models (Balanced, Responsive, Adaptive V2), GS3 variant,
 Sibionics reset reminder and raw source-journal backup/recovery, NovoPen 6 / Echo Plus NFC import
 (JugglucoNG `NovoPen/opennov`, IEEE 11073 PHD over NFC Type 4 — needs CoreNFC ISO 7816
-entitlement and AIDs), adaptive forecast.
+entitlement and AIDs).
 
 ## Git
 

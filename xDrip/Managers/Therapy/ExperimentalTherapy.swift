@@ -39,6 +39,7 @@ extension UserDefaults {
         static let predictionEnabled = "experimentalPredictionEnabled"
         static let predictionHorizon = "experimentalPredictionHorizonMinutes"
         static let predictionMomentum = "experimentalPredictionTrendMomentum"
+        static let predictionAdaptive = "experimentalPredictionAdaptive"
         static let predictionCarbRatio = "experimentalPredictionCarbRatio"
         static let predictionSensitivity = "experimentalPredictionInsulinSensitivityMgDl"
         static let predictionAbsorption = "experimentalPredictionCarbAbsorption"
@@ -77,6 +78,12 @@ extension UserDefaults {
     var experimentalPredictionTrendMomentum: Bool {
         get { object(forKey: ExperimentalKey.predictionMomentum) == nil || bool(forKey: ExperimentalKey.predictionMomentum) }
         set { set(newValue, forKey: ExperimentalKey.predictionMomentum) }
+    }
+
+    /// JugglucoNG's adaptive forecast is drawn instead of the standard one. Off by default, as there.
+    var experimentalPredictionAdaptive: Bool {
+        get { bool(forKey: ExperimentalKey.predictionAdaptive) }
+        set { set(newValue, forKey: ExperimentalKey.predictionAdaptive) }
     }
 
     /// Grams of carbohydrate covered by one unit. JugglucoNG default 10, range 3...30.
@@ -1093,6 +1100,11 @@ struct RecordedForecast: Codable, Hashable, Sendable {
     let originMgDl: Double
     /// Horizon in minutes → predicted mg/dL.
     let predicted: [Int: Double]
+    /// `adaptive` for JugglucoNG's adaptive forecast; nil for the standard one (and older records).
+    var model: String? = nil
+
+    static let adaptiveModel = "adaptive"
+    var isAdaptive: Bool { model == Self.adaptiveModel }
 }
 
 /// How the forecast fared at one horizon (JugglucoNG `HorizonAccuracy`).
@@ -1210,10 +1222,25 @@ enum PredictionAccuracyRecorder {
             readings: readings, treatments: PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext, now: now),
             isMmol: false, targetLowMgDl: defaults.lowMarkValue, targetHighMgDl: defaults.highMarkValue, now: now)
         guard let record = record(from: forecast) else { return }
+        // The adaptive forecast from the same reading, when its model can answer, to compare the two.
+        var adaptiveRecord: RecordedForecast?
+        var recent: AdaptiveReadings?
+        if AdaptiveForecastStore.model(defaults: defaults)?.isReliable == true {
+            recent = AdaptiveForecastStore.recentReadingsOnMainContext(coreDataManager: coreDataManager, now: now)
+            recent?.appendNewer(dates: readings.map { $0.date }, values: readings.map { $0.mgDl }, until: now)
+        }
+        if let recent, let adaptive = AdaptiveForecastStore.forecast(history: recent.history, horizonMinutes: PredictionAccuracy.horizons.max() ?? 120,
+                                                         defaults: defaults, now: now),
+           var adaptiveForecastRecord = self.record(from: adaptive), adaptiveForecastRecord.origin == record.origin {
+            adaptiveForecastRecord.model = RecordedForecast.adaptiveModel
+            adaptiveRecord = adaptiveForecastRecord
+        }
+        AdaptiveForecastStore.refreshIfDue(coreDataManager: coreDataManager, defaults: defaults, now: now)
         defaults.set(now, forKey: "experimentalPredictionAccuracyLastRecord")
         queue.async {
             var records = load().filter { now.timeIntervalSince($0.origin) < retention }
             records.append(record)
+            if let adaptiveRecord { records.append(adaptiveRecord) }
             guard let url = fileURL, let data = try? JSONEncoder().encode(records) else { return }
             try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? data.write(to: url, options: .atomic)
@@ -1404,7 +1431,8 @@ enum ExperimentalChartInputs {
                 model.carbRatio.description, model.insulinSensitivityMgDl.description, model.carbAbsorption.description,
                 model.bolusInsulin.rawValue, model.basalInsulin.rawValue, defaults.bloodGlucoseUnitIsMgDl.description,
                 model.bodyWeightKg?.description ?? "-", ExperimentalPredictionPeriod.encode(model.periods), model.macrosEnabled.description,
-                defaults.lowMarkValue.description, defaults.highMarkValue.description].joined(separator: "|")
+                defaults.lowMarkValue.description, defaults.highMarkValue.description,
+                defaults.experimentalPredictionAdaptive.description].joined(separator: "|")
     }
 
     /// How far back insulin can still be acting: two days, or eight for a once-weekly basal.
@@ -1418,12 +1446,28 @@ enum ExperimentalChartInputs {
         let readings = BgReadingsAccessor(coreDataManager: coreDataManager)
             .getLatestBgReadings(limit: nil, fromDate: now.addingTimeInterval(-2 * 60 * 60), forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
             .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
-        let forecast = ExperimentalPredictionModel(defaults: defaults).forecast(
-            readings: readings, treatments: PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext, now: now),
-            isMmol: !defaults.bloodGlucoseUnitIsMgDl, targetLowMgDl: defaults.lowMarkValue, targetHighMgDl: defaults.highMarkValue, now: now)
+        var model = ExperimentalPredictionModel(defaults: defaults)
+        let treatments = PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext, now: now)
+        func standard(trendMomentum: Bool) -> [GlucosePredictionPoint] {
+            model.trendMomentum = trendMomentum && defaults.experimentalPredictionTrendMomentum
+            return model.forecast(readings: readings, treatments: treatments, isMmol: !defaults.bloodGlucoseUnitIsMgDl,
+                                  targetLowMgDl: defaults.lowMarkValue, targetHighMgDl: defaults.highMarkValue, now: now)
+        }
+        var forecast = standard(trendMomentum: true)
+        var isAdaptive = false
+        if defaults.experimentalPredictionAdaptive {
+            var recent = AdaptiveForecastStore.recentReadingsOnMainContext(coreDataManager: coreDataManager, now: now)
+            recent?.appendNewer(dates: readings.map { $0.date }, values: readings.map { $0.mgDl }, until: now)
+            let shown = AdaptiveForecastStore.shownForecast(readings: recent, standard: { standard(trendMomentum: $0) },
+                                                           horizonMinutes: model.horizonMinutes, defaults: defaults, now: now)
+            forecast = shown.points
+            isAdaptive = shown.isAdaptive
+        }
         guard let first = forecast.first, forecast.count > 1 else { return nil }
-        return ExperimentalCompanionForecast(startAsDouble: first.date.timeIntervalSince1970,
-                                             valuesMgDl: forecast.map { ($0.value * 10).rounded() / 10 })
+        var companion = ExperimentalCompanionForecast(startAsDouble: first.date.timeIntervalSince1970,
+                                                      valuesMgDl: forecast.map { ($0.value * 10).rounded() / 10 })
+        companion.isAdaptive = isAdaptive ? true : nil
+        return companion
     }
 
     static func onBoard(_ entry: InsulinActivityStack.OnBoard) -> GlucoseChartExperimentalPlots.OnBoard {
@@ -1457,9 +1501,23 @@ enum ExperimentalChartInputs {
             let readings = zip(chartState.bgReadingDates, chartState.bgReadingValues)
                 .filter { $0.0 >= now.addingTimeInterval(-2 * 60 * 60) && $0.0 <= now }
                 .map { (date: $0.0, mgDl: $0.1) }
-            plots.prediction = model.forecast(readings: readings, treatments: treatments, isMmol: !defaults.bloodGlucoseUnitIsMgDl,
+            func standard(trendMomentum: Bool) -> [GlucosePredictionPoint] {
+                var standardModel = model
+                standardModel.trendMomentum = trendMomentum && model.trendMomentum
+                return standardModel.forecast(readings: readings, treatments: treatments, isMmol: !defaults.bloodGlucoseUnitIsMgDl,
                                               targetLowMgDl: defaults.lowMarkValue, targetHighMgDl: defaults.highMarkValue, now: now)
-                .map { GlucoseChartExperimentalPlots.PredictionPoint(date: $0.date, mgDl: $0.value) }
+            }
+            var forecast = standard(trendMomentum: true)
+            if defaults.experimentalPredictionAdaptive, let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager {
+                AdaptiveForecastStore.refreshIfDue(coreDataManager: coreDataManager, defaults: defaults, now: now)
+                var recent = await AdaptiveForecastStore.recentReadings(coreDataManager: coreDataManager, now: now)
+                recent?.appendNewer(dates: chartState.bgReadingDates, values: chartState.bgReadingValues, until: now)
+                let shown = AdaptiveForecastStore.shownForecast(readings: recent, standard: { standard(trendMomentum: $0) },
+                                                               horizonMinutes: model.horizonMinutes, defaults: defaults, now: now)
+                forecast = shown.points
+                plots.predictionIsAdaptive = shown.isAdaptive
+            }
+            plots.prediction = forecast.map { GlucoseChartExperimentalPlots.PredictionPoint(date: $0.date, mgDl: $0.value) }
         }
 
         if wantsInsulin {

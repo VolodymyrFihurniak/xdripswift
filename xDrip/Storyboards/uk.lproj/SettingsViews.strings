@@ -1094,3 +1094,13 @@
 "settingsviews_shareUploadNever" = "Ще ні";
 "settingsviews_shareUploadReceiverNotAssigned" = "Цей приймач не прив’язано до вашого облікового запису Dexcom. Зареєструйте його в офіційному застосунку Dexcom.";
 "settingsviews_shareUploadConfigurationRequired" = "Введіть ім’я користувача, пароль і серійний номер приймача.";
+"experimental.predictionAdaptive" = "Адаптивний прогноз";
+"experimental.predictionAdaptiveModel" = "Навчена модель";
+"experimental.predictionAdaptiveRelearn" = "Перенавчити зараз";
+"experimental.predictionAdaptiveLearning" = "Навчається, потрібно 2 дні показників";
+"experimental.predictionAdaptiveReady" = "Навчено на показниках за %@ дн.";
+"experimental.predictionAdaptiveNotBetter" = "Поки не краща за «без змін», показано стандартний";
+"experimental.predictionAdaptiveFooter" = "Показує прогноз, навчений на ваших власних показниках, замість стандартного — пунктиром з крапок, до двох годин. Модель навчається на останніх чотирьох тижнях, перенавчається раз на добу й потребує двох днів показників; записані інсулін і вуглеводи вона не враховує. Поки модель не готова, після розриву даних чи в першу годину нового сенсора, а також поки вона не краща за «без змін», показується стандартний прогноз без тренду. Сигнал прогнозованої низької глюкози й Nightscout і далі використовують стандартний прогноз.";
+"experimental.accuracyStandard" = "Стандартний прогноз";
+"experimental.accuracyAdaptive" = "Адаптивний прогноз";
+"experimental.accuracyAdaptiveFooter" = "Записується з тих самих показників щоразу, коли адаптивна модель може відповісти, навіть якщо її прогноз не показано.";
