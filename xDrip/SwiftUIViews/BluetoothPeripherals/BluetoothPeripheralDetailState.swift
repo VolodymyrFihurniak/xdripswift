@@ -2248,13 +2248,14 @@ private extension BluetoothPeripheralDetailState {
             actionTitle: Texts_Common.Ok,
             cancelTitle: Texts_Common.Cancel,
             actionHandler: { [weak self] text in
+                guard let self else { return }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 let value = trimmed.isEmpty ? nil : parse(trimmed)
-                guard Sibionics2Configuration.manualSensitivity(for: address) != value else { self?.refresh(); return }
+                guard Sibionics2Configuration.manualSensitivity(for: address) != value else { self.refresh(); return }
                 Sibionics2Configuration.setManualSensitivity(value, for: address)
-                trace("Sibionics manual sensitivity was %{public}@", log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController,
+                trace("Sibionics manual sensitivity was %{public}@", log: self.log, category: ConstantsLog.categoryBluetoothPeripheralViewController,
                       type: .info, value.map { "set to \($0)" } ?? "removed")
-                self?.sensitivityInputDidChange(for: bluetoothPeripheral)
+                self.sensitivityInputDidChange(for: bluetoothPeripheral)
             },
             actionIsEnabled: { text in
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
