@@ -33,14 +33,15 @@ extension SettingsViewGroupedSettingsViewModel {
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionModel, predictionAlert, predictionAccuracy, insulins }
+    enum Group { case predictionMain, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
         SettingsScreen(title: ExperimentalTexts.text("prediction", "Glucose prediction"),
                        introduction: { ExperimentalTexts.text("predictionIntroduction", "Experimental. A forecast of the next hours, drawn as a dashed line to the right of the main chart. It continues the recent trend and adds the effect of the carbs, boluses and exercise you log. It is an estimate only: never dose insulin from it.") },
                        providers: { [ExperimentalSettingsViewModel(group: .predictionMain), ExperimentalSettingsViewModel(group: .predictionModel),
-                                     ExperimentalSettingsViewModel(group: .predictionAlert), ExperimentalSettingsViewModel(group: .predictionAccuracy)] })
+                                     ExperimentalSettingsViewModel(group: .predictionAlert), ExperimentalSettingsViewModel(group: .predictionAccuracy),
+                                     ExperimentalSettingsViewModel(group: .predictionNightscout)] })
     }
 
     static var insulinScreen: SettingsScreen {
@@ -141,6 +142,13 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                 guard choices.indices.contains(index) else { return }
                                 UserDefaults.standard.experimentalPredictedLowLeadMinutes = choices[index]
                             }))
+            ]
+        case .predictionNightscout:
+            return [
+                SettingsRow(id: "experimental.prediction.nightscout", title: ExperimentalTexts.text("predictionNightscout", "Upload to Nightscout"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalNightscoutPredictionEnabled },
+                                             setIsOn: { UserDefaults.standard.experimentalNightscoutPredictionEnabled = $0 }),
+                            isEnabled: !defaults.dataFlowPolicy.importsStatusFromNightscout)
             ]
         case .predictionAccuracy:
             return [
@@ -256,6 +264,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         case .predictionModel: return ExperimentalTexts.text("predictionModel", "Model")
         case .predictionAlert: return Texts_Alerts.predictedLowAlertTitle
         case .predictionAccuracy: return ExperimentalTexts.text("accuracyShow", "Prediction accuracy")
+        case .predictionNightscout: return "Nightscout"
         }
     }
 
@@ -267,6 +276,8 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("predictionModelFooter", "Insulin sensitivity: how far one unit lowers glucose. Carb ratio: grams covered by one unit. Absorption sets how long carbs take to act. Periods change these by time of day; each treatment uses the values in force when it was logged. Body weight sharpens curves measured per kilogram (Fiasp, Levemir, regular insulin). Protein and fat add a late rise for carb entries that list them. Basal and premixed insulins are not part of the forecast, as in JugglucoNG.")
         case .predictionAlert:
             return ExperimentalTexts.text("predictedLowFooter", "Warns when the forecast falls below the alarm value within this time while glucose is still above it. Turn it on and set the value, sound and snooze in Settings > Alerts > Predicted Low. It uses the model above even when the prediction is not drawn.")
+        case .predictionNightscout:
+            return ExperimentalTexts.text("predictionNightscoutFooter", "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.")
         case .predictionAccuracy:
             return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
         case .insulins:

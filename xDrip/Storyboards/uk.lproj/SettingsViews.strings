@@ -838,3 +838,5 @@
 "experimental.accuracyCount" = "Записано прогнозів: %ld. Для надійної оцінки горизонту потрібно щонайменше %ld порівняних прогнозів.";
 "experimental.accuracyLine" = "Похибка %@ · без змін %@ · зміщення %@";
 "experimental.accuracyClear" = "Видалити записані прогнози";
+"experimental.predictionNightscout" = "Відвантажувати в Nightscout";
+"experimental.predictionNightscoutFooter" = "Кожні п’ять хвилин прогноз відвантажується як devicestatus у форматі OpenAPS, як це робить AAPS, тож Nightscout показує його лініями прогнозу (увімкніть плагін openaps). Недоступно, поки xDrip стежить за статусом AID із Nightscout. Болюси також передають вибраний інсулін у нотатках, а вуглеводи — білки й жири.";

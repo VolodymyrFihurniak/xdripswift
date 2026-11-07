@@ -609,3 +609,5 @@
 "experimental.accuracyCount" = "%ld forecasts recorded. A horizon needs at least %ld compared forecasts to say much.";
 "experimental.accuracyLine" = "Error %@ · no change %@ · bias %@";
 "experimental.accuracyClear" = "Delete recorded forecasts";
+"experimental.predictionNightscout" = "Upload to Nightscout";
+"experimental.predictionNightscoutFooter" = "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.";

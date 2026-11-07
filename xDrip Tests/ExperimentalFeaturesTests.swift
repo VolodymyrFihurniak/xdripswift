@@ -317,6 +317,18 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertEqual(record.predicted, [15: 103, 30: 106, 60: 112, 120: 124])
     }
 
+    // MARK: Nightscout
+
+    func testNightscoutForecastUsesTheOpenAPSPredBGsShape() throws {
+        let points = (0...3).map { GlucosePredictionPoint(date: start.addingTimeInterval(TimeInterval($0 * 5 * 60)), value: 120.4 - Double($0), confidence: 1, unclampedValue: 0) }
+        let status = try XCTUnwrap(ExperimentalNightscoutPrediction.deviceStatus(forecast: points, now: start))
+        XCTAssertEqual(status["device"] as? String, "xDrip4iOS")
+        let suggested = try XCTUnwrap((status["openaps"] as? [String: Any])?["suggested"] as? [String: Any])
+        XCTAssertEqual(suggested["bg"] as? Int, 120)
+        XCTAssertEqual((suggested["predBGs"] as? [String: [Int]])?["IOB"], [120, 119, 118, 117])
+        XCTAssertNil(ExperimentalNightscoutPrediction.deviceStatus(forecast: Array(points.prefix(1)), now: start))
+    }
+
     // MARK: Predicted low alert
 
     private func forecast(_ values: [Double]) -> [GlucosePredictionPoint] {

@@ -52,6 +52,15 @@ the bias (positive means the forecast ran high) and the error of simply assuming
 Readings are interpolated across gaps of at most 2.5 reading intervals (6–20 minutes). A horizon
 needs at least 36 compared forecasts before it says much.
 
+### Nightscout
+
+**Upload to Nightscout** sends the forecast every five minutes as an OpenAPS-style devicestatus
+(`openaps.suggested.predBGs.IOB`, five-minute steps from the newest reading), the way AAPS does,
+so Nightscout's forecast lines show it with the openaps plugin enabled. It is unavailable while
+xDrip follows an AID's status from Nightscout, so the AID's own lines stay the only ones. Boluses
+upload the chosen insulin as `notes`, carb entries their `protein` and `fat`, exercise its
+intensity note.
+
 ### Predicted low alert
 
 Settings → Alerts → **Predicted Low** (off by default) warns before a low: it fires when the

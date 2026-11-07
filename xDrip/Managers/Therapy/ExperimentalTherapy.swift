@@ -122,6 +122,12 @@ extension UserDefaults {
         set { set(newValue, forKey: "experimentalPredictionAccuracyEnabled") }
     }
 
+    /// Uploads the forecast to Nightscout as an OpenAPS-style devicestatus.
+    var experimentalNightscoutPredictionEnabled: Bool {
+        get { bool(forKey: "experimentalNightscoutPredictionEnabled") }
+        set { set(newValue, forKey: "experimentalNightscoutPredictionEnabled") }
+    }
+
     /// How far ahead the predicted low alert looks, in minutes.
     var experimentalPredictedLowLeadMinutes: Int {
         get {
@@ -1204,6 +1210,30 @@ enum PredictionAccuracyRecorder {
             try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? data.write(to: url, options: .atomic)
         }
+    }
+}
+
+// MARK: - Nightscout
+
+/// The forecast in the shape AAPS uploads, which Nightscout's OpenAPS plugin draws as forecast lines.
+enum ExperimentalNightscoutPrediction {
+    static let device = "xDrip4iOS"
+
+    static func deviceStatus(forecast: [GlucosePredictionPoint], now: Date) -> [String: Any]? {
+        guard let first = forecast.first, forecast.count > 1 else { return nil }
+        return [
+            "device": device,
+            "created_at": now.ISOStringFromDate(),
+            "openaps": [
+                "suggested": [
+                    "timestamp": first.date.ISOStringFromDate(),
+                    "bg": Int(first.value.rounded()),
+                    // Five-minute steps from the newest reading, as OpenAPS predBGs.
+                    "predBGs": ["IOB": forecast.map { Int($0.value.rounded()) }],
+                    "reason": "xDrip4iOS experimental forecast, not a dosing recommendation"
+                ] as [String: Any]
+            ] as [String: Any]
+        ]
     }
 }
 
