@@ -206,6 +206,9 @@ class SettingsViewDexcomShareUploadSettingsViewModel: SettingsViewModelProtocol 
             return rows
         case .options:
             return [
+                SettingsRow(id: "dexcomShare.uploadEveryReading", title: Texts_SettingsView.nightscoutUploadEveryReading,
+                            control: .toggle(isOn: { UserDefaults.standard.dexcomShareUploadEveryReading },
+                                             setIsOn: { UserDefaults.standard.dexcomShareUploadEveryReading = $0 })),
                 nativeSettingsRow(id: "dexcomShare.useSchedule", index: Setting.useSchedule.rawValue, sectionID: sectionID),
                 nativeSettingsRow(id: "dexcomShare.schedule", index: Setting.schedule.rawValue, sectionID: sectionID,
                                   isVisible: self.defaults.dexcomShareUploadUseSchedule)

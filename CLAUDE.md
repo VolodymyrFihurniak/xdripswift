@@ -74,6 +74,8 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
 - Nightscout uploads every new reading (`storeFrequentReadingsInNightscout` defaults to true;
   toggle "Upload Every Reading" in Nightscout > Upload Options, the old developer row is hidden).
   Off restores upstream's one reading per 5 minutes.
+- Apple Health (`storeFrequentReadingsInHealthKit`) and Dexcom Share (`dexcomShareUploadEveryReading`)
+  also take every reading by default, with the same toggle in their settings.
 
 ## Experimental features (`docs/experimental-features.md`)
 

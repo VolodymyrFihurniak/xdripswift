@@ -3116,16 +3116,23 @@ extension UserDefaults {
         }
     }
 
-    /// should readings be stored much more frequentyly in healthkit ? true or false
+    /// Store every new reading in Apple Health instead of at most one per 5 minutes.
     ///
-    /// Only really useful for master with Libre 2 Direct connection (60 second readings). Default is false/disabled.
+    /// Like Nightscout, this fork enables it by default; an explicit choice is kept.
     @objc dynamic var storeFrequentReadingsInHealthKit: Bool {
         get {
-            return bool(forKey: Key.storeFrequentReadingsInHealthKit.rawValue)
+            return object(forKey: Key.storeFrequentReadingsInHealthKit.rawValue) == nil || bool(forKey: Key.storeFrequentReadingsInHealthKit.rawValue)
         }
         set {
             set(newValue, forKey: Key.storeFrequentReadingsInHealthKit.rawValue)
         }
+    }
+
+    /// Upload every new reading to Dexcom Share instead of at most one per 5 minutes. On by
+    /// default in this fork, as for Nightscout and Apple Health; an explicit choice is kept.
+    var dexcomShareUploadEveryReading: Bool {
+        get { object(forKey: "dexcomShareUploadEveryReading") == nil || bool(forKey: "dexcomShareUploadEveryReading") }
+        set { set(newValue, forKey: "dexcomShareUploadEveryReading") }
     }
 
     /// G7 defaults to the established coexistence path for existing and new installations.
