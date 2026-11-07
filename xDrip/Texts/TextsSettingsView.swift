@@ -692,6 +692,14 @@ class Texts_SettingsView {
     static let nightscoutUploadOptionsSectionTitle: String = {
         return NSLocalizedString("settingsviews_nightscoutUploadOptionsSectionTitle", tableName: filename, bundle: Bundle.main, value: "Upload Options", comment: "nightscout settings, section title for upload options")
     }()
+
+    static let nightscoutUploadEveryReading: String = {
+        return NSLocalizedString("settingsviews_nightscoutUploadEveryReading", tableName: filename, bundle: Bundle.main, value: "Upload Every Reading", comment: "nightscout settings, upload each new reading instead of one per 5 minutes")
+    }()
+
+    static let nightscoutUploadEveryReadingFooter: String = {
+        return NSLocalizedString("settingsviews_nightscoutUploadEveryReadingFooter", tableName: filename, bundle: Bundle.main, value: "Upload Every Reading sends each new glucose value to Nightscout as soon as it arrives, every minute with 1-minute sensors. Off, at most one reading per 5 minutes is uploaded.", comment: "nightscout settings, footer explaining upload every reading")
+    }()
     
     static let labelNightscoutUrl = {
         return NSLocalizedString("settingsviews_nightscoutUrl", tableName: filename, bundle: Bundle.main, value: "URL:", comment: "nightscout settings, where user can set the nightscout url")

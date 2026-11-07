@@ -781,3 +781,5 @@
 /* Speak Glucose wording and preview. */
 "speak.introduction" = "Промовляти вступ";
 "speak.preview" = "Прослухати приклад озвучення глюкози";
+"settingsviews_nightscoutUploadEveryReading" = "Відвантажувати кожен показник";
+"settingsviews_nightscoutUploadEveryReadingFooter" = "Кожне нове значення глюкози надсилається в Nightscout одразу після отримання, з датчиками на 1 хвилину — щохвилини. Якщо вимкнено, відвантажується не більше одного показника на 5 хвилин.";

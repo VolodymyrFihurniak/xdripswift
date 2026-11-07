@@ -288,3 +288,19 @@ final class NightscoutFollowerGapFillTests: XCTestCase {
         XCTAssertEqual(selected.map(\.id), ["baseline", "first", "second"])
     }
 }
+
+/// Nightscout uploads each new reading by default in this fork; an explicit choice is kept.
+final class NightscoutUploadEveryReadingDefaultTests: XCTestCase {
+    func testUploadEveryReadingDefaultsToOnAndKeepsAnExplicitChoice() {
+        let suite = "NightscoutUploadEveryReadingDefaultTests"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertTrue(defaults.storeFrequentReadingsInNightscout)
+        defaults.storeFrequentReadingsInNightscout = false
+        XCTAssertFalse(defaults.storeFrequentReadingsInNightscout)
+        defaults.storeFrequentReadingsInNightscout = true
+        XCTAssertTrue(defaults.storeFrequentReadingsInNightscout)
+    }
+}
