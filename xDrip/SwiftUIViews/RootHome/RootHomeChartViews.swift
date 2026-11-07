@@ -107,6 +107,16 @@ struct RootHomeMainChartView: View {
                 )
                 .clipped()
 
+                // Experimental: which colour is which insulin, for the layers in this window.
+                let legendLayers = experimentalPlots.insulinLayers(from: chartState.startDate, to: chartState.endDate)
+                if showsTreatments && allowsTherapyCharts && !legendLayers.isEmpty {
+                    InsulinActivityLegend(layers: legendLayers)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(.leading, 6)
+                        .padding(.top, 4)
+                        .allowsHitTesting(false)
+                }
+
                 if rangeOverlay.value {
                     HStack(spacing: 4) {
                         Text("\(Int(selectedRange.rawValue))")
@@ -346,5 +356,25 @@ struct RootHomeMiniChartView: View {
             visibleTimeInterval: visibleTimeInterval,
             chartWidth: chartWidth
         )
+    }
+}
+
+/// Compact legend for the experimental insulin activity layers: a dot and a short name each.
+struct InsulinActivityLegend: View {
+    let layers: [GlucoseChartExperimentalPlots.InsulinLayer]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(layers) { layer in
+                HStack(spacing: 3) {
+                    Circle().fill(layer.color).frame(width: 7, height: 7)
+                    Text(layer.name).font(.caption2).foregroundStyle(ConstantsAppColors.secondaryText).lineLimit(1)
+                }
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(ConstantsAppColors.homePanelBackground.opacity(0.75), in: Capsule())
+        .accessibilityElement(children: .combine)
     }
 }

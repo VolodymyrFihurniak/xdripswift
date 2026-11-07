@@ -191,12 +191,20 @@ public class TreatmentEntry: NSManagedObject, Comparable {
 		case .Insulin:
 			dict["eventType"] = "Bolus" // maybe overwritten in next statement
 			dict["insulin"] = self.value
+            // Experimental insulin support names the insulin in the notes ("Fiasp"); Nightscout shows them.
+            if let notes, !notes.isEmpty { dict["notes"] = notes }
 		case .Carbs:
 			dict["eventType"] = "Carbs" // maybe overwritten in next statement
 			dict["carbs"] = self.value
+            // Experimental protein and fat ("P:20 F:15") map to Nightscout's own fields.
+            if let macros = ExperimentalTreatment(date: date, amount: value, kind: .carbs, notes: notes).macros {
+                if macros.protein > 0 { dict["protein"] = macros.protein }
+                if macros.fat > 0 { dict["fat"] = macros.fat }
+            }
 		case .Exercise:
 			dict["eventType"] = "Exercise" // maybe overwritten in next statement
 			dict["duration"] = self.value
+            if let notes, !notes.isEmpty { dict["notes"] = notes }
         case .BgCheck:
             dict["eventType"] = "BG Check" // maybe overwritten in next statement
             dict["glucose"] = self.value

@@ -62,6 +62,8 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
 - **Name**: S1 and S2 share `CGMTransmitterType.sibionics2` (persisted raw value). Use
   `CGMSibionics2Transmitter.productName` / `SibionicsDeviceVariant.productName` wherever the
   product name is shown (active sensor description, Activity Log source, Loop, reports).
+- **Manual sensitivity** (`Sibionics2Configuration.manualSensitivity`, 0.8–2.5) wins over probe code,
+  label and name; changing it replays history like a new label code.
 - **Reset**: manual for all variants (S2 encrypted `0x10`, EU/Hematonix `24 E7 6F 34`,
   Chinese `AA 55 10 F1`); automatic only for Sibionics 2. The post-reset session probe is one-shot.
 - **Calibration** (`xDrip/Calibration/Sibionics2Calibrator.swift`): xDrip+ or JugglucoNG
@@ -74,6 +76,8 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
 - Nightscout uploads every new reading (`storeFrequentReadingsInNightscout` defaults to true;
   toggle "Upload Every Reading" in Nightscout > Upload Options, the old developer row is hidden).
   Off restores upstream's one reading per 5 minutes.
+- Apple Health (`storeFrequentReadingsInHealthKit`) and Dexcom Share (`dexcomShareUploadEveryReading`)
+  also take every reading by default, with the same toggle in their settings.
 
 ## Experimental features (`docs/experimental-features.md`)
 
@@ -85,12 +89,18 @@ Drawn only on the Home main chart via `GlucoseChartView.experimentalPlots(_:)`; 
 it needs live in `GlucoseChartView.swift` because that file is also compiled into the widget,
 watch and notification extensions. A treatment's insulin is named in its `notes`
 (`InsulinProfile.matching(notes:)`); every per-dose choice must round-trip through its
-`shortName`. All off by default; IOB/COB is untouched.
+`shortName`. All off by default; IOB/COB is untouched. Also: `AlertKind.predictedLow` (raw 16),
+prediction periods/body weight/protein-fat/intensity (notes tokens `P:20 F:15`, `intensity:light`),
+accuracy recorder (Application Support JSON, 14 days), Nightscout devicestatus forecast
+(`openaps.suggested.predBGs.IOB`, only when no AID status is followed), and
+`ExperimentalCompanionForecast` for widgets, Live Activity and watch (optional fields).
 
 ## Not ported (yet)
 
-JugglucoNG alternative glucose models (Balanced, Responsive, Adaptive V2), manual sensitivity
-override, GS3 variant.
+JugglucoNG alternative glucose models (Balanced, Responsive, Adaptive V2), GS3 variant,
+Sibionics reset reminder and raw source-journal backup/recovery, NovoPen 6 / Echo Plus NFC import
+(JugglucoNG `NovoPen/opennov`, IEEE 11073 PHD over NFC Type 4 — needs CoreNFC ISO 7816
+entitlement and AIDs), adaptive forecast.
 
 ## Git
 

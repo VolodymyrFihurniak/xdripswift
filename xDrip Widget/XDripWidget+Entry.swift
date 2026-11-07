@@ -41,6 +41,7 @@ extension XDripWidget.Entry {
         
         var aidStatus: AIDStatus?
         var therapyMetrics: TherapyMetricsSnapshot? = nil
+        var experimentalForecast: ExperimentalCompanionForecast? = nil
         
         var bgUnitString: String
         var bgValueInMgDl: Double?

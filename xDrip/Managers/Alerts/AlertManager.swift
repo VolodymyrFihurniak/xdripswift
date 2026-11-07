@@ -196,10 +196,13 @@ public class AlertManager: NSObject {
                 // alerts are checked in order of importance - there should be only one alert raised, except missed reading alert which will always be checked.
                 
                 // create helper to check and fire alerts
-                let checkAlertAndFireHelper = { (_ alertKind: AlertKind) -> Bool in self.checkAlertAndFire(alertKind: alertKind, lastBgReading: lastBgReading, lastButOneBgReading: lastButOneBgReading, lastCalibration: lastCalibration, transmitterBatteryInfo: transmitterBatteryInfo) }
+                // The experimental forecast is only built when the predicted low alert can use it.
+                let forecast = predictedLowForecast()
+                let checkAlertAndFireHelper = { (_ alertKind: AlertKind) -> Bool in self.checkAlertAndFire(alertKind: alertKind, lastBgReading: lastBgReading, lastButOneBgReading: lastButOneBgReading, lastCalibration: lastCalibration, transmitterBatteryInfo: transmitterBatteryInfo, forecast: forecast) }
                 
                 // Specify the order in which alerts should be checked and group those with related snoozes.
-                var alertGroupsByPreference: [[AlertKind]] = [[.fastdrop], [.verylow, .low], [.fastrise], [.veryhigh, .high], [.calibration]]
+                // A current low wins over a predicted one; the prediction warns before that.
+                var alertGroupsByPreference: [[AlertKind]] = [[.fastdrop], [.verylow, .low], [.predictedLow], [.fastrise], [.veryhigh, .high], [.calibration]]
 
                 // Select exactly one persisted battery configuration from the received payload.
                 // The firing path therefore reads the G7 value from the G7 AlertEntry, the G5 value
@@ -858,7 +861,20 @@ public class AlertManager: NSObject {
     }
     
     /// will check if the alert of type alertKind needs to be fired and also fires it, plays the sound, and if yes returns true, otherwise false
-    private func checkAlertAndFire(alertKind: AlertKind, lastBgReading: BgReading?, lastButOneBgReading: BgReading?, lastCalibration: Calibration?, transmitterBatteryInfo: TransmitterBatteryInfo?, deviceStatus: NotLoopingDeviceStatus? = nil) -> Bool {
+    /// Forecast for the predicted low alert, or nil when that alert is off or cannot fire.
+    private func predictedLowForecast() -> [GlucosePredictionPoint]? {
+        let (entry, _) = alertEntriesAccessor.getCurrentAndNextAlertEntry(forAlertKind: .predictedLow, forWhen: Date(), alertTypesAccessor: alertTypesAccessor)
+        guard !entry.isDisabled, entry.alertType.enabled else { return nil }
+        let since = Date().addingTimeInterval(-2 * 60 * 60)
+        let readings = bgReadingsAccessor.getLatestBgReadings(limit: nil, fromDate: since, forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
+            .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
+        let treatments = PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext)
+        return ExperimentalPredictionModel(defaults: .standard).forecast(
+            readings: readings, treatments: treatments, isMmol: !UserDefaults.standard.bloodGlucoseUnitIsMgDl,
+            targetLowMgDl: UserDefaults.standard.lowMarkValue, targetHighMgDl: UserDefaults.standard.highMarkValue)
+    }
+
+    private func checkAlertAndFire(alertKind: AlertKind, lastBgReading: BgReading?, lastButOneBgReading: BgReading?, lastCalibration: Calibration?, transmitterBatteryInfo: TransmitterBatteryInfo?, deviceStatus: NotLoopingDeviceStatus? = nil, forecast: [GlucosePredictionPoint]? = nil) -> Bool {
         /// This is only for missed reading alert. How many minutes between now and the moment the snooze expires (meaning when is it not snoozed anymore)
         ///
         /// will be initialized later
@@ -904,7 +920,7 @@ public class AlertManager: NSObject {
         }
         
         // check if alert is required
-        let (alertNeeded, alertBody, alertTitle, delayInSeconds) = alertKind.alertNeeded(currentAlertEntry: currentAlertEntry, nextAlertEntry: nextAlertEntry, lastBgReading: lastBgReading, lastButOneBgReading, lastCalibration: lastCalibration, transmitterBatteryInfo: transmitterBatteryInfo, deviceStatus: deviceStatus)
+        let (alertNeeded, alertBody, alertTitle, delayInSeconds) = alertKind.alertNeeded(currentAlertEntry: currentAlertEntry, nextAlertEntry: nextAlertEntry, lastBgReading: lastBgReading, lastButOneBgReading, lastCalibration: lastCalibration, transmitterBatteryInfo: transmitterBatteryInfo, deviceStatus: deviceStatus, forecast: forecast)
 
         // A low initial Voltage B is not trustworthy during the configured initial period of Dexcom
         // hardware life. G5/G6/ONE use the transmitter start date. G7/ONE+/Stelo use the sensor
@@ -995,7 +1011,7 @@ public class AlertManager: NSObject {
             // Device, calibration and missing-data warnings remain text-only.
             let includesGlucose: Bool
             switch alertKind {
-            case .verylow, .low, .high, .veryhigh, .fastdrop, .fastrise:
+            case .verylow, .low, .high, .veryhigh, .fastdrop, .fastrise, .predictedLow:
                 includesGlucose = true
             case .missedreading, .calibration, .batterylow, .phonebatterylow, .notlooping,
                  .sensorTransmitterFailure, .dexcomG5BatteryLow, .dexcomG7BatteryLow, .sensorEndingSoon, .sensorExpectedExpiry:

@@ -39,6 +39,8 @@ struct WidgetSharedUserDefaultsModel: Codable, Equatable {
     var allowStandByHighContrast: Bool
     var forceStandByBigNumbers: Bool
 
+    /// Experimental forecast; optional so data written by older builds still decodes.
+    var experimentalForecast: ExperimentalCompanionForecast? = nil
 }
 
 /// Remember completed publications, not requests which may still be queued or replaced.

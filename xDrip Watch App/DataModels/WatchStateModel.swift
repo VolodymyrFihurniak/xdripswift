@@ -124,6 +124,8 @@ final class WatchStateModel: NSObject, ObservableObject {
     @Published var sensorMaxAgeInMinutes: Double = 14400
     @Published var preferSensorCountdown: Bool = false
     @Published var sensorNoiseStateRawValue: Int?
+    /// Experimental forecast from the phone, drawn on the watch chart.
+    @Published var experimentalForecast: ExperimentalCompanionForecast?
     @Published var timeStampOfLastFollowerConnection: Date = .now
     @Published var secondsUntilFollowerDisconnectWarning: Int = 60 * 6
     @Published var timeStampOfLastHeartBeat: Date = .now
@@ -853,6 +855,7 @@ final class WatchStateModel: NSObject, ObservableObject {
         sensorMaxAgeInMinutes = dictionary["sensorMaxAgeInMinutes"] as? Double ?? 0
         preferSensorCountdown = dictionary["preferSensorCountdown"] as? Bool ?? false
         sensorNoiseStateRawValue = dictionary["sensorNoiseStateRawValue"] as? Int
+        experimentalForecast = ExperimentalCompanionForecast(dictionary: dictionary["experimentalForecast"])
         isMaster = dictionary["isMaster"] as? Bool ?? true
         followerDataSourceType = FollowerDataSourceType(rawValue: dictionary["followerDataSourceTypeRawValue"] as? Int ?? 0) ?? .nightscout
         followerBackgroundKeepAliveType = FollowerBackgroundKeepAliveType(rawValue: dictionary["followerBackgroundKeepAliveTypeRawValue"] as? Int ?? 0) ?? .normal

@@ -25,6 +25,9 @@ class Texts_Alerts {
         return NSLocalizedString("alerts_veryhighalerttitle", tableName: filename, bundle: Bundle.main, value: "Very High Alarm", comment: "When very high alert rises, this is the start of the text shown in the title of the alert notification, also in alert settings list, for the name of the alert")
     }()
     
+    static let predictedLowAlertTitle = NSLocalizedString("alerts_predictedLowAlertTitle", tableName: filename, bundle: .main, value: "Predicted Low", comment: "Experimental alert raised when the glucose forecast falls below the alert value")
+    static let predictedLowInMinutes = NSLocalizedString("alerts_predictedLowInMinutes", tableName: filename, bundle: .main, value: "in %ld min", comment: "Predicted low alert: when the forecast reaches the value, e.g. 'in 20 min'")
+
     static let lowAlertTitle: String = {
         return NSLocalizedString("alerts_lowalerttitle", tableName: filename, bundle: Bundle.main, value: "Low Alarm", comment: "When very low alert rises, this is the start of the text shown in the title of the alert notification, also in alert settings list, for the name of the alert")
     }()

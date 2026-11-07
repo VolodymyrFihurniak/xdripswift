@@ -34,3 +34,5 @@
 "sensorExpiry.hoursHelp" = "Enter a whole number from 1 to 48 hours.";
 "sensorExpiry.endingSoonBody" = "Your sensor is expected to reach the end of its lifetime on %@.";
 "sensorExpiry.expectedExpiryBody" = "Your sensor has reached its expected expiry time (%@).";
+"alerts_predictedLowAlertTitle" = "Predicted Low";
+"alerts_predictedLowInMinutes" = "in %ld min";

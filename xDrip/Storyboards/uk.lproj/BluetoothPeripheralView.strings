@@ -320,3 +320,6 @@
 "bluetoothAccessNotEnabled" = "Доступ до Bluetooth не ввімкнено";
 "bluetoothAccessInstructions" = "Щоб підключитися, відкрийте Параметри → Приватність і безпека → Bluetooth і дозвольте доступ для %@.";
 "bluetoothAccessRestrictedInstructions" = "Обмеження пристрою блокують доступ до Bluetooth. Перевірте параметри Екранного часу або зверніться до адміністратора пристрою, щоб увімкнути доступ.";
+"sibionics.manualSensitivityTitle" = "Ручна чутливість";
+"sibionics.manualSensitivityOff" = "Вимкнено";
+"sibionics.manualSensitivityMessage" = "Значення від 0,8 до 2,5 має пріоритет над кодом зонда, етикеткою та назвою датчика, а історія перераховується з ним. Залиште порожнім, щоб знову використовувати коди.";

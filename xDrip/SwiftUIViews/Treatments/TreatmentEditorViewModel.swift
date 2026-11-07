@@ -28,6 +28,10 @@ import OSLog
     @Published var enteredInsulinDescription: String
     /// Experimental: the insulin of a bolus, stored in its notes. Nil uses the default bolus insulin.
     @Published var selectedBolusInsulin: InsulinProfile?
+    /// Experimental: protein and fat of a carb entry and exercise intensity, stored in the notes.
+    @Published var enteredProtein: String
+    @Published var enteredFat: String
+    @Published var selectedIntensity: ExperimentalExerciseIntensity?
     @Published var alertMessage: TreatmentEditorAlertMessage?
 
     /// Only show the copied-values footer when both fields were prefilled for a new injection.
@@ -66,6 +70,12 @@ import OSLog
         // Editing always uses the saved treatment. Defaults only prefill a new injection draft.
         self.enteredInsulinDescription = treatmentToEdit?.notes ?? (initialType == .BasalInjection ? UserDefaults.standard.lastBasalInjectionInsulinDescription : "")
         self.selectedBolusInsulin = treatmentToEdit?.treatmentType == .Insulin ? InsulinProfile.matching(notes: treatmentToEdit?.notes) : nil
+        let notes = treatmentToEdit?.notes ?? ""
+        let isCarbs = treatmentToEdit?.treatmentType == .Carbs
+        self.enteredProtein = isCarbs ? ExperimentalTreatment.number(after: "P:", in: notes).map(ExperimentalPredictionModel.compact) ?? "" : ""
+        self.enteredFat = isCarbs ? ExperimentalTreatment.number(after: "F:", in: notes).map(ExperimentalPredictionModel.compact) ?? "" : ""
+        self.selectedIntensity = treatmentToEdit?.treatmentType == .Exercise
+            ? ExperimentalTreatment(date: Date(), amount: 0, kind: .exercise, notes: notes).intensity : nil
 
         if let treatmentToEdit = treatmentToEdit {
             if treatmentToEdit.treatmentType == .Note {
@@ -93,6 +103,16 @@ import OSLog
     /// Experimental insulin support lets a bolus name its insulin and a basal injection pick one.
     var showsExperimentalInsulinChoice: Bool {
         UserDefaults.standard.experimentalInsulinsEnabled && (selectedType == .Insulin || selectedType == .BasalInjection)
+    }
+
+    /// Protein and fat for the forecast's late rise (Experimental > Glucose prediction > Protein and fat).
+    var showsExperimentalMacros: Bool {
+        UserDefaults.standard.experimentalPredictionMacrosEnabled && selectedType == .Carbs
+    }
+
+    /// Exercise intensity scales the forecast's drop (JugglucoNG `JournalIntensity`).
+    var showsExperimentalIntensity: Bool {
+        UserDefaults.standard.experimentalPredictionEnabled && selectedType == .Exercise
     }
 
     /// BG checks are measurements and retain their existing no-future rule.
@@ -403,6 +423,11 @@ import OSLog
         case .BasalInjection: return normalizedInsulinDescription()
         case .Note: return normalizedNotesValue()
         case .Insulin where UserDefaults.standard.experimentalInsulinsEnabled: return selectedBolusInsulin?.shortName
+        case .Carbs where UserDefaults.standard.experimentalPredictionMacrosEnabled:
+            return ExperimentalTreatment.macrosNotes(protein: ExperimentalSettingsViewModel.parse(enteredProtein),
+                                                     fat: ExperimentalSettingsViewModel.parse(enteredFat))
+        case .Exercise where UserDefaults.standard.experimentalPredictionEnabled:
+            return selectedIntensity.map { "intensity:" + $0.rawValue }
         default: return nil
         }
     }

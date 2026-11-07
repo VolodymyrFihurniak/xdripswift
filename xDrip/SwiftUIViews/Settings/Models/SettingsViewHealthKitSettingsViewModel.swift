@@ -27,7 +27,11 @@ class SettingsViewHealthKitSettingsViewModel:SettingsViewModelProtocol {
     
     func settingsRows(sectionID: Int) -> [SettingsRow] {
         [
-            nativeSettingsRow(id: "healthKit.enabledHealthKit", index: Setting.enabledHealthKit.rawValue, sectionID: sectionID)
+            nativeSettingsRow(id: "healthKit.enabledHealthKit", index: Setting.enabledHealthKit.rawValue, sectionID: sectionID),
+            SettingsRow(id: "healthKit.storeEveryReading", title: Texts_SettingsView.nightscoutUploadEveryReading,
+                        control: .toggle(isOn: { UserDefaults.standard.storeFrequentReadingsInHealthKit },
+                                         setIsOn: { UserDefaults.standard.storeFrequentReadingsInHealthKit = $0 }),
+                        isEnabled: HKHealthStore.isHealthDataAvailable())
         ]
     }
 

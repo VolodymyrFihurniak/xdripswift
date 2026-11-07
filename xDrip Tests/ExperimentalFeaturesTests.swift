@@ -235,6 +235,137 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertEqual(points.map(\.mgDl), [100, 105, 107.5])
     }
 
+    // MARK: Body weight, periods, macros, intensity
+
+    func testBodyWeightSelectsTheDosePerKilogramCurve() {
+        // 14 U at 70 kg is Fiasp's 0.2 U/kg study dose; without a weight the 0.1 U/kg reference applies.
+        let weighted = InsulinCurveCatalogue.curve(for: .fiasp, units: 14, bodyWeightKg: 70)
+        XCTAssertEqual(InsulinCurveMath.cumulativeFraction(weighted, elapsedMinutes: 120), 0.439_609_643, accuracy: 1e-6)
+        let reference = InsulinCurveCatalogue.curve(for: .fiasp, units: 14)
+        XCTAssertEqual(InsulinCurveMath.cumulativeFraction(reference, elapsedMinutes: 120), 0.552_955_201, accuracy: 1e-6)
+        XCTAssertEqual(InsulinCurveCatalogue.curve(for: .fiasp, units: 14, bodyWeightKg: 5), reference)
+    }
+
+    func testPeriodsReplaceTheSingleValuesFromTheirStart() {
+        var model = ExperimentalPredictionModel()
+        model.timeZone = TimeZone(identifier: "UTC")!
+        model.periods = [ExperimentalPredictionPeriod(startMinute: 360, carbRatio: 8, insulinSensitivityMgDl: 40, carbAbsorption: 30)]
+        let midnight = Date(timeIntervalSince1970: (start.timeIntervalSince1970 / 86_400).rounded(.down) * 86_400)
+        XCTAssertEqual(model.parameters(at: midnight.addingTimeInterval(5 * 3600)).carbRatio, ExperimentalPredictionModel.defaultCarbRatio)
+        let morning = model.parameters(at: midnight.addingTimeInterval(7 * 3600))
+        XCTAssertEqual(morning.carbRatio, 8)
+        XCTAssertEqual(morning.insulinSensitivityMgDl, 40)
+        XCTAssertEqual(morning.carbAbsorption, 30)
+    }
+
+    func testPeriodsEncodeSortedUniqueAndClamped() {
+        let periods = [ExperimentalPredictionPeriod(startMinute: 720, carbRatio: 50, insulinSensitivityMgDl: 54, carbAbsorption: 35),
+                       ExperimentalPredictionPeriod(startMinute: 360, carbRatio: 8, insulinSensitivityMgDl: 40, carbAbsorption: 30),
+                       ExperimentalPredictionPeriod(startMinute: 360, carbRatio: 9, insulinSensitivityMgDl: 41, carbAbsorption: 31)]
+        let decoded = ExperimentalPredictionPeriod.decode(ExperimentalPredictionPeriod.encode(periods))
+        XCTAssertEqual(decoded.map(\.startMinute), [360, 720])
+        XCTAssertEqual(decoded.first?.carbRatio, 8)
+        XCTAssertEqual(decoded.last?.carbRatio, 30)
+        XCTAssertEqual(ExperimentalPredictionPeriod.sanitized((1...10).map {
+            ExperimentalPredictionPeriod(startMinute: $0 * 60, carbRatio: 10, insulinSensitivityMgDl: 54, carbAbsorption: 35) }).count, 7)
+    }
+
+    func testProteinAndFatAddJugglucoNGsDelayedTail() {
+        var model = ExperimentalPredictionModel()
+        model.macrosEnabled = true
+        let meal = ExperimentalTreatment(date: start, amount: 40, kind: .carbs, notes: ExperimentalTreatment.macrosNotes(protein: 20, fat: 15))
+        XCTAssertEqual(meal.notes, "P:20 F:15")
+        XCTAssertEqual(meal.macros?.protein, 20)
+        XCTAssertEqual(meal.macros?.fat, 15)
+        // 216 mg/dL from the carbs plus 11.825 g equivalent from 2.15 fat-protein units.
+        XCTAssertEqual(model.treatmentDelta(meal, at: start.addingTimeInterval(7 * 3600), baseline: start), 279.855, accuracy: 1e-6)
+        model.macrosEnabled = false
+        XCTAssertEqual(model.treatmentDelta(meal, at: start.addingTimeInterval(7 * 3600), baseline: start), 216, accuracy: 1e-9)
+    }
+
+    func testExerciseIntensityScalesTheDrop() {
+        let model = ExperimentalPredictionModel()
+        let intense = ExperimentalTreatment(date: start, amount: 60, kind: .exercise, notes: "intensity:intense")
+        XCTAssertEqual(intense.intensity, .intense)
+        XCTAssertEqual(model.treatmentDelta(intense, at: start.addingTimeInterval(3600), baseline: start), -11.88, accuracy: 1e-9)
+        let unknown = ExperimentalTreatment(date: start, amount: 60, kind: .exercise, notes: nil)
+        XCTAssertEqual(model.treatmentDelta(unknown, at: start.addingTimeInterval(3600), baseline: start), -5.94, accuracy: 1e-9)
+    }
+
+    // MARK: Prediction accuracy
+
+    func testAccuracyScoresEachHorizonAgainstTheReadingsThatFollowed() throws {
+        let readings = (0...12).map { (date: start.addingTimeInterval(TimeInterval($0 * 5 * 60)), mgDl: 100 + Double($0) * 2) }
+        let forecast = RecordedForecast(origin: start, originMgDl: 100, predicted: [15: 110, 30: 120, 60: 90, 120: 100])
+        let report = PredictionAccuracy.report(forecasts: [forecast], readings: readings, now: start.addingTimeInterval(60 * 60))
+        let byHorizon = Dictionary(uniqueKeysWithValues: report.map { ($0.horizonMinutes, $0) })
+        XCTAssertEqual(byHorizon[15]?.meanAbsoluteError, 4)
+        XCTAssertEqual(byHorizon[30]?.bias, 8)
+        XCTAssertEqual(byHorizon[60]?.bias, -34)
+        XCTAssertEqual(byHorizon[60]?.noChangeMeanAbsoluteError, 24)
+        XCTAssertEqual(byHorizon[120]?.count, 0)
+        XCTAssertEqual(byHorizon[120]?.pending, 1)
+        // Between readings five minutes apart the value is interpolated.
+        XCTAssertEqual(try XCTUnwrap(PredictionAccuracy.actual(at: start.addingTimeInterval(150), readings: readings, maximumGap: 12.5 * 60)), 101, accuracy: 1e-9)
+        XCTAssertEqual(PredictionAccuracy.maximumGap(readings: readings), 12.5 * 60)
+    }
+
+    func testRecordKeepsTheForecastAtEachScoredHorizon() throws {
+        let points = (0...24).map { GlucosePredictionPoint(date: start.addingTimeInterval(TimeInterval($0 * 5 * 60)), value: 100 + Double($0), confidence: 1, unclampedValue: 100 + Double($0)) }
+        let record = try XCTUnwrap(PredictionAccuracyRecorder.record(from: points))
+        XCTAssertEqual(record.originMgDl, 100)
+        XCTAssertEqual(record.predicted, [15: 103, 30: 106, 60: 112, 120: 124])
+    }
+
+    // MARK: Nightscout
+
+    func testNightscoutForecastUsesTheOpenAPSPredBGsShape() throws {
+        let points = (0...3).map { GlucosePredictionPoint(date: start.addingTimeInterval(TimeInterval($0 * 5 * 60)), value: 120.4 - Double($0), confidence: 1, unclampedValue: 0) }
+        let status = try XCTUnwrap(ExperimentalNightscoutPrediction.deviceStatus(forecast: points, now: start))
+        XCTAssertEqual(status["device"] as? String, "xDrip4iOS")
+        let suggested = try XCTUnwrap((status["openaps"] as? [String: Any])?["suggested"] as? [String: Any])
+        XCTAssertEqual(suggested["bg"] as? Int, 120)
+        XCTAssertEqual((suggested["predBGs"] as? [String: [Int]])?["IOB"], [120, 119, 118, 117])
+        XCTAssertNil(ExperimentalNightscoutPrediction.deviceStatus(forecast: Array(points.prefix(1)), now: start))
+    }
+
+    // MARK: Sibionics manual sensitivity
+
+    func testManualSensitivityOverridesEveryCodeWhenSupported() {
+        let automatic = Sibionics2FactorySensitivity.effectiveSensitivity(advertisedName: nil, variant: .sibionics1, sibionics1Family: .chinese)
+        XCTAssertEqual(automatic, 1.27, accuracy: 1e-9)
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(advertisedName: nil, variant: .sibionics1, sibionics1Family: .chinese,
+                                                                          manualSensitivity: 1.5), 1.5)
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(advertisedName: nil, variant: .sibionics1, sibionics1Family: .chinese,
+                                                                          manualSensitivity: 3.0), automatic)
+    }
+
+    // MARK: Predicted low alert
+
+    private func forecast(_ values: [Double]) -> [GlucosePredictionPoint] {
+        values.enumerated().map { GlucosePredictionPoint(date: start.addingTimeInterval(TimeInterval($0.offset * 5 * 60)), value: $0.element, confidence: 1, unclampedValue: $0.element) }
+    }
+
+    func testPredictedLowFiresOnlyWithinTheLeadTimeAndWhileStillAbove() throws {
+        let points = forecast([95, 90, 85, 78, 72, 68])
+        XCTAssertNil(PredictedLowAlert.crossing(forecast: points, currentMgDl: 95, thresholdMgDl: 70, leadMinutes: 20))
+        let crossing = try XCTUnwrap(PredictedLowAlert.crossing(forecast: points, currentMgDl: 95, thresholdMgDl: 70, leadMinutes: 25))
+        XCTAssertEqual(crossing.minutes, 25)
+        XCTAssertEqual(crossing.mgDl, 68)
+        // Already below: the ordinary low alert covers it.
+        XCTAssertNil(PredictedLowAlert.crossing(forecast: points, currentMgDl: 65, thresholdMgDl: 70, leadMinutes: 30))
+        XCTAssertNil(PredictedLowAlert.crossing(forecast: [], currentMgDl: 95, thresholdMgDl: 70, leadMinutes: 30))
+    }
+
+    func testPredictedLowIsANewDisabledByDefaultGlucoseAlert() {
+        XCTAssertEqual(AlertKind.predictedLow.rawValue, 16)
+        XCTAssertTrue(AlertKind.predictedLow.defaultIsDisabled())
+        XCTAssertTrue(AlertKind.predictedLow.valueIsABgValue())
+        XCTAssertEqual(AlertKind.predictedLow.defaultAlertValue(), ConstantsDefaultAlertLevels.low)
+        let kinds = AlertKind.visibleAlertKinds(for: .Libre2)
+        XCTAssertEqual(kinds.firstIndex(of: .predictedLow), (kinds.firstIndex(of: .low) ?? -2) + 1)
+    }
+
     // MARK: Settings
 
     func testSettingsDefaultsAndClamping() {

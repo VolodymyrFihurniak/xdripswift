@@ -142,6 +142,22 @@ struct TreatmentEditorView: View {
 
     // MARK: - SwiftUI views
 
+    /// A grams entry row matching the value editor (experimental protein and fat).
+    private func gramsField(_ title: String, text: Binding<String>) -> some View {
+        LabeledContent(title) {
+            HStack(spacing: 6) {
+                TextField("0", text: text)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(Color(.colorSecondary))
+                    .frame(minWidth: 72, maxWidth: 96, alignment: .trailing)
+                Text("g").foregroundStyle(Color(.colorTertiary))
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
     var body: some View {
         Form {
             Section(footer: editorFooterView()) {
@@ -186,6 +202,22 @@ struct TreatmentEditorView: View {
                             .textFieldStyle(.plain)
                             .foregroundStyle(Color(.colorSecondary))
                     }
+                }
+
+                // Experimental prediction inputs, stored in the treatment's notes.
+                if viewModel.showsExperimentalMacros {
+                    gramsField(ExperimentalTexts.text("protein", "Protein"), text: $viewModel.enteredProtein)
+                    gramsField(ExperimentalTexts.text("fat", "Fat"), text: $viewModel.enteredFat)
+                }
+
+                if viewModel.showsExperimentalIntensity {
+                    Picker(ExperimentalTexts.text("intensity", "Intensity"), selection: $viewModel.selectedIntensity) {
+                        Text(ExperimentalTexts.text("intensityNotSet", "Not set")).tag(ExperimentalExerciseIntensity?.none)
+                        ForEach(ExperimentalExerciseIntensity.allCases, id: \.self) { intensity in
+                            Text(intensity.title).tag(ExperimentalExerciseIntensity?.some(intensity))
+                        }
+                    }
+                    .foregroundStyle(Color(.colorPrimary))
                 }
 
                 // Experimental insulin support: the insulin is named in the treatment's notes.

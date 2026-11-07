@@ -57,6 +57,8 @@ struct XDripWidgetAttributes: ActivityAttributes {
         var dataSourceDescription: String
         var followerPatientName: String?
         var sensorNoiseStateRawValue: Int?
+        /// Experimental forecast; optional so activities started by older builds still decode.
+        var experimentalForecast: ExperimentalCompanionForecast?
         // optional so existing activities without warm-up information still decode
         var sensorWarmupEndDate: Date?
         var sensorWarmupConfirmationUntil: Date?

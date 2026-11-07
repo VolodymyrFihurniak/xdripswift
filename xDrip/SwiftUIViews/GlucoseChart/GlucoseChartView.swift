@@ -317,7 +317,7 @@ struct GlucoseChartView: View {
 
     /// The forecast is shown only while the chart ends at the present.
     private var showsPrediction: Bool {
-        usesMainChartYAxisContext && !experimentalPlotData.prediction.isEmpty
+        (usesMainChartYAxisContext || experimentalPlotData.showsInCompactCharts) && !experimentalPlotData.prediction.isEmpty
             && visibleEndDate.timeIntervalSinceNow > -ConstantsGlucoseChartSwiftUI.experimentalPredictionPresentTolerance
     }
 
@@ -540,6 +540,13 @@ struct GlucoseChartView: View {
                 return min(lastPredictionDate, visibleEndDate.addingTimeInterval(futureSpan))
             }
             return visibleEndDate
+        }
+
+        // Widgets, Live Activity and the watch make the same room for an experimental forecast.
+        if showsPrediction, let lastPredictionDate = experimentalPlotData.prediction.last?.date, lastPredictionDate > visibleEndDate {
+            let futureSpan = max(visibleEndDate.timeIntervalSince(visibleStartDate) * ConstantsGlucoseChartSwiftUI.experimentalPredictionFutureShare,
+                                 ConstantsGlucoseChartSwiftUI.experimentalPredictionMinimumFutureSpan)
+            return min(lastPredictionDate, visibleEndDate.addingTimeInterval(futureSpan))
         }
 
         guard chartType == .miniChart else {
@@ -1597,6 +1604,8 @@ struct GlucoseChartExperimentalPlots {
     var prediction: [PredictionPoint] = []
     var insulin: [InsulinLayer] = []
     var drawsGlucoseAsLine = false
+    /// Lets widgets, Live Activity and the watch draw the forecast; the app's main chart always may.
+    var showsInCompactCharts = false
 
     /// Layers inside the window that carry any insulin.
     func insulinLayers(from start: Date, to end: Date) -> [InsulinLayer] {
@@ -1642,6 +1651,36 @@ struct GlucoseChartExperimentalPlots {
         }
         close()
         return runs
+    }
+}
+
+/// The experimental forecast as it crosses to widgets, Live Activity and the watch: a start and
+/// five-minute mg/dL values, compact enough for ActivityKit's payload limit.
+struct ExperimentalCompanionForecast: Codable, Hashable {
+    var startAsDouble: Double
+    var valuesMgDl: [Double]
+    static let stepSeconds: TimeInterval = 5 * 60
+
+    var plots: GlucoseChartExperimentalPlots {
+        var plots = GlucoseChartExperimentalPlots()
+        plots.showsInCompactCharts = true
+        plots.prediction = valuesMgDl.enumerated().map {
+            GlucoseChartExperimentalPlots.PredictionPoint(
+                date: Date(timeIntervalSince1970: startAsDouble + Double($0.offset) * Self.stepSeconds), mgDl: $0.element)
+        }
+        return plots
+    }
+
+    /// Rebuilds the watch's copy from the dictionary WatchConnectivity delivers.
+    init?(dictionary: Any?) {
+        guard let dictionary = dictionary as? [String: Any], let start = dictionary["startAsDouble"] as? Double,
+              let values = dictionary["valuesMgDl"] as? [Double], values.count > 1 else { return nil }
+        self.init(startAsDouble: start, valuesMgDl: values)
+    }
+
+    init(startAsDouble: Double, valuesMgDl: [Double]) {
+        self.startAsDouble = startAsDouble
+        self.valuesMgDl = valuesMgDl
     }
 }
 

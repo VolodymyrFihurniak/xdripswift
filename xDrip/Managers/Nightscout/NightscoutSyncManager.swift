@@ -354,6 +354,9 @@ public class NightscoutSyncManager: NSObject, ObservableObject {
             uploadBgReadingsToNightscout(lastConnectionStatusChangeTimeStamp: lastConnectionStatusChangeTimeStamp)
         }
         
+        // Experimental: the forecast as an OpenAPS-style devicestatus, at most every five minutes.
+        uploadExperimentalPredictionIfDue()
+
         // upload calibrations
         uploadCalibrationsToNightscout()
         
@@ -1375,6 +1378,26 @@ public class NightscoutSyncManager: NSObject, ObservableObject {
     
     // MARK: - - upload to Nightscout
     
+    /// Uploads the experimental forecast as `openaps.suggested.predBGs.IOB`, as AAPS does, so the
+    /// Nightscout forecast lines show it. Skipped while an AID's devicestatus is followed: xDrip would
+    /// read its own forecast back as pump status, and the AID's lines must stay the only ones.
+    private func uploadExperimentalPredictionIfDue(now: Date = Date()) {
+        let defaults = UserDefaults.standard
+        guard defaults.experimentalNightscoutPredictionEnabled, !defaults.dataFlowPolicy.importsStatusFromNightscout else { return }
+        if let last = defaults.object(forKey: "experimentalNightscoutPredictionLastUpload") as? Date,
+           now.timeIntervalSince(last) < 5 * 60 - 30 { return }
+        let readings = bgReadingsAccessor.getLatestBgReadings(limit: nil, fromDate: now.addingTimeInterval(-2 * 60 * 60), forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
+            .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
+        let forecast = ExperimentalPredictionModel(defaults: defaults).forecast(
+            readings: readings, treatments: PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext, now: now),
+            isMmol: false, targetLowMgDl: defaults.lowMarkValue, targetHighMgDl: defaults.highMarkValue, now: now)
+        guard let payload = ExperimentalNightscoutPrediction.deviceStatus(forecast: forecast, now: now) else { return }
+        defaults.set(now, forKey: "experimentalNightscoutPredictionLastUpload")
+        uploadData(dataToUpload: payload, httpMethod: nil, path: nightscoutDeviceStatusPath, completionHandler: {
+            trace("in uploadExperimentalPredictionIfDue, forecast uploaded to NS", log: self.oslog, category: ConstantsLog.categoryNightscoutSyncManager, type: .info)
+        })
+    }
+
     /// upload battery level to nightscout
     /// - parameters:
     ///     - transmitterBatteryInfosensor: setransmitterBatteryInfosensornsor to upload
