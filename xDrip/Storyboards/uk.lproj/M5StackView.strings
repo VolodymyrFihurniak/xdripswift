@@ -4,37 +4,37 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// this is the text shown when clicking the cell 'where to find M5Stack software'
-"m5StackSoftWareHelpText" = "Go to";
+"m5StackSoftWareHelpText" = "Перейдіть на";
 
 /// cell text, to power off
-"powerOff" = "Power Off";
+"powerOff" = "Вимкнути";
 
 /// In m5StickC view, one line allows to show info where to find M5Stack software, this is the text in the cell
-"m5StickCSoftWhereHelpCellText" = "Where to find the M5StickC software?";
+"m5StickCSoftWhereHelpCellText" = "Де знайти програмне забезпечення M5StickC?";
 
 /// when Bluetooth Peripheral list is shown, title of the view
 "screenTitle" = "M5Stack";
 
 /// user clicks power off in M5Stack view, confirmation is needed
-"powerOffConfirm" = "Are you sure you want to power off the M5Stack?";
+"powerOffConfirm" = "Ви справді хочете вимкнути M5Stack?";
 
 /// when M5Stickc list is shown, title of the view
 "m5StickCViewscreenTitle" = "M5StickC";
 
 /// in case M5Stack authentication failed, and M5Stack is generating a random password
-"m5StackResetRequiredWarning" = "M5Stack must be reset in order to generate a new temporary password. When done click ";
+"m5StackResetRequiredWarning" = "M5Stack потрібно скинути, щоб згенерувати новий тимчасовий пароль. Після цього натисніть ";
 
 /// In m5Stack view, one line allows to show info where to find M5Stack software, this is the text in the cell
-"m5StackSoftWhereHelpCellText" = "Where to find the M5Stack software?";
+"m5StackSoftWhereHelpCellText" = "Де знайти програмне забезпечення M5Stack?";
 
 /// when M5Stack list is shown, title of the view
 "m5StackViewscreenTitle" = "M5Stack";
 
 /// in case M5Stack authentication failed, and M5Stack is expecting user configured password
-"blePasswordMissingWarning" = "You need to set the password in the Settings";
+"blePasswordMissingWarning" = "Потрібно задати пароль у налаштуваннях";
 
 /// in case user tires to power off the M5Stack via xdrip but it's not connected
-"deviceMustBeConnectedToPowerOff" = "M5Stack must be connected to be able to power it off";
+"deviceMustBeConnectedToPowerOff" = "Щоб вимкнути M5Stack, він має бути підключений";
 
 /// in case M5Stack authentication failed
-"authenticationFailureWarning" = "Authentication to M5Stack Failed, either set the pre-configured password in the Settings, or, if the M5Stack does not have a preconfigured password then reset the M5Stack. M5Stack will disconnect now. You can make a new attempt by clicking ";
+"authenticationFailureWarning" = "Не вдалося автентифікуватися на M5Stack. Задайте попередньо налаштований пароль у налаштуваннях або, якщо M5Stack не має попередньо налаштованого пароля, скиньте M5Stack. Зараз M5Stack відключиться. Щоб спробувати знову, натисніть ";

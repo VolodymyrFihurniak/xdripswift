@@ -1,5 +1,8 @@
 /* Root tab titles. */
-"rootTab.home" = "Home";
-"rootTab.treatments" = "Treatments";
+"rootTab.home" = "Головна";
+"rootTab.treatments" = "Лікування";
 "rootTab.devices" = "Пристрої";
-"rootTab.settings" = "Settings";
+"rootTab.settings" = "Налаштування";
+
+/* Fork: Ukrainian translation completed */
+"rootTab.statistics" = "Статистика";

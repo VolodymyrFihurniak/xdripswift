@@ -4,41 +4,41 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// timestamp of glucose reading
-"timestamp" = "Timestamp";
+"timestamp" = "Час";
 "backfilledAtFooterFormat" = "Заповнено заднім числом %@";
 
 /// glucose reading
-"glucoseReadingTitle" = "Glucose Reading";
+"glucoseReadingTitle" = "Показник глюкози";
 
 /// which date should be selected
 "selectDate" = "Date";
 
 /// the raw data value of the glucose reading
-"rawData" = "Raw data";
+"rawData" = "Сирі дані";
 
 /// no readings are found for the selected date
-"noReadingsToShow" = "No readings to show...";
+"noReadingsToShow" = "Немає показників для відображення...";
 
 /// device name of the transmitter used to send the glucose reading
 "deviceName" = "Device name";
 
 /// calculated value of the glucose readings
-"calculatedValue" = "Calculated value";
+"calculatedValue" = "Обчислене значення";
 
 /// general glucose reading section header
-"generalSectionHeader" = "General";
+"generalSectionHeader" = "Загальне";
 
 /// glucose reading
-"glucoseReadingsTitle" = "Glucose Readings";
+"glucoseReadingsTitle" = "Показники глюкози";
 
 /// id of the glucose reading
 "id" = "ID";
 
 /// internal glucose reading data
-"internalDataSectionHeader" = "Internal data";
+"internalDataSectionHeader" = "Внутрішні дані";
 
 /// the slope arrow of the glucose reading
-"slopeArrow" = "Slope arrow";
+"slopeArrow" = "Стрілка тренду";
 
 "glucoseRange" = "Діапазон глюкози";
 "bgRangeUrgent" = "Терміново";
@@ -51,3 +51,22 @@
 "receivedViaWatchAtFooterFormat" = "Отримано через Watch о %@";
 "backfilledViaWatchAtFooterFormat" = "Відновлено через Watch о %@";
 "receivedViaWatch" = "Отримано через Watch";
+
+/* Fork: Ukrainian translation completed */
+"date" = "Дата";
+"slopeSectionHeader" = "Нахил";
+"glucoseValueSectionHeader" = "Значення глюкози";
+"backfilled" = "Доповнено заднім числом";
+"calibratedValue" = "Відкаліброване значення";
+"finalGlucose" = "Значення глюкози";
+"slopePerMinute" = "Нахил/хвилина";
+"slopePer5Minutes" = "Нахил/5 хвилин";
+"rawValue" = "Сире значення";
+"adjustedValue" = "Скориговане значення";
+"smoothedValue" = "Згладжене значення";
+"finalValue" = "Остаточне значення";
+"calibrationTitle" = "Застосоване калібрування";
+"slope" = "Нахил";
+"intercept" = "Зсув";
+"calibrationValue" = "Значення калібрування";
+"sensorRawValue" = "Сире значення сенсора";

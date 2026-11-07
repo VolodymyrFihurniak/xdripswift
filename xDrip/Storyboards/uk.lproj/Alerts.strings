@@ -4,7 +4,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// When very high alert rises, this is the start of the text shown in the title of the alert notification, also in alert settings list, for the name of the alert
-"alerts_veryhighalerttitle" = "Very High Alarm";
+"alerts_veryhighalerttitle" = "Сигнал дуже високої глюкози";
 "alerts_snooze_high_title" = "Високий";
 "alerts_snooze_very_high_title" = "Дуже високий";
 "alerts_snooze_low_title" = "Низький";
@@ -13,55 +13,55 @@
 "alerts_snooze_fast_rise_title" = "Швидке зростання";
 
 /// an alentry is applicable as of a certain value (eg low alert as of 70 mg/dl), this is the name of the field in the settings screen that allows to modify this valule
-"alerttype" = "Alarm Type";
+"alerttype" = "Тип сигналу";
 
 /// When fast drop alert rises, this is the start of the text shown in the title of the alert notification, also in alert settings list, for the name of the alert
-"alerts_fastdrop" = "Fast Drop Alarm";
+"alerts_fastdrop" = "Сигнал швидкого падіння";
 
 /// When fast drop alert rises, this is the start of the text shown in the title of the alert notification, also in alert settings list, for the name of the alert
-"alerts_fastrise" = "Fast Rise Alarm";
+"alerts_fastrise" = "Сигнал швидкого зростання";
 
 /// When Missed reading alert happens, this is the title of the alert notification, also in alert settings list, for the name of the alert
-"alerts_missedreadingalerttitle" = "Missed Readings";
+"alerts_missedreadingalerttitle" = "Пропущені показники";
 
 /// Action text for alerts. This is the button that allows to snooze the alert
-"alerts_snooze" = "Snooze";
+"alerts_snooze" = "Відкласти";
 
 /// shown on top of the screen that allows user to view all the alerts in one table
-"alertssettingsview_screentitle" = "Edit Alarm";
+"alertssettingsview_screentitle" = "Редагувати сигнал";
 
 /// When pop up is shown to let user pick the snooze time, this is the title of this pop up
-"alerts_select_snooze_time" = "Select Snooze Time";
+"alerts_select_snooze_time" = "Виберіть час відкладення";
 
 /// shown on top of the screen that allows user to edit an alert
-"alertsettingsview_screentitle" = "Alarms";
+"alertsettingsview_screentitle" = "Сигнали";
 
 /// an alentry is applicable as of a certain value (eg low alert as of 70 mg/dl), this is the name of the field in the settings screen that allows to modify this valule
-"alertvalue" = "Value";
+"alertvalue" = "Значення";
 
 /// when editing an alert value, a pop is shown, this is the explanation message in the pop up
-"changealertvalue" = "Change Alarm Value";
+"changealertvalue" = "Змінити значення сигналу";
 
 /// When very low alert rises, this is the start of the text shown in the title of the alert notification, also in alert settings list, for the name of the alert
-"alerts_lowalerttitle" = "Low Alarm";
+"alerts_lowalerttitle" = "Сигнал низької глюкози";
 
 /// transmitter battery low, this is the title of the alert notification, also in alert settings list, for the name of the alert
-"alerts_batterylow" = "Transmitter Battery Low";
+"alerts_batterylow" = "Низький заряд трансмітера";
 
 /// When high alarm rises, this is the start of the text shown in the title of the alert notification, also in alert settings list, for the name of the alarm
-"alerts_highalerttitle" = "High Alarm";
+"alerts_highalerttitle" = "Сигнал високої глюкози";
 
 /// when trying to delete an alert, user needs to confirm first, this is the message
-"confirmdeletionalert" = "Delete Alarm?";
+"confirmdeletionalert" = "Видалити сигнал?";
 
 /// an alentry is applicable as of a certain timestamp in the day, this is the text in the field in the settings screen that allows to modify this timestamp
-"alertstart" = "Apply from";
+"alertstart" = "Діє з";
 
 /// When very low alert rises, this is the start of the text shown in the title of the alert notification, also in alert settings list, for the name of the alert
-"alerts_verylowalerttitle" = "Very Low Alarm";
+"alerts_verylowalerttitle" = "Сигнал дуже низької глюкози";
 
 /// when calibration is needed, this is the title of the alert notification, also in alert settings list, for the name of the alert
-"alerts_calibrationneeded" = "Calibration Reminder";
+"alerts_calibrationneeded" = "Нагадування про калібрування";
 
 /* Optional one-off sensor expiry reminders. */
 "sensorExpiry.endingSoon" = "Термін роботи сенсора скоро спливе";
@@ -72,3 +72,13 @@
 "sensorExpiry.expectedExpiryBody" = "Сенсор досяг очікуваного терміну завершення роботи (%@).";
 "alerts_predictedLowAlertTitle" = "Прогнозована гіпоглікемія";
 "alerts_predictedLowInMinutes" = "через %ld хв";
+
+/* Fork: Ukrainian translation completed */
+"alerts_notloopingalerttitle" = "Цикл не працює";
+"alerts_sensortransmitterfailure" = "Збій сенсора/трансмітера";
+"alerts_phonebatterylow" = "Низький заряд телефона";
+"alertWhenBelowValue" = "Лише якщо нижче";
+"alertWhenAboveValue" = "Лише якщо вище";
+"changeAlertTriggerValue" = "Змінити поріг спрацювання";
+"alertTypeUrgent" = "Терміновий";
+"alertTypeWarning" = "Попередження";

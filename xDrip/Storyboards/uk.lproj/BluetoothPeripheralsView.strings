@@ -4,17 +4,22 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// title of the cell where transmitter battery level is shown in detailed screen
-"batteryLevel" = "Battery Level";
+"batteryLevel" = "Рівень заряду";
 "noBluetoothPeripheralsConfigured" = "Немає налаштованих Bluetooth-пристроїв";
 
 /// when Bluetooth Peripheral list is shown, title of the view
 "screenTitle" = "Пристрої";
 
 /// When adding a new cgm transmitter, but the user has another one already which is either connected or trying to connect
-"noMultipleActiveCGMsAllowed" = "You already have one CGM transmitter connected.\n\nVerify your other CGM transmitters and click 'Stop Scanning', 'Disconnect' or just delete them if needed.";
+"noMultipleActiveCGMsAllowed" = "У вас уже підключено один трансмітер CGM.\n\nПеревірте інші трансмітери CGM і натисніть «Зупинити пошук», «Відключити» або просто видаліть їх, якщо потрібно.";
 
 /// when clicking add button in screen with list of bluetoothperipherals, title of pop up where user  needs to select bluetooth peripheral category
 "selectCategory" = "Виберіть тип";
 
 /// when clicking add button in screen with list of bluetoothperipherals, after having selected the category, a new pop up appears, this is the title of pop up where user  needs to select bluetooth peripheral type
-"selectType" = "Select Transmitter Type";
+"selectType" = "Виберіть тип трансмітера";
+
+/* Fork: Ukrainian translation completed */
+"heartbeatDeviceFooter" = "Пристрій heartbeat не передає показників глюкози. Він використовує активність Bluetooth, щоб будити програму у фоні, і тоді оновлення в режимі спостерігача, сигнали, значки та сповіщення продовжують працювати.";
+"m5StackDeviceFooter" = "Пристрої M5Stack — це невеликі зовнішні дисплеї на базі ESP32. Вони можуть показувати значення глюкози, які xDrip4iOS надсилає через Bluetooth.";
+"noMultipleActiveCGMsAllowedFooter" = "У вас уже підключено один CGM.";

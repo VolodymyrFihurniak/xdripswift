@@ -159,3 +159,5 @@
 
 /* Switch title when the surrounding screen or section identifies the feature */
 "common_enable" = "Enable";
+"quickactions_speak_readings" = "Speak readings";
+"quickactions_stop_speaking_readings" = "Stop speaking readings";

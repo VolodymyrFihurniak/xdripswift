@@ -2,7 +2,8 @@ import Foundation
 
 /// all texts for Quick Actions
 class Texts_QuickActions {
-    static private let filename = "QuickActions"
+    /// The quick action titles live in the localised Common table (QuickActions.strings is not localised).
+    static private let filename = "Common"
     
     static let speakReadings: String = {
         return NSLocalizedString("quickactions_speak_readings", tableName: filename, bundle: Bundle.main, value: "Speak readings", comment: "Home screen quick action, turns speaking on, available when speaking is off")

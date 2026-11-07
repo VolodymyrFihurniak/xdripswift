@@ -611,3 +611,11 @@
 "experimental.accuracyClear" = "Delete recorded forecasts";
 "experimental.predictionNightscout" = "Upload to Nightscout";
 "experimental.predictionNightscoutFooter" = "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.";
+"experimental.chartCursor" = "Chart cursor";
+"experimental.iobValue" = "IOB %@";
+"experimental.cobValue" = "COB %@";
+"experimental.basalOnBoardValue" = "Basal %@";
+"experimental.activeUntil" = "until %@";
+"experimental.unitsValue" = "%@ U";
+"experimental.gramsValue" = "%@ g";
+"experimental.cursorForecast" = "forecast";

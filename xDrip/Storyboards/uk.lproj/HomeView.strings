@@ -4,160 +4,160 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Text in button on home screen
-"unlock" = "Unlock";
+"unlock" = "Розблокувати";
 
 /// when user starts scanning for bluetooth device, but bluetooth is not authorized
-"bluetoothIsNotAuthorized" = "You did not give bluetooth permission for %@. Go to the settings, find the %@ app, and enable Bluetooth.";
+"bluetoothIsNotAuthorized" = "Ви не надали дозвіл Bluetooth для %@. Відкрийте Налаштування, знайдіть програму %@ і ввімкніть Bluetooth.";
 
 /// Text in button on home screen
-"presnooze" = "Snooze";
+"presnooze" = "Відкласти";
 
 /// Info message to explain screen lock function
-"screenlockinfo" = "This will keep the screen awake until you move to another app or click Unlock.\r\n\nIt is recommended that you keep the phone plugged into a charger to prevent battery drain.";
+"screenlockinfo" = "Екран не вимикатиметься, доки ви не перейдете в іншу програму або не натиснете «Розблокувати».\r\n\nРекомендуємо тримати телефон на зарядці, щоб не розрядити батарею.";
 
 /// status info : literally 'not started', used if sensor is not started
-"notstarted" = "Not Started";
+"notstarted" = "Не запущено";
 
 /// for home view, user clicks calibrate but there's no reading yet
-"theremustbeareadingbeforecalibration" = "There must be at least two readings before you can calibrate. You will be requested to calibrate as soon as there is another reading.";
+"theremustbeareadingbeforecalibration" = "Для калібрування потрібно щонайменше два показники. Вас попросять відкалібрувати, щойно надійде ще один показник.";
 
 /// If transmitter needs pairing, a notification was fired, user clicked it more than 60 seconds later, which is too late
-"transmitterpairingtoolate" = "Too late! The Transmitter has already been disconnected. You should get a new pairing request in a few minutes.";
+"transmitterpairingtoolate" = "Запізно! Трансмітер уже відключився. За кілька хвилин має надійти новий запит на створення пари.";
 
 /// Screen Lock Title
-"screenlocktitle" = "Screen Lock Enabled";
+"screenlocktitle" = "Блокування екрана ввімкнено";
 
 /// for home view, Info how to start : set transmitter and id, then go back to home screen, start scanning
-"transmitterinfo" = "First go to the Bluetooth screen where you can add and scan for your transmitter.\r\n\nThen come back to the Home screen and start your sensor.";
+"transmitterinfo" = "Спершу перейдіть на екран Bluetooth, де можна додати трансмітер і шукати його.\r\n\nПотім поверніться на головний екран і запустіть сенсор.";
 
 /// when user clicks transmitterButton, this is the action to start the sensor
-"startsensor" = "Start Sensor";
+"startsensor" = "Запустити сенсор";
 
 /// for home view, title of pop up that gives info about how to select the transmitter. Simply the word Info
-"info" = "Please Read";
+"info" = "Прочитайте";
 
 /// To give result about transitter result in notification body, failed
-"failed" = "Failed";
+"failed" = "Не вдалося";
 
 /// Error message in case Dexcom G5 (and G6?) battery is too low. This is deteced by wrong G5 values 2096896
-"dexcomBatteryTooLow" = "The Transmitter battery is too low!";
+"dexcomBatteryTooLow" = "Заряд батареї трансмітера надто низький!";
 
 /// When user clicks stop sensor, ask confirmation
-"stopSensorConfirmation" = "Are you sure you want to stop the sensor?";
+"stopSensorConfirmation" = "Ви справді хочете зупинити сенсор?";
 
 /// for home view, where it say how old the reading is, 'x minutes ago', literaly translation of 'ago'
-"ago" = "ago";
+"ago" = "тому";
 
 /// Text in button on home screen
-"lock" = "Lock";
+"lock" = "Заблокувати";
 
 /// To give info to user that the transmitter pairing requeset timed out
-"transmitterpairingattempttimeout" = "Transmitter did not reply to pairing request.";
+"transmitterpairingattempttimeout" = "Трансмітер не відповів на запит створення пари.";
 
 /// status info : literally 'Last connection', shows when the last connection to a transmitter occured
-"lastconnection" = "Last Connection";
+"lastconnection" = "Останнє підключення";
 
 /// when user clicks transmitterButton, this is the first action, to show the status
-"statusactiontitle" = "Status";
+"statusactiontitle" = "Стан";
 
 /// when user starts scanning but bluetooth is not on
-"bluetoothisnoton" = "Bluetooth is not on. Switch on bluetooth first and then try again.";
+"bluetoothisnoton" = "Bluetooth вимкнено. Увімкніть Bluetooth і спробуйте знову.";
 
 /// for home view, user clicks calibrate but there's no sensor started yet
-"startsensorbeforecalibration" = "You cannot calibrate unless you have started a sensor.";
+"startsensorbeforecalibration" = "Калібрувати можна лише після запуску сенсора.";
 
 /// Literally 'Sensor', used as name in the button in the home screen, but also in text in pop ups
-"sensor" = "Sensor";
+"sensor" = "Сенсор";
 
 /// status info : literally 'Transmitter Battery Level', shows the battery level
 "transmitterbatterylevel" = "Transmitter Battery Level";
 
 /// for home view, license info
-"licenseinfo" = "This program is free software distributed under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or any later version.\r\n\nThis program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY.\r\n\nSee http://www.gnu.org/licenses/gpl.txt for more details.\r\n\r\nInfo: ";
+"licenseinfo" = "Ця програма — вільне програмне забезпечення, яке поширюється на умовах GNU General Public License, опублікованої Free Software Foundation, версії 3 або будь-якої пізнішої.\r\n\nПрограма поширюється в надії, що вона буде корисною, але БЕЗ БУДЬ-ЯКИХ ГАРАНТІЙ.\r\n\nДокладніше: http://www.gnu.org/licenses/gpl.txt\r\n\r\nІнформація: ";
 
 /// when user clicks transmitterButton, this is the action to start scanning
-"scanbluetoothdeviceactiontitle" = "Scan for Transmitter";
+"scanbluetoothdeviceactiontitle" = "Шукати трансмітер";
 
 /// After clicking scan button, this message will appear
-"startScanningInfo" = "Scanning Started.\n\nKeep %@ open in the foreground until a connection is made.\n\n(There's no need to turn off Auto-Lock. Just don't press the home button and don't lock your iPhone)";
+"startScanningInfo" = "Пошук розпочато.\n\nТримайте %@ відкритою на екрані, доки не буде встановлено з’єднання.\n\n(Автоблокування вимикати не потрібно. Просто не натискайте кнопку «Додому» і не блокуйте iPhone)";
 
 /// Text in button on home screen
-"calibrate" = "Calibrate";
+"calibrate" = "Відкалібрувати";
 
 /// when user clicks transmitterButton, this is the action to forget the device, so that user can scan for a new device, in case user switches device
-"forgetbluetoothdeviceactiontitle" = "Forget Transmitter";
+"forgetbluetoothdeviceactiontitle" = "Забути трансмітер";
 
 /// when user manually starts sensor, this is the message that explains that time should be correct
-"startsensortimeinfo" = "In the next dialogs, you will need to set the date and time the sensor was inserted. It is important that you set the date and time as correct as possible.";
+"startsensortimeinfo" = "У наступних вікнах потрібно вказати дату й час встановлення сенсора. Важливо вказати їх якомога точніше.";
 
 /// when user manually starts scanning, this is the message that scanning is ongoing
-"scanbluetoothdeviceongoing" = "Scanning for Transmitter...";
+"scanbluetoothdeviceongoing" = "Пошук трансмітера...";
 
 /// When user needs to enter sensor code, to start firefly sensor
 "enterSensorCode" = "Введіть код сенсора вручну, відскануйте етикетку сенсора або виберіть фото.\n\nЯкщо у вас немає коду або ви хочете використовувати сеанс сенсора, який уже працює на передавачі, виберіть «Використовувати без коду».";
 
 /// status info : literally 'not known', used if transmitter name is not known
-"notknown" = "Not Known";
+"notknown" = "Невідомо";
 
 /// To give info to user that the transmitter is successfully paired
-"transmitterpairingsuccessful" = "The Transmitter was successfully paired.";
+"transmitterpairingsuccessful" = "Трансмітер успішно з’єднано в пару.";
 
 /// when user clicks transmitterButton, this is the action to stop the sensor
-"stopsensor" = "Stop Sensor";
+"stopsensor" = "Зупинити сенсор";
 
 /// status info : literally 'Sensor Start'
-"sensorstart" = "Sensor Started";
+"sensorstart" = "Сенсор запущено";
 
 /// status info : literally 'Sensor End'
-"sensorend" = "Sensor Ends";
+"sensorend" = "Сенсор завершиться";
 
 /// for home view, miaomiao doesn't detect a sensor
-"sensornotdetected" = "The sensor was not detected. Check if the Transmitter is correctly placed on the sensor.";
+"sensornotdetected" = "Сенсор не виявлено. Перевірте, чи правильно трансмітер встановлено на сенсор.";
 
 /// To give result about transitter result in notification body, successful
-"success" = "Success";
+"success" = "Успішно";
 
 /// When user has no CGM transmitter created with 'Always connect', and tries to calibrate, then this message is shown
-"theresNoCGMTransmitterActive" = "You cannot calibrate unless you have a transmitter connected.";
+"theresNoCGMTransmitterActive" = "Калібрувати можна лише з підключеним трансмітером.";
 
 /// If transmitter needs pairing, user needs to click the notification
-"transmitternotpaired" = "The Transmitter is not paired with this iPhone. Open the application.";
+"transmitternotpaired" = "Трансмітер не з’єднано в пару з цим iPhone. Відкрийте програму.";
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 /////   Translation needed - remove this header after translation                       /////
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// if web oop enabled, and also if transmitter supports this, user clicks calibrate button, but calibration is not possible
-"calibrationNotNecessary" = "When using the native transmitter algorithm, manual calibration is not available.\n\nIf you want to calibrate, you can switch to the xDrip algorithm in the transmitter screen (if available).";
+"calibrationNotNecessary" = "З власним алгоритмом трансмітера ручне калібрування недоступне.\n\nЯкщо хочете калібрувати, перейдіть на алгоритм xDrip на екрані трансмітера (якщо доступно).";
 
 /// nightscout is not enabled
-"nightscoutNotEnabled" = "Nightscout is disabled";
+"nightscoutNotEnabled" = "Nightscout вимкнено";
 
 /// After clicking scan button, this message will appear
-"hidingUrlForXSeconds" = "Hiding URL for %@s...";
+"hidingUrlForXSeconds" = "URL приховано ще на %@ с...";
 
 /// no sensor data is available
-"noSensorData" = "No sensor data";
+"noSensorData" = "Немає даних сенсора";
 
 /// status info : literally 'Sensor Duration'
-"sensorDuration" = "Sensor Duration";
+"sensorDuration" = "Тривалість сенсора";
 
 /// nightscout is not enabled
-"nightscoutURLMissing" = "URL missing";
+"nightscoutURLMissing" = "Немає URL-адреси";
 
 /// ask the user to disconnect and reconnect the sensor
-"reconnectLibreDataSource" = "Disconnect and reconnect Libre sensor";
+"reconnectLibreDataSource" = "Відключіть і знову підключіть сенсор Libre";
 
 /// username and/or password is missing for librelinkup
-"followerAccountCredentialsMissing" = "Username/password missing";
+"followerAccountCredentialsMissing" = "Немає імені користувача/пароля";
 
 /// no data source is enabled or connected
-"noDataSourceConnected" = "No CGM data source connected";
+"noDataSourceConnected" = "Джерело даних CGM не підключено";
 
-"postProcessingFiveMinuteReadings" = "5-minute readings";
-"postProcessingAlgorithm" = "Algorithm";
+"postProcessingFiveMinuteReadings" = "Показники щоп’ять хвилин";
+"postProcessingAlgorithm" = "Алгоритм";
 "sensorLifetimeRemainingFormat" = "Залишилося %@";
-"postProcessingAlgorithmSavitzkyGolay" = "Savitzky-Golay";
+"postProcessingAlgorithmSavitzkyGolay" = "Савіцкі — Голея";
 
 "sensorManagementNoiseTitle" = "Шум сенсора";
 "sensorManagementNoiseShortTerm" = "Останні 30 хвилин";
@@ -175,7 +175,7 @@
 "sensorNoiseHistoryCurrentTitle" = "Поточні вимірювання";
 "sensorNoiseHistoryChartTitle" = "Шум у часі";
 "sensorNoiseHistoryRangeTitle" = "Період";
-"sensorNoiseHistoryDayRange" = "1d";
+"sensorNoiseHistoryDayRange" = "1 д";
 "sensorNoiseHistoryThreeDayRange" = "3 дн.";
 "sensorNoiseHistoryWeekRange" = "7 дн.";
 "sensorNoiseHistoryAllRange" = "Усе";
@@ -187,14 +187,14 @@
 "sensorNoiseHistoryChartAccessibility" = "Графік історії шуму сенсора";
 "pumpBattery" = "Батарея";
 "pumpReservoir" = "Резервуар";
-"sensorManagementSessionLifetime" = "Elapsed / Remaining";
-"sensorManagementSessionDetails" = "Session Details";
-"sensorManagementCalibrationOpenTitle" = "Calibration Details";
-"sensorManagementCGMType" = "CGM Type";
+"sensorManagementSessionLifetime" = "Минуло / залишилось";
+"sensorManagementSessionDetails" = "Дані сеансу";
+"sensorManagementCalibrationOpenTitle" = "Дані калібрування";
+"sensorManagementCGMType" = "Тип CGM";
 "sensorManagementLastCalibration" = "Останнє";
-"sensorManagementStatusActive" = "Sensor Active";
-"sensorManagementStarted" = "Started";
-"sensorManagementEnds" = "Ends";
+"sensorManagementStatusActive" = "Сенсор активний";
+"sensorManagementStarted" = "Запущено";
+"sensorManagementEnds" = "Завершиться";
 "sensorHealthPersistentNoiseTitle" = "Дуже високий шум сенсора";
 "sensorHealthPersistentNoiseGuidance" = "Дуже високий шум протягом 12 годин. Якщо він триває, розгляньте заміну сенсора.";
 "sensorHealthFlatlineTitle" = "Сигнал сенсора не змінюється";
@@ -265,3 +265,122 @@
 "noSensorCodeSelectedTitle" = "Продовжити без коду сенсора?";
 "noSensorCodeSelectedMessage" = "Якщо на передавачі вже працює сеанс сенсора, застосунок використовуватиме його з наявними вимогами до калібрування.\n\nЗапуск нового сеансу без коду потребує калібрувань після прогрівання та періодично надалі. Вимкнення нагадування про калібрування в застосунку не скасовує цих вимог.";
 "showHideGlucoseChartTitle" = "Графік";
+
+/* Fork: Ukrainian translation completed */
+"home_expandChart" = "Розгорнути графік";
+"snoozeAllTitle" = "Відкласти все";
+"snoozeAllDisabled" = "Відкладення всього вимкнено";
+"snoozeAllSnoozed" = "Усі сигнали відкладено!";
+"snoozeAllSnoozedUntil" = "Відкладено до %@";
+"snoozeUrgentAlarms" = "Лише термінові сигнали";
+"sensorManagementTitle" = "Сенсор";
+"sensorManagementSummaryTitle" = "Сеанс сенсора";
+"sensorNoiseHistoryPersistentCompact" = "12 год";
+"sensorManagementNoisePersistent" = "Останні 12 годин";
+"sensorNoiseHistoryFooter" = "Графік показує 30-хвилинне тремтіння сигналу, ковзне 4-годинне значення та 12-годинну медіану, за якою попереджають про стійкий шум. Менші значення означають рівніший сигнал. Точність глюкози графік не вимірює.";
+"sensorHealthTestPersistentNoise" = "Перевірити стійкий шум за 5 секунд";
+"sensorHealthTestFlatline" = "Перевірити рівний сигнал за 5 секунд";
+"sensorHealthTestTemporaryIssue" = "Перевірити тимчасову проблему за 5 секунд";
+"sensorHealthTestSensorFailure" = "Перевірити збій сенсора за 5 секунд";
+"sensorHealthTestTransmitterFailure" = "Перевірити збій трансмітера за 5 секунд";
+"sensorManagementActionsTitle" = "Дії із сенсором";
+"sensorManagementCalibrationTitle" = "Калібрування";
+"sensorManagementHistoryTitle" = "Історія калібрувань";
+"sensorManagementNotAvailableInFollower" = "У режимі спостерігача керування сенсором недоступне.";
+"sensorManagementAutomaticSessionNote" = "Цей сенсор керує сеансом автоматично, тому ручний запуск і зупинка недоступні.";
+"sensorManagementNoTransmitterNote" = "Підключіть трансмітер CGM, щоб керувати сеансом сенсора.";
+"sensorManagementCalibrationUnavailable" = "Калібрування тимчасово недоступне.";
+"sensorManagementStatusExpired" = "Термін дії минув";
+"sensorManagementStatusNotStarted" = "Не запущено";
+"sensorManagementNoSensor" = "Немає сенсора";
+"sensorManagementElapsed" = "Минуло";
+"sensorManagementRemaining" = "Залишилось";
+"sensorManagementExpiryFooterFormat" = "Термін дії сенсора минає %@";
+"sensorManagementCurrentCalibrationTitle" = "Поточне калібрування";
+"sensorManagementHistoricCalibration" = "Попереднє";
+"sensorManagementCalibrationSafetyFooter" = "Калібруйте, лише якщо розумієте, як робити це безпечно.";
+"sensorManagementCalibrationValue" = "Значення калібрування";
+"sensorManagementCalibrationStableTrend" = "Стабільний тренд";
+"sensorManagementCalibrationSlightlyLow" = "Трохи низько";
+"sensorManagementCalibrationSlightlyHigh" = "Трохи високо";
+"sensorManagementCalibrationNoReading" = "Немає показника";
+"sensorManagementCalibrationGood" = "Добре";
+"sensorManagementCalibrationNoTrend" = "Немає тренду";
+"sensorManagementCalibrationStale" = "Застарілий";
+"sensorManagementCalibrationStable" = "Стабільно";
+"sensorManagementCalibrationFallingFast" = "Швидко падає";
+"sensorManagementCalibrationFalling" = "Падає";
+"sensorManagementCalibrationRisingFast" = "Швидко зростає";
+"sensorManagementCalibrationRising" = "Зростає";
+"sensorManagementCalibrationFlatline" = "Рівна лінія";
+"sensorManagementCalibrationBG" = "ГК";
+"sensorManagementCalibrationRaw" = "Сире";
+"sensorManagementCalibrationSlope" = "Нахил";
+"sensorManagementCalibrationIntercept" = "Зсув";
+"sensorManagementCalibrationReadinessBad" = "Зараз калібрування навряд чи буде точним. Зачекайте.";
+"sensorManagementCalibrationReadinessCaution" = "Калібрування може бути менш надійним. Можливо, краще зачекати.";
+"sensorManagementCalibrationReadinessGood" = "Зараз слушний час для калібрування.";
+"sensorManagementCalibrationHelp" = "Довідка з калібрування";
+"sensorManagementLargeCalibrationDifferenceWarningFormat" = "Можливо, це калібрування не спрацює. Намагайтеся змінювати калібрування щонайбільше на %@ за раз.";
+"sensorRemaining" = "Залишок сенсора";
+"remaining" = "залишилось";
+"startSensorAnyway" = "Усе одно запустити";
+"noDataSourceConnectedWatch" = "Відкрийте програму на iOS";
+"waitingForCGMConnection" = "Очікування підключення CGM...";
+"waitingForDataSource" = "CGM підключено. Очікування даних...";
+"followerAccountCredentialsInvalid" = "Неправильний обліковий запис";
+"showHideItemsTitle" = "Швидко показати/сховати";
+"showHideHomeScreenTitle" = "Головний екран";
+"showHideHomeScreenFooter" = "Показати або сховати основні елементи головного екрана — зручно на iPhone з меншим екраном";
+"showHideStandByModeTitle" = "Режим StandBy";
+"showHideStandByModeFooter" = "Змінює вигляд режиму StandBy, якщо його ввімкнено в налаштуваннях iPhone";
+"postProcessingTitle" = "Коригування глюкози";
+"postProcessingPreviewHours" = "Години попереднього перегляду";
+"postProcessingAdjustment" = "Коригування";
+"postProcessingOffset" = "Зсув";
+"postProcessingScale" = "Масштаб";
+"postProcessingShape" = "Акцент";
+"postProcessingShapeExplanation" = "Акцент визначає, де масштаб найсильніше впливає на криву. Це допомагає, якщо сенсор перебільшує високі або низькі значення глюкози більше, ніж решту діапазону.";
+"postProcessingSofterHighs" = "Високі";
+"postProcessingSofterHighsDescription" = "Сильніше застосовує масштаб до високих значень глюкози і слабше — до низьких.";
+"postProcessingNeutral" = "Рівномірно";
+"postProcessingNeutralDescription" = "Застосовує масштаб рівномірно в усьому діапазоні глюкози.";
+"postProcessingSofterLows" = "Низькі";
+"postProcessingSofterLowsDescription" = "Сильніше застосовує масштаб до низьких значень глюкози і слабше — до високих.";
+"postProcessingSmoothing" = "Згладжування";
+"postProcessingStrength" = "Сила";
+"postProcessingAlgorithmSavitzkyGolayDescription" = "Фільтр Савіцкі — Голея згладжує криву глюкози, підганяючи короткі локальні вікна, і зберігає загальну форму піків і западин.";
+"postProcessingAlgorithmExponential" = "Експоненційне";
+"postProcessingAlgorithmExponentialDescription" = "Експоненційне згладжування робить зважені проходи вперед і назад з малою затримкою: недавні зміни глюкози виглядають спокійніше, але не так сильно сплощуються.";
+"postProcessingAlgorithmKalman" = "Калмана";
+"postProcessingAlgorithmKalmanDescription" = "Фільтр Калмана розглядає глюкозу як зашумлений живий сигнал і оновлює поточну оцінку. Зазвичай крива рівніша, а фільтрування помітніше, ніж у типового згладжування, що зберігає форму.";
+"postProcessingAlgorithmLoess" = "LOESS";
+"postProcessingAlgorithmLoessDescription" = "LOESS будує невелику зважену регресію навколо кожного показника. Зазвичай зберігає підйоми й вигини і виглядає плавніше та менш жорстко, ніж простий фільтр.";
+"postProcessingAlgorithmHampelSavitzkyGolay" = "Гампель + Савіцкі — Голея";
+"postProcessingAlgorithmHampelSavitzkyGolayDescription" = "Цей гібрид спершу прибирає поодинокі викиди-піки фільтром Гампеля, а потім згладжує фільтром Савіцкі — Голея, щоб загальна крива глюкози залишалася природною.";
+"postProcessingLight" = "Слабке";
+"postProcessingMedium" = "Середнє";
+"postProcessingStrong" = "Сильне";
+"postProcessingReadingFrequency" = "Частота показників";
+"postProcessingApplyFrom" = "Застосувати з";
+"postProcessingNow" = "Зараз";
+"postProcessingApply" = "Застосувати";
+"postProcessingDexcomShareDataNotUpdated" = "Дані Dexcom Share не оновлюватимуться";
+"postProcessingOriginal" = "Початкове";
+"postProcessingAdjusted" = "Скориговане";
+"postProcessingSmoothed" = "Згладжене";
+"postProcessingUpdateAllReadingsLastPeriod" = "Перезаписати всі значення за останні %@";
+"postProcessingNightscoutDataNotUpdated" = "Дані Nightscout не оновлюватимуться";
+"postProcessingMasterNightscoutUploadDisabled" = "Відвантаження в Nightscout вимкнено";
+"postProcessingOriginalGlucose" = "Початкова глюкоза";
+"postProcessingCurrentValue" = "Поточне значення";
+"postProcessingAdjustedGlucose" = "Скоригована глюкоза";
+"postProcessingEnterValue" = "Введіть значення";
+"postProcessingEnterGlucose" = "Введіть глюкозу";
+"postProcessingNoCurrentValues" = "Немає поточних значень";
+"postProcessingValidGlucoseRange" = "Введіть значення від %@ до %@";
+"postProcessingOffsetBgCheckHint" = "Рекомендовано щонайменше один недавній вимір глюкометром";
+"postProcessingScaleBgCheckHint" = "Рекомендовано щонайменше два недавні виміри глюкометром";
+"postProcessingAdjustmentDisabledBecauseSensorIsCalibrated" = "Коригування вимкнено, бо цей сенсор уже використовує власне калібрування.";
+"postProcessingAdjustmentDisabledUseNativeAlgorithm" = "Коригування вимкнено, бо цей сенсор уже використовує власне калібрування. Перейдіть на власний алгоритм, щоб дозволити коригування глюкози.";
+"showTreatments" = "Показувати лікування";

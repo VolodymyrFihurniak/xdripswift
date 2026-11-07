@@ -4,14 +4,18 @@
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 /// When calibration alert goess off, user clicks the notification, app opens, dialog pops up, this is the text in the dialog
-"enter_calibration_value" = "Enter Calibration Value";
+"enter_calibration_value" = "Введіть значення для калібрування";
 
 /// If user must calibrate, this is the body of the notification
-"calibration_notification_body" = "Click the Notification to Calibrate";
+"calibration_notification_body" = "Натисніть на сповіщення, щоб відкалібрувати";
 
 /// 
 "calibration_title" = "Calibration";
 
 /// If user must calibrate, this is the title of the notification
-"calibration_notification_title" = "Calibration";
+"calibration_notification_title" = "Калібрування";
 "previousCalibrationPrefillMessage" = "Попереднє значення калібрування від %@ уже введено. Перед підтвердженням порівняйте його з поточним показником глюкометра.";
+
+/* Fork: Ukrainian translation completed */
+"singlePointCalibration" = "Стандартне";
+"multiPointCalibration" = "Багатоточкове";
