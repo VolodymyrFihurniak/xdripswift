@@ -1494,9 +1494,8 @@ import AppIntents
                 bluetoothPeripheralManager?.sendLatestReading()
 
                 // Experimental: keep the forecast made now to score it later against what happened.
-                if let coreDataManager {
-                    PredictionAccuracyRecorder.recordIfDue(coreDataManager: coreDataManager)
-                }
+                // coreDataManager is already unwrapped by the guard at the top of this function.
+                PredictionAccuracyRecorder.recordIfDue(coreDataManager: coreDataManager)
                 
                 calendarManager?.processNewReading(lastConnectionStatusChangeTimeStamp: lastConnectionStatusChangeTimeStamp())
                 
