@@ -16,7 +16,8 @@ import OSLog
     /// Permit a small amount of advance entry without allowing accidental future-day treatments.
     static let maximumFutureTreatmentInterval: TimeInterval = 60 * 60
 
-    static let supportedTreatmentTypes: [TreatmentType] = [.Insulin, .Carbs, .BgCheck, .Exercise, .BasalInjection, .Note]
+    /// Basal injections follow bolus so both insulins sit together in the type list.
+    static let supportedTreatmentTypes: [TreatmentType] = [.Insulin, .BasalInjection, .Carbs, .BgCheck, .Exercise, .Note]
 
     // MARK: - @Published properties
 

@@ -910,8 +910,8 @@ struct GlucoseChartView: View {
                 // Note labels sit above basal lines and below dose treatments.
                 noteTreatmentMarks(points: visibleTreatmentPoints.notes)
 
-                // Draw basal injections first so overlapping carbs and boluses remain in front.
-                treatmentSymbolMarks(points: visibleTreatmentPoints.basalInjections, systemImage: GlucoseChartTreatmentStyle.basalInjectionSymbol, size: { _ in treatmentSymbolSize() * GlucoseChartTreatmentStyle.basalInjectionScale }, color: GlucoseChartTreatmentStyle.basalInjectionColor, labelPosition: .bottom)
+                // Basal injections share the bolus row; draw them first so carbs and boluses stay in front.
+                treatmentSymbolMarks(points: visibleTreatmentPoints.basalInjections, systemImage: GlucoseChartTreatmentStyle.basalInjectionSymbol, size: { _ in treatmentSymbolSize() * GlucoseChartTreatmentStyle.basalInjectionScale }, color: GlucoseChartTreatmentStyle.basalInjectionColor, labelPosition: .bottom, xOffset: { basalInjectionOffset($0, boluses: visibleTreatmentPoints.boluses) })
                 treatmentSymbolMarks(points: visibleTreatmentPoints.carbs, systemImage: GlucoseChartTreatmentStyle.carbsSymbol, size: carbsSymbolSizing.size, color: GlucoseChartTreatmentStyle.carbsColor, labelPosition: .top, minimumLabelValue: smallCarbTreatmentThreshold)
                 treatmentSymbolMarks(points: visibleTreatmentPoints.boluses, systemImage: GlucoseChartTreatmentStyle.bolusSymbol, size: bolusSymbolSizing.size, color: GlucoseChartTreatmentStyle.bolusColor, labelPosition: .bottom, minimumLabelValue: smallBolusTreatmentThreshold)
             }
@@ -1288,7 +1288,7 @@ struct GlucoseChartView: View {
     /// on custom symbols can be displaced from the mark. An overlay preserves the symbol's
     /// size and data position while anchoring the label to its actual top or bottom edge.
     /// Boluses and carbs pass their own label thresholds; values equal to the threshold remain visible.
-    private func treatmentSymbolMarks(points: [GlucoseChartTreatmentPoint], systemImage: String?, size: @escaping (Double) -> Double, color: Color, labelPosition: VerticalAlignment?, verticalLabel: Bool = false, minimumLabelValue: Double? = nil) -> some ChartContent {
+    private func treatmentSymbolMarks(points: [GlucoseChartTreatmentPoint], systemImage: String?, size: @escaping (Double) -> Double, color: Color, labelPosition: VerticalAlignment?, verticalLabel: Bool = false, minimumLabelValue: Double? = nil, xOffset: @escaping (GlucoseChartTreatmentPoint) -> Double = { _ in 0 }) -> some ChartContent {
         ForEach(points) { point in
             PointMark(x: .value("Time", point.date), y: .value("BG", point.yValue))
                 .symbol {
@@ -1316,8 +1316,21 @@ struct GlucoseChartView: View {
                             .offset(y: labelPosition == .bottom ? 4 : -4)
                         }
                     }
+                    .offset(x: xOffset(point))
                 }
         }
+    }
+
+    /// Moves a basal injection sideways when a bolus marker on the same row would cover it,
+    /// so the two insulins sit side by side: before the bolus when injected earlier, else after it.
+    private func basalInjectionOffset(_ point: GlucoseChartTreatmentPoint, boluses: [GlucoseChartTreatmentPoint]) -> Double {
+        guard let nearest = boluses.min(by: { abs($0.date.timeIntervalSince(point.date)) < abs($1.date.timeIntervalSince(point.date)) }) else { return 0 }
+        let pointsPerSecond = chartWidth / max(visibleEndDate.timeIntervalSince(visibleStartDate), 60)
+        let basalSize = treatmentSymbolSize() * GlucoseChartTreatmentStyle.basalInjectionScale
+        let gap = (bolusSymbolSizing.size(for: nearest.treatmentValue) + basalSize) / 2 + 2
+        let distance = point.date.timeIntervalSince(nearest.date) * pointsPerSecond
+        guard abs(distance) < gap else { return 0 }
+        return (distance < 0 ? -gap : gap) - distance
     }
 
     /// Resolve marker ranges at render time so cached treatments respond immediately to scale changes.

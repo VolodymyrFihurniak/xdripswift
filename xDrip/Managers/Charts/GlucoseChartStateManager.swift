@@ -647,11 +647,11 @@ final class GlucoseChartStateManager: ObservableObject, @unchecked Sendable {
             treatmentPoints.boluses.append(point)
         }
 
-        // Use the same nearest-glucose placement as boluses, a little further below the curve.
+        // Basal injections sit on the bolus row, beside any bolus given at the same time
+        // (the chart moves the marker sideways when the two would overlap).
         // Keep this outside the pump-data gate so MDI users always see their injection markers.
         for treatment in visibleTreatments where treatment.type == .BasalInjection {
-            let yValue = closestYAxisValue(treatmentDate: treatment.date, bgReadings: sortedBgReadings)
-                - treatmentOffset * ConstantsGlucoseChart.basalInjectionOffsetMultiplier
+            let yValue = closestYAxisValue(treatmentDate: treatment.date, bgReadings: sortedBgReadings) - doseTreatmentOffset
             treatmentPoints.basalInjections.append(GlucoseChartTreatmentPoint(date: treatment.date, yValue: yValue, treatmentValue: treatment.value, label: label(for: treatment), notes: treatment.notes, idPrefix: "basal-injection"))
         }
 

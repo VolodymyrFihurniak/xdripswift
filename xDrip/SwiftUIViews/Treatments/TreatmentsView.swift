@@ -296,6 +296,16 @@ private struct TreatmentsControlsCard: View {
                         }
                     }
 
+                    // Basal injections sit beside the bolus filters.
+                    TreatmentFilterChip(
+                        systemImage: TreatmentType.BasalInjection.iconSystemName,
+                        tintColor: ConstantsGlucoseChart.basalInjectionTreatmentColor,
+                        isSelected: viewModel.showBasalInjectionTreatments
+                    ) {
+                        viewModel.toggleBasalInjectionFilter()
+                    }
+                    .accessibilityLabel(Texts_TreatmentsView.basalInjection)
+
                     TreatmentFilterChip(
                         systemImage: GlucoseChartTreatmentStyle.carbsSymbol,
                         tintColor: ConstantsGlucoseChart.carbsTreatmentColor,
@@ -319,15 +329,6 @@ private struct TreatmentsControlsCard: View {
                     ) {
                         viewModel.toggleNoteFilter()
                     }
-
-                    TreatmentFilterChip(
-                        systemImage: TreatmentType.BasalInjection.iconSystemName,
-                        tintColor: ConstantsGlucoseChart.basalInjectionTreatmentColor,
-                        isSelected: viewModel.showBasalInjectionTreatments
-                    ) {
-                        viewModel.toggleBasalInjectionFilter()
-                    }
-                    .accessibilityLabel(Texts_TreatmentsView.basalInjection)
 
                     if viewModel.showBasalFilter {
                         TreatmentFilterChip(
