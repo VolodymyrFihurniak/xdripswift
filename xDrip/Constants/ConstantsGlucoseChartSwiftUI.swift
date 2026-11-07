@@ -41,6 +41,8 @@ enum ConstantsGlucoseChartSwiftUI {
     static let experimentalPredictionMinimumFutureSpan: TimeInterval = 30 * 60
     static let experimentalPredictionColor = Color(red: 0.55, green: 0.65, blue: 0.95).opacity(0.9)
     static let experimentalGlucoseLineWidth: CGFloat = 2.5
+    /// Widgets, Live Activity and the watch draw smaller charts.
+    static let experimentalCompactGlucoseLineWidth: CGFloat = 2
     /// Smallest top of the insulin activity scale, so a small dose is not drawn full height.
     static let experimentalInsulinMinimumScaleUnitsPerHour: Double = 2
     static let experimentalInsulinScaleHeadroom: Double = 1.1

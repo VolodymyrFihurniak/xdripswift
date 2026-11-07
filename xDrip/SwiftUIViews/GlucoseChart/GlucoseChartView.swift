@@ -732,7 +732,9 @@ struct GlucoseChartView: View {
                              series: .value("Series", "glucose-line-\(run.id)"))
                         .interpolationMethod(.monotone)
                         .foregroundStyle(run.color)
-                        .lineStyle(StrokeStyle(lineWidth: ConstantsGlucoseChartSwiftUI.experimentalGlucoseLineWidth, lineCap: .round, lineJoin: .round))
+                        .lineStyle(StrokeStyle(lineWidth: usesMainChartYAxisContext ? ConstantsGlucoseChartSwiftUI.experimentalGlucoseLineWidth
+                                                    : ConstantsGlucoseChartSwiftUI.experimentalCompactGlucoseLineWidth,
+                                               lineCap: .round, lineJoin: .round))
                 }
             }
         }
@@ -972,8 +974,9 @@ struct GlucoseChartView: View {
                 }
             }
 
-            // Main glucose points, or the experimental connected line.
-            if experimentalPlotData.drawsGlucoseAsLine && usesMainChartYAxisContext {
+            // Main glucose points, or the experimental connected line (main chart, widgets,
+            // Live Activity and watch; the mini overview chart keeps its points).
+            if experimentalPlotData.drawsGlucoseAsLine {
                 glucoseLineMarks()
             } else {
                 ForEach(bgReadingValues.indices, id: \.self) { index in

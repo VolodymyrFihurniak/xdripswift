@@ -39,6 +39,7 @@ extension XDripWidget.EntryView {
                 .padding(.bottom, 6)
                 
                 GlucoseChartView(glucoseChartType: .widgetSystemSmall, bgReadingValues: entry.widgetState.bgReadingValues, bgReadingDates: entry.widgetState.bgReadingDates, isMgDl: entry.widgetState.isMgDl, urgentLowLimitInMgDl: entry.widgetState.urgentLowLimitInMgDl, lowLimitInMgDl: entry.widgetState.lowLimitInMgDl, highLimitInMgDl: entry.widgetState.highLimitInMgDl, urgentHighLimitInMgDl: entry.widgetState.urgentHighLimitInMgDl, liveActivityType: nil, hoursToShowScalingHours: nil, glucoseCircleDiameterScalingHours: nil, overrideChartHeight: nil, overrideChartWidth: nil, highContrast: nil)
+                    .experimentalPlots(entry.widgetState.experimentalLinePlots)
                 
                 HStack(alignment: .center) {
                     Text(entry.widgetState.dataSourceDescription)
@@ -86,6 +87,7 @@ extension XDripWidget.EntryView {
                     .padding(.bottom, 2)
                     
                     GlucoseChartView(glucoseChartType: .widgetSystemSmallStandBy, bgReadingValues: entry.widgetState.bgReadingValues, bgReadingDates: entry.widgetState.bgReadingDates, isMgDl: entry.widgetState.isMgDl, urgentLowLimitInMgDl: entry.widgetState.urgentLowLimitInMgDl, lowLimitInMgDl: entry.widgetState.lowLimitInMgDl, highLimitInMgDl: entry.widgetState.highLimitInMgDl, urgentHighLimitInMgDl: entry.widgetState.urgentHighLimitInMgDl, liveActivityType: nil, hoursToShowScalingHours: nil, glucoseCircleDiameterScalingHours: nil, overrideChartHeight: nil, overrideChartWidth: nil, highContrast: isAtNight())
+                        .experimentalPlots(entry.widgetState.experimentalLinePlots)
                     
                 } else {
                     // this is the "big number" standby view

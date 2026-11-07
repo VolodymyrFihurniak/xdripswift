@@ -126,6 +126,15 @@ final class WatchStateModel: NSObject, ObservableObject {
     @Published var sensorNoiseStateRawValue: Int?
     /// Experimental forecast from the phone, drawn on the watch chart.
     @Published var experimentalForecast: ExperimentalCompanionForecast?
+    /// Experimental line style for glucose, from the phone.
+    @Published var experimentalGlucoseLine = false
+
+    /// The forecast and the glucose line style for the watch chart.
+    var experimentalPlots: GlucoseChartExperimentalPlots {
+        var plots = experimentalForecast?.plots ?? GlucoseChartExperimentalPlots()
+        plots.drawsGlucoseAsLine = experimentalGlucoseLine
+        return plots
+    }
     @Published var timeStampOfLastFollowerConnection: Date = .now
     @Published var secondsUntilFollowerDisconnectWarning: Int = 60 * 6
     @Published var timeStampOfLastHeartBeat: Date = .now
@@ -856,6 +865,7 @@ final class WatchStateModel: NSObject, ObservableObject {
         preferSensorCountdown = dictionary["preferSensorCountdown"] as? Bool ?? false
         sensorNoiseStateRawValue = dictionary["sensorNoiseStateRawValue"] as? Int
         experimentalForecast = ExperimentalCompanionForecast(dictionary: dictionary["experimentalForecast"])
+        experimentalGlucoseLine = dictionary["experimentalGlucoseLine"] as? Bool ?? false
         isMaster = dictionary["isMaster"] as? Bool ?? true
         followerDataSourceType = FollowerDataSourceType(rawValue: dictionary["followerDataSourceTypeRawValue"] as? Int ?? 0) ?? .nightscout
         followerBackgroundKeepAliveType = FollowerBackgroundKeepAliveType(rawValue: dictionary["followerBackgroundKeepAliveTypeRawValue"] as? Int ?? 0) ?? .normal

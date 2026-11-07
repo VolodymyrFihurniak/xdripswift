@@ -59,6 +59,22 @@ struct XDripWidgetAttributes: ActivityAttributes {
         var sensorNoiseStateRawValue: Int?
         /// Experimental forecast; optional so activities started by older builds still decode.
         var experimentalForecast: ExperimentalCompanionForecast?
+        /// Experimental line style for glucose; optional for the same reason.
+        var experimentalGlucoseLine: Bool?
+
+        /// The forecast and the glucose line style for the Live Activity chart.
+        var experimentalPlots: GlucoseChartExperimentalPlots {
+            var plots = experimentalForecast?.plots ?? GlucoseChartExperimentalPlots()
+            plots.drawsGlucoseAsLine = experimentalGlucoseLine ?? false
+            return plots
+        }
+
+        /// Only the glucose line style, for charts too small for the forecast.
+        var experimentalLinePlots: GlucoseChartExperimentalPlots {
+            var plots = GlucoseChartExperimentalPlots()
+            plots.drawsGlucoseAsLine = experimentalGlucoseLine ?? false
+            return plots
+        }
         // optional so existing activities without warm-up information still decode
         var sensorWarmupEndDate: Date?
         var sensorWarmupConfirmationUntil: Date?

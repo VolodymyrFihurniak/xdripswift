@@ -41,6 +41,8 @@ struct WidgetSharedUserDefaultsModel: Codable, Equatable {
 
     /// Experimental forecast; optional so data written by older builds still decodes.
     var experimentalForecast: ExperimentalCompanionForecast? = nil
+    /// Experimental line style for glucose (Settings > Experimental); optional for the same reason.
+    var experimentalGlucoseLine: Bool? = nil
 }
 
 /// Remember completed publications, not requests which may still be queued or replaced.

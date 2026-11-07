@@ -741,7 +741,8 @@ private struct LandscapeAGPComparisonChart: View {
             glucosePoints: agpGlucosePoints,
             showsNowRule: Calendar.current.isDateInToday(displayedDate),
             emptyMessage: Texts_Common.statisticsWaitingForGlucoseData,
-            usesTightRange: usesTightRange
+            usesTightRange: usesTightRange,
+            drawsGlucoseAsLine: UserDefaults.standard.experimentalGlucoseChartStyle == .line
         )
         .padding(.horizontal, 6)
         .padding(.top, 2)

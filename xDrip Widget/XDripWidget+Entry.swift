@@ -42,6 +42,21 @@ extension XDripWidget.Entry {
         var aidStatus: AIDStatus?
         var therapyMetrics: TherapyMetricsSnapshot? = nil
         var experimentalForecast: ExperimentalCompanionForecast? = nil
+        var experimentalGlucoseLine = false
+
+        /// The forecast and the glucose line style for the widget chart.
+        var experimentalPlots: GlucoseChartExperimentalPlots {
+            var plots = experimentalForecast?.plots ?? GlucoseChartExperimentalPlots()
+            plots.drawsGlucoseAsLine = experimentalGlucoseLine
+            return plots
+        }
+
+        /// Only the glucose line style, for charts too small for the forecast.
+        var experimentalLinePlots: GlucoseChartExperimentalPlots {
+            var plots = GlucoseChartExperimentalPlots()
+            plots.drawsGlucoseAsLine = experimentalGlucoseLine
+            return plots
+        }
         
         var bgUnitString: String
         var bgValueInMgDl: Double?

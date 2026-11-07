@@ -92,7 +92,7 @@ struct MainView: View {
                 }
 
                 GlucoseChartView(glucoseChartType: showsTherapyRow ? .watchAppWithAIDStatus : .watchApp, bgReadingValues: watchState.bgReadingValues, bgReadingDates: watchState.bgReadingDates, agpBackgroundPoints: agpBackgroundPoints, agpBackgroundOpacityMultiplier: showsAGPBackground ? ConstantsGlucoseChartSwiftUI.agpOpacityMultiplierWatchApp : nil, explicitVisibleEndDate: chartRangeEndDate, isMgDl: watchState.isMgDl, urgentLowLimitInMgDl: watchState.urgentLowLimitInMgDl, lowLimitInMgDl: watchState.lowLimitInMgDl, highLimitInMgDl: watchState.highLimitInMgDl, urgentHighLimitInMgDl: watchState.urgentHighLimitInMgDl, liveActivityType: nil, hoursToShowScalingHours: hoursToShow[hoursToShowIndex], glucoseCircleDiameterScalingHours: 4, overrideChartHeight: chartHeight, overrideChartWidth: container.size.width, highContrast: nil)
-                    .experimentalPlots(watchState.experimentalForecast?.plots ?? GlucoseChartExperimentalPlots())
+                    .experimentalPlots(watchState.experimentalPlots)
                     // make the full chart rectangle respond to swipes, not only the visible chart marks
                     .contentShape(Rectangle())
                     .gesture(
