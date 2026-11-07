@@ -292,6 +292,31 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertEqual(model.treatmentDelta(unknown, at: start.addingTimeInterval(3600), baseline: start), -5.94, accuracy: 1e-9)
     }
 
+    // MARK: Prediction accuracy
+
+    func testAccuracyScoresEachHorizonAgainstTheReadingsThatFollowed() throws {
+        let readings = (0...12).map { (date: start.addingTimeInterval(TimeInterval($0 * 5 * 60)), mgDl: 100 + Double($0) * 2) }
+        let forecast = RecordedForecast(origin: start, originMgDl: 100, predicted: [15: 110, 30: 120, 60: 90, 120: 100])
+        let report = PredictionAccuracy.report(forecasts: [forecast], readings: readings, now: start.addingTimeInterval(60 * 60))
+        let byHorizon = Dictionary(uniqueKeysWithValues: report.map { ($0.horizonMinutes, $0) })
+        XCTAssertEqual(byHorizon[15]?.meanAbsoluteError, 4)
+        XCTAssertEqual(byHorizon[30]?.bias, 8)
+        XCTAssertEqual(byHorizon[60]?.bias, -34)
+        XCTAssertEqual(byHorizon[60]?.noChangeMeanAbsoluteError, 24)
+        XCTAssertEqual(byHorizon[120]?.count, 0)
+        XCTAssertEqual(byHorizon[120]?.pending, 1)
+        // Between readings five minutes apart the value is interpolated.
+        XCTAssertEqual(try XCTUnwrap(PredictionAccuracy.actual(at: start.addingTimeInterval(150), readings: readings, maximumGap: 12.5 * 60)), 101, accuracy: 1e-9)
+        XCTAssertEqual(PredictionAccuracy.maximumGap(readings: readings), 12.5 * 60)
+    }
+
+    func testRecordKeepsTheForecastAtEachScoredHorizon() throws {
+        let points = (0...24).map { GlucosePredictionPoint(date: start.addingTimeInterval(TimeInterval($0 * 5 * 60)), value: 100 + Double($0), confidence: 1, unclampedValue: 100 + Double($0)) }
+        let record = try XCTUnwrap(PredictionAccuracyRecorder.record(from: points))
+        XCTAssertEqual(record.originMgDl, 100)
+        XCTAssertEqual(record.predicted, [15: 103, 30: 106, 60: 112, 120: 124])
+    }
+
     // MARK: Predicted low alert
 
     private func forecast(_ values: [Double]) -> [GlucosePredictionPoint] {

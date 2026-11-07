@@ -33,14 +33,14 @@ extension SettingsViewGroupedSettingsViewModel {
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionModel, predictionAlert, insulins }
+    enum Group { case predictionMain, predictionModel, predictionAlert, predictionAccuracy, insulins }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
         SettingsScreen(title: ExperimentalTexts.text("prediction", "Glucose prediction"),
                        introduction: { ExperimentalTexts.text("predictionIntroduction", "Experimental. A forecast of the next hours, drawn as a dashed line to the right of the main chart. It continues the recent trend and adds the effect of the carbs, boluses and exercise you log. It is an estimate only: never dose insulin from it.") },
                        providers: { [ExperimentalSettingsViewModel(group: .predictionMain), ExperimentalSettingsViewModel(group: .predictionModel),
-                                     ExperimentalSettingsViewModel(group: .predictionAlert)] })
+                                     ExperimentalSettingsViewModel(group: .predictionAlert), ExperimentalSettingsViewModel(group: .predictionAccuracy)] })
     }
 
     static var insulinScreen: SettingsScreen {
@@ -140,6 +140,16 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                 let choices = PredictedLowAlert.leadChoices
                                 guard choices.indices.contains(index) else { return }
                                 UserDefaults.standard.experimentalPredictedLowLeadMinutes = choices[index]
+                            }))
+            ]
+        case .predictionAccuracy:
+            return [
+                SettingsRow(id: "experimental.accuracy.enabled", title: ExperimentalTexts.text("accuracyRecord", "Record accuracy"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalPredictionAccuracyEnabled },
+                                             setIsOn: { UserDefaults.standard.experimentalPredictionAccuracyEnabled = $0 })),
+                SettingsRow(id: "experimental.accuracy.show", title: ExperimentalTexts.text("accuracyShow", "Prediction accuracy"),
+                            control: .custom(content: {
+                                AnyView(NavigationLink(ExperimentalTexts.text("accuracyShow", "Prediction accuracy")) { ExperimentalPredictionAccuracyView() })
                             }))
             ]
         case .insulins:
@@ -245,6 +255,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         case .predictionMain, .insulins: return nil
         case .predictionModel: return ExperimentalTexts.text("predictionModel", "Model")
         case .predictionAlert: return Texts_Alerts.predictedLowAlertTitle
+        case .predictionAccuracy: return ExperimentalTexts.text("accuracyShow", "Prediction accuracy")
         }
     }
 
@@ -256,6 +267,8 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("predictionModelFooter", "Insulin sensitivity: how far one unit lowers glucose. Carb ratio: grams covered by one unit. Absorption sets how long carbs take to act. Periods change these by time of day; each treatment uses the values in force when it was logged. Body weight sharpens curves measured per kilogram (Fiasp, Levemir, regular insulin). Protein and fat add a late rise for carb entries that list them. Basal and premixed insulins are not part of the forecast, as in JugglucoNG.")
         case .predictionAlert:
             return ExperimentalTexts.text("predictedLowFooter", "Warns when the forecast falls below the alarm value within this time while glucose is still above it. Turn it on and set the value, sound and snooze in Settings > Alerts > Predicted Low. It uses the model above even when the prediction is not drawn.")
+        case .predictionAccuracy:
+            return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
         case .insulins:
             return ExperimentalTexts.text("insulinsFooter", "The chart shows how fast each insulin is working, in units per hour, stacked in its own colour along the bottom. A curve ends where its source stopped measuring; nothing is extrapolated.")
         }
@@ -354,5 +367,73 @@ struct ExperimentalPredictionPeriodsView: View {
     private static func minute(of date: Date) -> Int {
         let components = Calendar.current.dateComponents([.hour, .minute], from: date)
         return (components.hour ?? 0) * 60 + (components.minute ?? 0)
+    }
+}
+
+/// Forecast error by horizon (JugglucoNG `PredictionAnalysisScreen`, simplified).
+struct ExperimentalPredictionAccuracyView: View {
+    @State private var report: [HorizonAccuracy] = []
+    @State private var forecastCount = 0
+    @State private var isLoading = true
+    private let isMgDl = UserDefaults.standard.bloodGlucoseUnitIsMgDl
+
+    var body: some View {
+        List {
+            if isLoading {
+                ProgressView()
+            } else if forecastCount == 0 {
+                Text(ExperimentalTexts.text("accuracyEmpty", "No forecasts recorded yet. Turn on Record accuracy and come back after a few hours."))
+            } else {
+                Section(footer: Text(String(format: ExperimentalTexts.text("accuracyCount", "%ld forecasts recorded. A horizon needs at least %ld compared forecasts to say much."),
+                                            forecastCount, PredictionAccuracy.minimumReliableCount))) {
+                    ForEach(report, id: \.horizonMinutes) { horizon in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(ExperimentalSettingsViewModel.minutesText(horizon.horizonMinutes)).font(.headline)
+                                Spacer()
+                                Text("n = \(horizon.count)").foregroundStyle(horizon.count < PredictionAccuracy.minimumReliableCount ? Color.orange : Color.secondary)
+                            }
+                            if horizon.count > 0 {
+                                Text(String(format: ExperimentalTexts.text("accuracyLine", "Error %@ · no change %@ · bias %@"),
+                                            glucose(horizon.meanAbsoluteError), glucose(horizon.noChangeMeanAbsoluteError), glucose(horizon.bias, signed: true)))
+                                    .font(.subheadline)
+                                    .foregroundStyle(horizon.meanAbsoluteError <= horizon.noChangeMeanAbsoluteError ? Color.primary : Color.orange)
+                            }
+                        }
+                    }
+                }
+                Section {
+                    Button(ExperimentalTexts.text("accuracyClear", "Delete recorded forecasts"), role: .destructive) {
+                        PredictionAccuracyRecorder.clear()
+                        report = []
+                        forecastCount = 0
+                    }
+                }
+            }
+        }
+        .navigationTitle(ExperimentalTexts.text("accuracyShow", "Prediction accuracy"))
+        .task { await load() }
+    }
+
+    private func glucose(_ mgDl: Double, signed: Bool = false) -> String {
+        let value = isMgDl ? mgDl : mgDl * ConstantsBloodGlucose.mgDlToMmoll
+        let text = ExperimentalSettingsViewModel.numberText(abs(value), fractionDigits: isMgDl ? 0 : 1)
+        let sign = signed ? (value > 0 ? "+" : value < 0 ? "−" : "") : ""
+        return sign + text + " " + (isMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
+    }
+
+    @MainActor
+    private func load() async {
+        let forecasts = PredictionAccuracyRecorder.load()
+        forecastCount = forecasts.count
+        guard let earliest = forecasts.map(\.origin).min(), let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager else {
+            isLoading = false
+            return
+        }
+        let readings = BgReadingsAccessor(coreDataManager: coreDataManager)
+            .getLatestBgReadings(limit: nil, fromDate: earliest.addingTimeInterval(-60), forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
+            .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
+        report = PredictionAccuracy.report(forecasts: forecasts, readings: readings)
+        isLoading = false
     }
 }

@@ -831,3 +831,10 @@
 "experimental.intensityLight" = "Легка";
 "experimental.intensityModerate" = "Помірна";
 "experimental.intensityIntense" = "Висока";
+"experimental.accuracyRecord" = "Записувати точність";
+"experimental.accuracyShow" = "Точність прогнозу";
+"experimental.accuracyFooter" = "Зберігає прогноз кожні п’ять хвилин протягом 14 днів і порівнює його з глюкозою, що була насправді. Якщо прогноз часто гірший за припущення «без змін» або систематично завищує чи занижує, скоригуйте чутливість, вуглеводний коефіцієнт або засвоєння.";
+"experimental.accuracyEmpty" = "Прогнозів ще не записано. Увімкніть «Записувати точність» і поверніться за кілька годин.";
+"experimental.accuracyCount" = "Записано прогнозів: %ld. Для надійної оцінки горизонту потрібно щонайменше %ld порівняних прогнозів.";
+"experimental.accuracyLine" = "Похибка %@ · без змін %@ · зміщення %@";
+"experimental.accuracyClear" = "Видалити записані прогнози";

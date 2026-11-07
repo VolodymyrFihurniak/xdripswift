@@ -602,3 +602,10 @@
 "experimental.intensityLight" = "Light";
 "experimental.intensityModerate" = "Moderate";
 "experimental.intensityIntense" = "Intense";
+"experimental.accuracyRecord" = "Record accuracy";
+"experimental.accuracyShow" = "Prediction accuracy";
+"experimental.accuracyFooter" = "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.";
+"experimental.accuracyEmpty" = "No forecasts recorded yet. Turn on Record accuracy and come back after a few hours.";
+"experimental.accuracyCount" = "%ld forecasts recorded. A horizon needs at least %ld compared forecasts to say much.";
+"experimental.accuracyLine" = "Error %@ · no change %@ · bias %@";
+"experimental.accuracyClear" = "Delete recorded forecasts";

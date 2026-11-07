@@ -1492,6 +1492,11 @@ import AppIntents
                 dexcomShareUploadManager?.uploadLatestBgReadings(lastConnectionStatusChangeTimeStamp: lastConnectionStatusChangeTimeStamp())
                 
                 bluetoothPeripheralManager?.sendLatestReading()
+
+                // Experimental: keep the forecast made now to score it later against what happened.
+                if let coreDataManager {
+                    PredictionAccuracyRecorder.recordIfDue(coreDataManager: coreDataManager)
+                }
                 
                 calendarManager?.processNewReading(lastConnectionStatusChangeTimeStamp: lastConnectionStatusChangeTimeStamp())
                 

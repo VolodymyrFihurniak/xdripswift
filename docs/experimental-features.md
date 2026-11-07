@@ -43,6 +43,15 @@ Model refinements (JugglucoNG `PredictionModelProfile`, `JournalHumanProfile`, `
 - **Exercise intensity**: the editor offers light, moderate or intense (notes `intensity:light`),
   scaling the drop by 0.35, 0.65 or 1; not set keeps 0.5.
 
+### Prediction accuracy
+
+**Record accuracy** keeps the forecast every five minutes for 14 days (a file in Application
+Support) and **Prediction accuracy** compares it with the glucose that followed, as JugglucoNG's
+prediction analysis does: for 15, 30, 60 and 120 minutes ahead it shows the mean absolute error,
+the bias (positive means the forecast ran high) and the error of simply assuming no change.
+Readings are interpolated across gaps of at most 2.5 reading intervals (6–20 minutes). A horizon
+needs at least 36 compared forecasts before it says much.
+
 ### Predicted low alert
 
 Settings → Alerts → **Predicted Low** (off by default) warns before a low: it fires when the

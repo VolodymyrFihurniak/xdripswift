@@ -116,6 +116,12 @@ extension UserDefaults {
         set { set(newValue, forKey: "experimentalPredictionMacrosEnabled") }
     }
 
+    /// Keep each forecast to score it against the readings that followed.
+    var experimentalPredictionAccuracyEnabled: Bool {
+        get { bool(forKey: "experimentalPredictionAccuracyEnabled") }
+        set { set(newValue, forKey: "experimentalPredictionAccuracyEnabled") }
+    }
+
     /// How far ahead the predicted low alert looks, in minutes.
     var experimentalPredictedLowLeadMinutes: Int {
         get {
@@ -1062,6 +1068,142 @@ struct ExperimentalPredictionModel: Sendable {
         guard isMmol else { return points }
         return points.map { GlucosePredictionPoint(date: $0.date, value: $0.value / ConstantsBloodGlucose.mgDlToMmoll,
                                                    confidence: $0.confidence, unclampedValue: $0.unclampedValue / ConstantsBloodGlucose.mgDlToMmoll) }
+    }
+}
+
+// MARK: - Prediction accuracy (JugglucoNG data/prediction/analysis)
+
+/// One recorded forecast: where it started and what it predicted at each scored horizon (mg/dL).
+struct RecordedForecast: Codable, Hashable, Sendable {
+    let origin: Date
+    let originMgDl: Double
+    /// Horizon in minutes → predicted mg/dL.
+    let predicted: [Int: Double]
+}
+
+/// How the forecast fared at one horizon (JugglucoNG `HorizonAccuracy`).
+struct HorizonAccuracy: Hashable, Sendable {
+    let horizonMinutes: Int
+    let count: Int
+    /// Mean absolute error, mg/dL.
+    let meanAbsoluteError: Double
+    /// Mean of forecast − actual, mg/dL: positive means the forecast ran high.
+    let bias: Double
+    let rootMeanSquareError: Double
+    /// The same for assuming glucose stays where it was.
+    let noChangeMeanAbsoluteError: Double
+    let pending: Int
+    let missing: Int
+}
+
+/// Scores recorded forecasts against the readings that followed (JugglucoNG `PredictionAccuracy`).
+enum PredictionAccuracy {
+    static let horizons = [15, 30, 60, 120]
+    /// Below this many scored forecasts a horizon says nothing yet.
+    static let minimumReliableCount = 36
+    /// How long after its time a reading may still arrive before the outcome counts as missing.
+    static let arrivalAllowance: TimeInterval = 30 * 60
+
+    /// Glucose at `date` from readings sorted ascending: exact, or interpolated across a gap of at
+    /// most 2.5 typical intervals (6–20 minutes), as JugglucoNG `ActualGlucose.valueAt`.
+    static func actual(at date: Date, readings: [(date: Date, mgDl: Double)], maximumGap: TimeInterval) -> Double? {
+        guard let upperIndex = readings.firstIndex(where: { $0.date >= date }) else { return nil }
+        let upper = readings[upperIndex]
+        if upper.date == date { return upper.mgDl > 0 ? upper.mgDl : nil }
+        guard upperIndex > 0 else { return nil }
+        let lower = readings[upperIndex - 1]
+        let span = upper.date.timeIntervalSince(lower.date)
+        guard span <= maximumGap, lower.mgDl > 0, upper.mgDl > 0 else { return nil }
+        return lower.mgDl + (upper.mgDl - lower.mgDl) * date.timeIntervalSince(lower.date) / span
+    }
+
+    static func maximumGap(readings: [(date: Date, mgDl: Double)]) -> TimeInterval {
+        let gaps = zip(readings, readings.dropFirst()).map { $1.date.timeIntervalSince($0.date) }.filter { $0 > 0 }.sorted()
+        let cadence = gaps.isEmpty ? 5 * 60 : gaps[gaps.count / 2]
+        return min(max(cadence * 2.5, 6 * 60), 20 * 60)
+    }
+
+    static func report(forecasts: [RecordedForecast], readings: [(date: Date, mgDl: Double)], now: Date = Date()) -> [HorizonAccuracy] {
+        let sorted = readings.filter { $0.mgDl > 0 }.sorted { $0.date < $1.date }
+        let gap = maximumGap(readings: sorted)
+        let latest = sorted.last?.date ?? .distantPast
+        return horizons.map { horizon in
+            var errors: [Double] = [], noChange: [Double] = []
+            var pending = 0, missing = 0
+            for forecast in forecasts {
+                guard let predicted = forecast.predicted[horizon] else { continue }
+                let target = forecast.origin.addingTimeInterval(TimeInterval(horizon * 60))
+                if let actual = actual(at: target, readings: sorted, maximumGap: gap) {
+                    errors.append(predicted - actual)
+                    noChange.append(abs(forecast.originMgDl - actual))
+                } else if target > latest && target > now.addingTimeInterval(-arrivalAllowance) {
+                    pending += 1
+                } else {
+                    missing += 1
+                }
+            }
+            let count = errors.count
+            func mean(_ values: [Double]) -> Double { values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count) }
+            return HorizonAccuracy(horizonMinutes: horizon, count: count,
+                                   meanAbsoluteError: mean(errors.map(abs)), bias: mean(errors),
+                                   rootMeanSquareError: sqrt(mean(errors.map { $0 * $0 })),
+                                   noChangeMeanAbsoluteError: mean(noChange), pending: pending, missing: missing)
+        }
+    }
+}
+
+/// Records one forecast every five minutes while "Record accuracy" is on, keeping 14 days in a
+/// file in Application Support.
+enum PredictionAccuracyRecorder {
+    static let interval: TimeInterval = 5 * 60
+    static let retention: TimeInterval = 14 * 24 * 60 * 60
+    private static let queue = DispatchQueue(label: "prediction.accuracy", qos: .utility)
+
+    static var fileURL: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("experimental-prediction-accuracy.json")
+    }
+
+    static func load() -> [RecordedForecast] {
+        guard let url = fileURL, let data = try? Data(contentsOf: url) else { return [] }
+        return (try? JSONDecoder().decode([RecordedForecast].self, from: data)) ?? []
+    }
+
+    static func clear() {
+        queue.sync { if let url = fileURL { try? FileManager.default.removeItem(at: url) } }
+    }
+
+    /// The forecast's value at each scored horizon.
+    static func record(from forecast: [GlucosePredictionPoint]) -> RecordedForecast? {
+        guard let first = forecast.first else { return nil }
+        var predicted: [Int: Double] = [:]
+        for horizon in PredictionAccuracy.horizons {
+            let target = first.date.addingTimeInterval(TimeInterval(horizon * 60))
+            if let point = forecast.first(where: { abs($0.date.timeIntervalSince(target)) < 1 }) { predicted[horizon] = point.unclampedValue }
+        }
+        return predicted.isEmpty ? nil : RecordedForecast(origin: first.date, originMgDl: first.value, predicted: predicted)
+    }
+
+    /// Called after each new reading on the main queue; at most one record per five minutes.
+    static func recordIfDue(coreDataManager: CoreDataManager, defaults: UserDefaults = .standard, now: Date = Date()) {
+        guard defaults.experimentalPredictionAccuracyEnabled else { return }
+        if let last = defaults.object(forKey: "experimentalPredictionAccuracyLastRecord") as? Date,
+           now.timeIntervalSince(last) < interval - 30 { return }
+        let readings = BgReadingsAccessor(coreDataManager: coreDataManager)
+            .getLatestBgReadings(limit: nil, fromDate: now.addingTimeInterval(-2 * 60 * 60), forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
+            .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
+        let forecast = ExperimentalPredictionModel(defaults: defaults).forecast(
+            readings: readings, treatments: PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext, now: now),
+            isMmol: false, targetLowMgDl: defaults.lowMarkValue, targetHighMgDl: defaults.highMarkValue, now: now)
+        guard let record = record(from: forecast) else { return }
+        defaults.set(now, forKey: "experimentalPredictionAccuracyLastRecord")
+        queue.async {
+            var records = load().filter { now.timeIntervalSince($0.origin) < retention }
+            records.append(record)
+            guard let url = fileURL, let data = try? JSONEncoder().encode(records) else { return }
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: url, options: .atomic)
+        }
     }
 }
 
