@@ -114,7 +114,8 @@ class SettingsViewDevelopmentSettingsViewModel: NSObject, SettingsViewModelProto
                 }
             ),
             nativeSettingsRow(id: "developer.translateOnlineHelp", index: Setting.translateOnlineHelp.rawValue, sectionID: sectionID, isVisible: developerRowsVisible),
-            nativeSettingsRow(id: "developer.storeFrequentReadingsInNightscout", index: Setting.storeFrequentReadingsInNightscout.rawValue, sectionID: sectionID, isVisible: developerRowsVisible),
+            // Shown in Nightscout > Upload Options instead ("Upload every reading").
+            nativeSettingsRow(id: "developer.storeFrequentReadingsInNightscout", index: Setting.storeFrequentReadingsInNightscout.rawValue, sectionID: sectionID, isVisible: false),
             nativeSettingsRow(id: "developer.storeFrequentReadingsInHealthKit", index: Setting.storeFrequentReadingsInHealthKit.rawValue, sectionID: sectionID, isVisible: developerRowsVisible),
             nativeSettingsRow(id: "developer.suppressUnLockPayLoad", index: Setting.suppressUnLockPayLoad.rawValue, sectionID: sectionID, isVisible: developerRowsVisible),
             nativeSettingsRow(id: "developer.allowStandByHighContrast", index: Setting.allowStandByHighContrast.rawValue, sectionID: sectionID, isVisible: developerRowsVisible),

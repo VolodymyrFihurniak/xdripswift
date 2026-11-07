@@ -82,6 +82,11 @@ class SettingsViewNightscoutSettingsViewModel {
     
     // MARK: - Native SwiftUI rows
 
+    func settingsSectionFooter() -> String? {
+        guard rowGroup == .uploadSchedule, UserDefaults.standard.nightscoutEnabled else { return nil }
+        return Texts_SettingsView.nightscoutUploadEveryReadingFooter
+    }
+
     func settingsSectionTitle() -> String? {
         switch rowGroup {
         case .nightscout:
@@ -177,6 +182,15 @@ class SettingsViewNightscoutSettingsViewModel {
             ]
         case .uploadSchedule:
             return [
+                SettingsRow(
+                    id: "nightscout.uploadEveryReading",
+                    title: Texts_SettingsView.nightscoutUploadEveryReading,
+                    control: .toggle(
+                        isOn: { UserDefaults.standard.storeFrequentReadingsInNightscout },
+                        setIsOn: { UserDefaults.standard.storeFrequentReadingsInNightscout = $0 }
+                    ),
+                    isVisible: nightscoutEnabled
+                ),
                 nativeSettingsRow(id: "nightscout.uploadSensorStartTime", index: Setting.uploadSensorStartTime.rawValue, sectionID: sectionID, isVisible: sensorStartTimeRowVisible),
                 nativeSettingsRow(id: "nightscout.useSchedule", index: Setting.useSchedule.rawValue, sectionID: sectionID, isVisible: masterModeRowsVisible),
                 nativeSettingsRow(
