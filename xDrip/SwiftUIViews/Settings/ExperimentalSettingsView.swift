@@ -27,7 +27,7 @@ extension SettingsViewGroupedSettingsViewModel {
                     settingsScreen: { ExperimentalSettingsViewModel.insulinScreen }
                 )
             ],
-            leadingRows: { [ExperimentalSettingsViewModel.chartStyleRow()] }
+            leadingRows: { [ExperimentalSettingsViewModel.chartStyleRow(), ExperimentalSettingsViewModel.chartCursorRow()] }
         )
     }
 }
@@ -61,6 +61,13 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                         guard styles.indices.contains(index) else { return }
                         UserDefaults.standard.experimentalGlucoseChartStyle = styles[index]
                     }))
+    }
+
+    /// JugglucoNG's cursor on the main chart: time, glucose and the insulin on board at that moment.
+    static func chartCursorRow() -> SettingsRow {
+        SettingsRow(id: "experimental.chartCursor", title: ExperimentalTexts.text("chartCursor", "Chart cursor"),
+                    control: .toggle(isOn: { UserDefaults.standard.experimentalChartCursorEnabled },
+                                     setIsOn: { UserDefaults.standard.experimentalChartCursorEnabled = $0 }))
     }
 
     static func title(for style: ExperimentalGlucoseChartStyle) -> String {

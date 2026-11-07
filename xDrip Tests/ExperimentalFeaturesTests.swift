@@ -219,6 +219,74 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertTrue(dates.contains(start.addingTimeInterval(3600)))
     }
 
+    // MARK: Insulin on board
+
+    func testInsulinOnBoardFallsFromTheDoseToZero() {
+        let shape = InsulinActivityStack.shape(for: .aspart, units: 6)
+        XCTAssertEqual(InsulinActivityStack.remaining(units: 6, shape: shape, minutes: 0), 6, accuracy: 1e-9)
+        // Python port of JugglucoNG JournalIobMath.remainingCurveFraction over the aspart curve.
+        XCTAssertEqual(InsulinActivityStack.remaining(units: 6, shape: shape, minutes: 60), 4.5093, accuracy: 0.001)
+        XCTAssertEqual(InsulinActivityStack.remaining(units: 6, shape: shape, minutes: 120), 2.6429, accuracy: 0.001)
+        XCTAssertEqual(InsulinActivityStack.remaining(units: 6, shape: shape, minutes: -5), 0)
+        XCTAssertEqual(InsulinActivityStack.remaining(units: 6, shape: shape, minutes: 360), 0)
+    }
+
+    func testOnBoardGroupsByInsulinAndEndsWithTheLastDose() throws {
+        let treatments = [ExperimentalTreatment(date: start, amount: 6, kind: .bolus, notes: nil),
+                          ExperimentalTreatment(date: start.addingTimeInterval(3600), amount: 6, kind: .bolus, notes: "NovoRapid"),
+                          ExperimentalTreatment(date: start, amount: 20, kind: .basalInjection, notes: nil),
+                          // Logged for later: not on board yet.
+                          ExperimentalTreatment(date: start.addingTimeInterval(3 * 3600), amount: 4, kind: .bolus, notes: nil)]
+        let onBoard = InsulinActivityStack.onBoard(treatments: treatments, at: start.addingTimeInterval(2 * 3600),
+                                                   bolusDefault: .aspart, basalDefault: .glargineU100)
+        XCTAssertEqual(Set(onBoard.map(\.insulin)), [.aspart, .glargineU100])
+        let aspart = try XCTUnwrap(onBoard.first { $0.insulin == .aspart })
+        XCTAssertEqual(aspart.units, 2.6429 + 4.5093, accuracy: 0.002)
+        XCTAssertEqual(aspart.activeUntil, start.addingTimeInterval(3600 + 360 * 60))
+        XCTAssertEqual(onBoard.map(\.units), onBoard.map(\.units).sorted(by: >))
+    }
+
+    func testBandCarriesTheInsulinOnBoard() throws {
+        let treatments = [ExperimentalTreatment(date: start, amount: 6, kind: .bolus, notes: nil)]
+        let dates = InsulinActivityStack.sampleDates(from: start, to: start.addingTimeInterval(3 * 3600), treatments: treatments)
+        let band = InsulinActivityStack.band(treatments: treatments, dates: dates, bolusDefault: .aspart, basalDefault: .glargineU100)
+        let index = try XCTUnwrap(dates.firstIndex(of: start.addingTimeInterval(3600)))
+        XCTAssertEqual(band.layers[0].onBoard[index], 4.5093, accuracy: 0.001)
+        XCTAssertEqual(band.layers[0].onBoard[0], 6, accuracy: 1e-9)
+    }
+
+    func testPlotsReadTheInsulinOnBoardNearestTheCursor() {
+        var plots = GlucoseChartExperimentalPlots()
+        plots.insulin = [GlucoseChartExperimentalPlots.InsulinLayer(
+            id: "aspart", name: "NovoRapid", color: .blue,
+            points: [GlucoseChartExperimentalPlots.InsulinPoint(date: start, bottom: 0, top: 1, onBoard: 3),
+                     GlucoseChartExperimentalPlots.InsulinPoint(date: start.addingTimeInterval(300), bottom: 0, top: 1, onBoard: 2.8)],
+            countsTowardIOB: true)]
+        XCTAssertEqual(plots.onBoard(at: start.addingTimeInterval(200)).map(\.units), [2.8])
+        XCTAssertTrue(plots.onBoard(at: start.addingTimeInterval(3600)).isEmpty)
+    }
+
+    // MARK: Chart cursor
+
+    func testCursorFindsTheNearestReading() {
+        let dates = [0, 5, 10, 15].map { start.addingTimeInterval(TimeInterval($0 * 60)) }
+        XCTAssertEqual(RootHomeMainChartView.nearestIndex(in: dates, to: start.addingTimeInterval(7 * 60)), 1)
+        XCTAssertEqual(RootHomeMainChartView.nearestIndex(in: dates, to: start.addingTimeInterval(8 * 60)), 2)
+        XCTAssertEqual(RootHomeMainChartView.nearestIndex(in: dates, to: start.addingTimeInterval(-60)), 0)
+        XCTAssertEqual(RootHomeMainChartView.nearestIndex(in: dates, to: start.addingTimeInterval(99 * 60)), 3)
+        XCTAssertNil(RootHomeMainChartView.nearestIndex(in: [], to: start))
+    }
+
+    func testCursorGeometryMapsTimeAndGlucose() {
+        let geometry = GlucoseChartCursorGeometry()
+        XCTAssertNil(geometry.date(atX: 10))
+        geometry.update(plotRect: CGRect(x: 10, y: 0, width: 200, height: 100), xDomain: start...start.addingTimeInterval(3600), yDomain: 40...240)
+        XCTAssertEqual(geometry.date(atX: 110), start.addingTimeInterval(1800))
+        XCTAssertEqual(geometry.date(atX: -50), start)
+        XCTAssertEqual(geometry.x(for: start.addingTimeInterval(900)), 60)
+        XCTAssertEqual(geometry.y(forMgDl: 140), 50)
+    }
+
     // MARK: Chart helpers
 
     func testGlucoseLineBreaksAtGapsAndChangesColourWithTheRange() {

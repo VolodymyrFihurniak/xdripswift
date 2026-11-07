@@ -109,6 +109,8 @@ struct GlucoseChartView: View {
     private var therapySeries = TherapyChartSeries()
     private var renderBasalDownwards = false
     private var experimentalPlotData = GlucoseChartExperimentalPlots()
+    private var cursorSelection: GlucoseChartCursor?
+    private var cursorGeometry: GlucoseChartCursorGeometry?
 
     // MARK: - Input Data
 
@@ -313,6 +315,23 @@ struct GlucoseChartView: View {
         var view = self
         view.experimentalPlotData = plots
         return view
+    }
+
+    /// The main chart's cursor, and the object the chart reports its plot area to so a touch can be
+    /// turned into a time and a glucose value.
+    func cursor(_ cursor: GlucoseChartCursor?, geometry: GlucoseChartCursorGeometry?) -> Self {
+        var view = self
+        view.cursorSelection = cursor
+        view.cursorGeometry = geometry
+        return view
+    }
+
+    /// Hands the plot area, in the cursor's coordinate space, to `cursorGeometry`. Returns nothing:
+    /// it is called from the overlay while the chart lays out.
+    private func reportCursorGeometry(plotRect: CGRect, in geometryProxy: GeometryProxy, xDomain: ClosedRange<Date>, yDomain: ClosedRange<Double>) {
+        guard let cursorGeometry else { return }
+        let origin = geometryProxy.frame(in: .named(GlucoseChartCursorGeometry.coordinateSpace)).origin
+        cursorGeometry.update(plotRect: plotRect.offsetBy(dx: origin.x, dy: origin.y), xDomain: xDomain, yDomain: yDomain)
     }
 
     /// The forecast is shown only while the chart ends at the present.
@@ -971,6 +990,22 @@ struct GlucoseChartView: View {
                 predictionMarks(endDate: experimentalXScaleEndDate, domain: domain)
             }
 
+            // JugglucoNG's cursor: a vertical line at the chosen moment and a ring on its reading.
+            if usesMainChartYAxisContext, let cursor = cursorSelection {
+                RuleMark(x: .value("Cursor", cursor.date))
+                    .lineStyle(StrokeStyle(lineWidth: ConstantsGlucoseChartSwiftUI.cursorLineWidth))
+                    .foregroundStyle(ConstantsGlucoseChartSwiftUI.cursorLineColor)
+                if let mgDl = cursor.mgDl {
+                    PointMark(x: .value("Time", cursor.date), y: .value("BG", min(max(mgDl, domain.lowerBound), domain.upperBound)))
+                        .symbol {
+                            Circle()
+                                .fill(cursor.isForecast ? ConstantsGlucoseChartSwiftUI.experimentalPredictionColor : bgColor(bgValueInMgDl: mgDl))
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .frame(width: ConstantsGlucoseChartSwiftUI.cursorRingDiameter, height: ConstantsGlucoseChartSwiftUI.cursorRingDiameter)
+                        }
+                }
+            }
+
             // Calibration and BG check markers sit above glucose points.
             if chartState != nil {
                 borderedCircleMarks(points: visibleCalibrationPoints, outerColor: GlucoseChartTreatmentStyle.calibrationOuterColor, innerColor: GlucoseChartTreatmentStyle.calibrationInnerColor, outerScale: GlucoseChartTreatmentStyle.calibrationOuterScale, innerScale: GlucoseChartTreatmentStyle.calibrationInnerScale)
@@ -1157,9 +1192,11 @@ struct GlucoseChartView: View {
                 if usesMainChartYAxisContext {
                     if #available(iOS 17.0, watchOS 10.0, *) {
                         if let plotFrame = chartProxy.plotFrame {
+                            let _ = reportCursorGeometry(plotRect: geometryProxy[plotFrame], in: geometryProxy, xDomain: xScaleDomain, yDomain: domain)
                             mainChartPlotBorder(plotRect: geometryProxy[plotFrame], overlaySize: geometryProxy.size)
                         }
                     } else {
+                        let _ = reportCursorGeometry(plotRect: geometryProxy[chartProxy.plotAreaFrame], in: geometryProxy, xDomain: xScaleDomain, yDomain: domain)
                         mainChartPlotBorder(plotRect: geometryProxy[chartProxy.plotAreaFrame], overlaySize: geometryProxy.size)
                     }
                 }
@@ -1589,6 +1626,8 @@ struct GlucoseChartExperimentalPlots {
         let date: Date
         let bottom: Double
         let top: Double
+        /// Units of this insulin still to act at `date`.
+        var onBoard: Double = 0
         var id: TimeInterval { date.timeIntervalSince1970 }
     }
 
@@ -1597,6 +1636,19 @@ struct GlucoseChartExperimentalPlots {
         let name: String
         let color: Color
         let points: [InsulinPoint]
+        /// Rapid, regular and NPH insulins make up IOB; basal and premixed ones are shown apart.
+        var countsTowardIOB = true
+    }
+
+    /// What one insulin still has to deliver at a moment.
+    struct OnBoard: Identifiable {
+        let id: String
+        let name: String
+        let color: Color
+        let countsTowardIOB: Bool
+        let units: Double
+        /// When its last dose stops acting; nil where only the amount is known.
+        var activeUntil: Date?
     }
 
     struct LinePoint: Identifiable {
@@ -1616,6 +1668,8 @@ struct GlucoseChartExperimentalPlots {
 
     var prediction: [PredictionPoint] = []
     var insulin: [InsulinLayer] = []
+    /// Every insulin still on board now, largest first, whatever window the chart shows.
+    var onBoardNow: [OnBoard] = []
     var drawsGlucoseAsLine = false
     /// Lets widgets, Live Activity and the watch draw the forecast; the app's main chart always may.
     var showsInCompactCharts = false
@@ -1625,8 +1679,18 @@ struct GlucoseChartExperimentalPlots {
         insulin.compactMap { layer in
             let points = layer.points.filter { $0.date >= start && $0.date <= end }
             guard points.contains(where: { $0.top - $0.bottom > 0.0001 }) else { return nil }
-            return InsulinLayer(id: layer.id, name: layer.name, color: layer.color, points: points)
+            return InsulinLayer(id: layer.id, name: layer.name, color: layer.color, points: points, countsTowardIOB: layer.countsTowardIOB)
         }
+    }
+
+    /// Each insulin's units still on board at `date`, read from the nearest sample within five minutes.
+    func onBoard(at date: Date) -> [OnBoard] {
+        insulin.compactMap { layer in
+            guard let nearest = layer.points.min(by: { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }),
+                  abs(nearest.date.timeIntervalSince(date)) <= 5 * 60, nearest.onBoard > 0.005 else { return nil }
+            return OnBoard(id: layer.id, name: layer.name, color: layer.color, countsTowardIOB: layer.countsTowardIOB, units: nearest.onBoard)
+        }
+        .sorted { $0.units > $1.units }
     }
 
     /// The forecast up to `end`, ending exactly at `end` when it runs past it.
@@ -1664,6 +1728,51 @@ struct GlucoseChartExperimentalPlots {
         }
         close()
         return runs
+    }
+}
+
+/// A moment chosen with the main chart's cursor, and the glucose read there.
+struct GlucoseChartCursor: Equatable {
+    let date: Date
+    let mgDl: Double?
+    /// True when the value comes from the experimental forecast rather than a reading.
+    var isForecast = false
+}
+
+/// Where the main chart's plot area sits and what time and glucose it spans, so a touch can be
+/// turned into a moment and a moment into a position. The chart writes it while it lays out; it
+/// is a plain object, so writing it does not trigger another redraw.
+final class GlucoseChartCursorGeometry {
+    static let coordinateSpace = "glucoseChartCursor"
+
+    private(set) var plotRect: CGRect = .zero
+    private(set) var xDomain: ClosedRange<Date>?
+    private(set) var yDomain: ClosedRange<Double>?
+
+    func update(plotRect: CGRect, xDomain: ClosedRange<Date>, yDomain: ClosedRange<Double>) {
+        self.plotRect = plotRect
+        self.xDomain = xDomain
+        self.yDomain = yDomain
+    }
+
+    /// The time under `x`, clamped to the plot area.
+    func date(atX x: CGFloat) -> Date? {
+        guard let xDomain, plotRect.width > 0 else { return nil }
+        let fraction = min(max((x - plotRect.minX) / plotRect.width, 0), 1)
+        return xDomain.lowerBound.addingTimeInterval(Double(fraction) * xDomain.upperBound.timeIntervalSince(xDomain.lowerBound))
+    }
+
+    func x(for date: Date) -> CGFloat? {
+        guard let xDomain, plotRect.width > 0 else { return nil }
+        let span = xDomain.upperBound.timeIntervalSince(xDomain.lowerBound)
+        guard span > 0 else { return nil }
+        return plotRect.minX + CGFloat(date.timeIntervalSince(xDomain.lowerBound) / span) * plotRect.width
+    }
+
+    func y(forMgDl value: Double) -> CGFloat? {
+        guard let yDomain, plotRect.height > 0, yDomain.upperBound > yDomain.lowerBound else { return nil }
+        let fraction = (value - yDomain.lowerBound) / (yDomain.upperBound - yDomain.lowerBound)
+        return plotRect.maxY - CGFloat(fraction) * plotRect.height
     }
 }
 

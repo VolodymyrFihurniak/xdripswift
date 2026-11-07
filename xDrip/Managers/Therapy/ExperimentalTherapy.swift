@@ -35,6 +35,7 @@ enum ExperimentalPredictionHorizon {
 extension UserDefaults {
     private enum ExperimentalKey {
         static let chartStyle = "experimentalGlucoseChartStyle"
+        static let chartCursor = "experimentalChartCursorEnabled"
         static let predictionEnabled = "experimentalPredictionEnabled"
         static let predictionHorizon = "experimentalPredictionHorizonMinutes"
         static let predictionMomentum = "experimentalPredictionTrendMomentum"
@@ -49,6 +50,13 @@ extension UserDefaults {
     var experimentalGlucoseChartStyle: ExperimentalGlucoseChartStyle {
         get { ExperimentalGlucoseChartStyle(rawValue: integer(forKey: ExperimentalKey.chartStyle)) ?? .points }
         set { set(newValue.rawValue, forKey: ExperimentalKey.chartStyle) }
+    }
+
+    /// JugglucoNG's chart cursor: touch the glucose line, or hold anywhere, to read a moment. On by
+    /// default because it only adds a way to look at the chart.
+    var experimentalChartCursorEnabled: Bool {
+        get { object(forKey: ExperimentalKey.chartCursor) as? Bool ?? true }
+        set { set(newValue, forKey: ExperimentalKey.chartCursor) }
     }
 
     /// Off by default here: JugglucoNG enables it, but in xDrip it is an experimental feature.
@@ -1253,6 +1261,16 @@ enum InsulinActivityStack {
         let tops: [Double]
         /// Total of the layers below, in units per hour.
         let bottoms: [Double]
+        /// Units of this insulin still to act at each date (JugglucoNG `JournalIobMath` IOB).
+        let onBoard: [Double]
+    }
+
+    /// One insulin's remaining units at a moment.
+    struct OnBoard: Sendable, Hashable {
+        let insulin: InsulinProfile
+        let units: Double
+        /// When the last of its doses stops acting.
+        let activeUntil: Date
     }
 
     struct Band: Sendable {
@@ -1292,6 +1310,32 @@ enum InsulinActivityStack {
         return units * InsulinCurveCatalogue.interpolate(shape, minute: minutes) / areaHours
     }
 
+    /// JugglucoNG `JournalIobMath.remainingCurveFraction`: the part of `units` whose action is still
+    /// to come `minutes` after the dose: all of it at the injection, none before it or once spent.
+    static func remaining(units: Double, shape: [InsulinCurvePoint], minutes: Double) -> Double {
+        guard units.isFinite, units > 0, minutes >= 0, let end = shape.last?.minute, minutes < Double(end) else { return 0 }
+        return units * (1 - InsulinCurveMath.cumulativeFraction(shape, elapsedMinutes: minutes))
+    }
+
+    /// What each insulin still has on board at `date`, largest first. Uses the same per-dose
+    /// shapes as the chart band, so the units left are the area still to come under its curve.
+    static func onBoard(treatments: [ExperimentalTreatment], at date: Date, bolusDefault: InsulinProfile,
+                        basalDefault: InsulinProfile, bodyWeightKg: Double? = nil) -> [OnBoard] {
+        var units: [InsulinProfile: Double] = [:]
+        var until: [InsulinProfile: Date] = [:]
+        for treatment in treatments where (treatment.kind == .bolus || treatment.kind == .basalInjection) && treatment.date <= date {
+            guard treatment.amount.isFinite, treatment.amount > 0,
+                  let insulin = treatment.insulin(bolusDefault: bolusDefault, basalDefault: basalDefault) else { continue }
+            let doseShape = shape(for: insulin, units: treatment.amount, bodyWeightKg: bodyWeightKg)
+            let left = remaining(units: treatment.amount, shape: doseShape, minutes: date.timeIntervalSince(treatment.date) / 60)
+            guard left > 0.0005, let end = doseShape.last?.minute else { continue }
+            units[insulin, default: 0] += left
+            until[insulin] = max(until[insulin] ?? .distantPast, treatment.date.addingTimeInterval(TimeInterval(end * 60)))
+        }
+        return units.map { OnBoard(insulin: $0.key, units: $0.value, activeUntil: until[$0.key] ?? date) }
+            .sorted { $0.units > $1.units }
+    }
+
     /// The stacked band over `dates`. Basal insulins sit at the bottom, then rapid ones.
     static func band(treatments: [ExperimentalTreatment], dates: [Date], bolusDefault: InsulinProfile, basalDefault: InsulinProfile,
                      bodyWeightKg: Double? = nil) -> Band {
@@ -1312,12 +1356,15 @@ enum InsulinActivityStack {
         for insulin in order {
             guard let insulinDoses = doses[insulin] else { continue }
             let bottoms = running
+            var onBoard = [Double](repeating: 0, count: dates.count)
             for (index, date) in dates.enumerated() {
-                running[index] += insulinDoses.reduce(0) { total, dose in
-                    total + rate(units: dose.units, shape: dose.shape, minutes: date.timeIntervalSince(dose.date) / 60)
+                for dose in insulinDoses {
+                    let minutes = date.timeIntervalSince(dose.date) / 60
+                    running[index] += rate(units: dose.units, shape: dose.shape, minutes: minutes)
+                    onBoard[index] += remaining(units: dose.units, shape: dose.shape, minutes: minutes)
                 }
             }
-            layers.append(Layer(insulin: insulin, tops: running, bottoms: bottoms))
+            layers.append(Layer(insulin: insulin, tops: running, bottoms: bottoms, onBoard: onBoard))
         }
         return Band(dates: dates, layers: layers)
     }
@@ -1379,6 +1426,12 @@ enum ExperimentalChartInputs {
                                              valuesMgDl: forecast.map { ($0.value * 10).rounded() / 10 })
     }
 
+    static func onBoard(_ entry: InsulinActivityStack.OnBoard) -> GlucoseChartExperimentalPlots.OnBoard {
+        GlucoseChartExperimentalPlots.OnBoard(id: entry.insulin.rawValue, name: entry.insulin.shortName, color: color(entry.insulin),
+                                              countsTowardIOB: entry.insulin.countsTowardPrediction, units: entry.units,
+                                              activeUntil: entry.activeUntil)
+    }
+
     static func color(_ insulin: InsulinProfile) -> Color {
         Color(red: Double((insulin.colorHex >> 16) & 0xFF) / 255,
               green: Double((insulin.colorHex >> 8) & 0xFF) / 255,
@@ -1419,9 +1472,15 @@ enum ExperimentalChartInputs {
                 GlucoseChartExperimentalPlots.InsulinLayer(
                     id: layer.insulin.rawValue, name: layer.insulin.shortName, color: color(layer.insulin),
                     points: band.dates.indices.map {
-                        GlucoseChartExperimentalPlots.InsulinPoint(date: band.dates[$0], bottom: layer.bottoms[$0], top: layer.tops[$0])
-                    })
+                        GlucoseChartExperimentalPlots.InsulinPoint(date: band.dates[$0], bottom: layer.bottoms[$0], top: layer.tops[$0],
+                                                                   onBoard: layer.onBoard[$0])
+                    },
+                    countsTowardIOB: layer.insulin.countsTowardPrediction)
             }
+            // What is left of every insulin now, whatever window the chart shows.
+            plots.onBoardNow = InsulinActivityStack.onBoard(treatments: treatments, at: now, bolusDefault: model.bolusInsulin,
+                                                            basalDefault: model.basalInsulin, bodyWeightKg: model.bodyWeightKg)
+                .map { onBoard($0) }
         }
         return plots
     }
