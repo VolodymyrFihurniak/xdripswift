@@ -847,8 +847,10 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             probeCode: probeCode,
             variant: (bluetoothPeripheral as? Sibionics2)?.variant ?? .sibionics2,
             sibionics1Family: sibionics1Family,
-            labelShortCode: Sibionics2Configuration.labelShortCode(for: address)
+            labelShortCode: Sibionics2Configuration.labelShortCode(for: address),
+            manualSensitivity: Sibionics2Configuration.manualSensitivity(for: address)
         )
+        let manualSensitivity = Sibionics2Configuration.manualSensitivity(for: address)
         let labelShortCode = Sibionics2Configuration.labelShortCode(for: address)
         let usesSibionics1Fallback = isSibionics1 && Sibionics2FactorySensitivity.sibionics1ShortCodeSensitivity(
             advertisedName: bluetoothPeripheral.blePeripheral.name, family: sibionics1Family,
@@ -926,6 +928,15 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                     showsDisclosure: true,
                     action: { [weak self] in
                         self?.requestSibionics2LabelScan(for: bluetoothPeripheral)
+                    }
+                ),
+                row(
+                    id: "sibionics-manual-sensitivity",
+                    title: Texts_BluetoothPeripheralView.sibionicsManualSensitivityTitle,
+                    detail: manualSensitivity?.stringWithoutTrailingZeroes ?? Texts_BluetoothPeripheralView.sibionicsManualSensitivityOff,
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        self?.requestSibionicsManualSensitivity(for: bluetoothPeripheral)
                     }
                 ),
                 row(
@@ -2218,6 +2229,41 @@ private extension BluetoothPeripheralDetailState {
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty, Sibionics2FactorySensitivity.decodeProbe(trimmed) == nil else { return nil }
                 return Texts_BluetoothPeripheralView.sibionics2ProbeCodeInvalid
+            }
+        ))
+    }
+
+    /// Factory sensitivity typed by hand (JugglucoNG's override); empty returns to the codes.
+    func requestSibionicsManualSensitivity(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        func parse(_ text: String) -> Double? {
+            Double(text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: "."))
+        }
+        presentTextEntryView(BluetoothPeripheralTextEntry(
+            title: Texts_BluetoothPeripheralView.sibionicsManualSensitivityTitle,
+            message: Texts_BluetoothPeripheralView.sibionicsManualSensitivityMessage,
+            keyboardType: .decimalPad,
+            text: Sibionics2Configuration.manualSensitivity(for: address)?.stringWithoutTrailingZeroes,
+            placeholder: "1.27",
+            actionTitle: Texts_Common.Ok,
+            cancelTitle: Texts_Common.Cancel,
+            actionHandler: { [weak self] text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let value = trimmed.isEmpty ? nil : parse(trimmed)
+                guard Sibionics2Configuration.manualSensitivity(for: address) != value else { self?.refresh(); return }
+                Sibionics2Configuration.setManualSensitivity(value, for: address)
+                trace("Sibionics manual sensitivity was %{public}@", log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController,
+                      type: .info, value.map { "set to \($0)" } ?? "removed")
+                self?.sensitivityInputDidChange(for: bluetoothPeripheral)
+            },
+            actionIsEnabled: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty || parse(trimmed).map(Sibionics2FactorySensitivity.isSupported) == true
+            },
+            inputValidator: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, parse(trimmed).map(Sibionics2FactorySensitivity.isSupported) != true else { return nil }
+                return Texts_BluetoothPeripheralView.sibionicsManualSensitivityMessage
             }
         ))
     }

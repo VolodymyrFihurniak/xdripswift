@@ -618,6 +618,23 @@ enum Sibionics2Configuration {
         return true
     }
 
+    /// Factory sensitivity entered by hand; it overrides the probe code, label and name.
+    static func manualSensitivity(for identifier: String, userDefaults: UserDefaults = .standard) -> Double? {
+        guard let key = key("manualSensitivity", identifier: identifier),
+              let value = (userDefaults.object(forKey: key) as? NSNumber)?.doubleValue,
+              Sibionics2FactorySensitivity.isSupported(value) else { return nil }
+        return value
+    }
+
+    static func setManualSensitivity(_ value: Double?, for identifier: String, userDefaults: UserDefaults = .standard) {
+        guard let key = key("manualSensitivity", identifier: identifier) else { return }
+        if let value, Sibionics2FactorySensitivity.isSupported(value) {
+            userDefaults.set(value, forKey: key)
+        } else {
+            userDefaults.removeObject(forKey: key)
+        }
+    }
+
     /// Short code read from a scanned Sibionics sensor label.
     static func labelShortCode(for identifier: String, userDefaults: UserDefaults = .standard) -> String? {
         guard let key = key("labelShortCode", identifier: identifier),

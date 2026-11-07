@@ -79,6 +79,12 @@ Sibionics 1 covers three JugglucoNG product lines, told apart at runtime:
 - There is no warm-up wait for any Sibionics sensor: readings are shown from the first minute, as in JugglucoNG. Earlier builds hid the first 45 minutes of a new sensor.
 - The active sensor is named **Sibionics 1** in the home screen, Sensor Management, reports and the Activity Log (both variants share one internal transmitter type).
 
+## Manual sensitivity
+
+Sibionics 1 and 2 → **Manual sensitivity**: a factory sensitivity from 0.8 to 2.5 typed by hand
+overrides the probe code, the scanned label and the sensor name, as JugglucoNG's override does.
+History is recalculated with it. Leave the field empty to return to the codes.
+
 ## Scanning a Sibionics 2 label (optional)
 
 Instead of typing the probe code, open the Sibionics 2 device and tap **Scan sensor label**. As in JugglucoNG, the GS1 label (QR or Data Matrix) must carry a Sibionics GTIN and a V120 serial:

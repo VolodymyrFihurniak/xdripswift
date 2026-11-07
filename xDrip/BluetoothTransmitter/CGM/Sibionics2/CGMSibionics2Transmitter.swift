@@ -979,7 +979,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             probeCode: Sibionics2Configuration.probeCode(for: address),
             variant: variant,
             sibionics1Family: family,
-            labelShortCode: Sibionics2Configuration.labelShortCode(for: address)
+            labelShortCode: Sibionics2Configuration.labelShortCode(for: address),
+            manualSensitivity: Sibionics2Configuration.manualSensitivity(for: address)
         )
     }
 

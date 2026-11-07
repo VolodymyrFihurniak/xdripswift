@@ -329,6 +329,17 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertNil(ExperimentalNightscoutPrediction.deviceStatus(forecast: Array(points.prefix(1)), now: start))
     }
 
+    // MARK: Sibionics manual sensitivity
+
+    func testManualSensitivityOverridesEveryCodeWhenSupported() {
+        let automatic = Sibionics2FactorySensitivity.effectiveSensitivity(advertisedName: nil, variant: .sibionics1, sibionics1Family: .chinese)
+        XCTAssertEqual(automatic, 1.27, accuracy: 1e-9)
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(advertisedName: nil, variant: .sibionics1, sibionics1Family: .chinese,
+                                                                          manualSensitivity: 1.5), 1.5)
+        XCTAssertEqual(Sibionics2FactorySensitivity.effectiveSensitivity(advertisedName: nil, variant: .sibionics1, sibionics1Family: .chinese,
+                                                                          manualSensitivity: 3.0), automatic)
+    }
+
     // MARK: Predicted low alert
 
     private func forecast(_ values: [Double]) -> [GlucosePredictionPoint] {
