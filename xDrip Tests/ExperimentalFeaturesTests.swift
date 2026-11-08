@@ -266,6 +266,52 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertTrue(plots.onBoard(at: start.addingTimeInterval(3600)).isEmpty)
     }
 
+    func testUploadedBasalInjectionStillCountsButAnImportedNoteDoesNot() throws {
+        let coreDataManager = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
+        let context = coreDataManager.mainManagedObjectContext
+        // Uploaded to Nightscout: an id and the Note event type, as the treatment editor stores it.
+        _ = TreatmentEntry(id: "uploaded", date: start, value: 20, treatmentType: .BasalInjection,
+                           nightscoutEventType: ConstantsNightscout.noteEventType, enteredBy: "Test", notes: "Tresiba", nsManagedObjectContext: context)
+        _ = TreatmentEntry(id: "imported", date: start, value: 4, treatmentType: .Insulin,
+                           nightscoutEventType: "Correction Bolus", enteredBy: "Nightscout", nsManagedObjectContext: context)
+        let policy = DataFlowPolicy(isMaster: true, followerDataSource: .nightscout, therapyDataSourceSelection: .none,
+                                    nightscoutEnabled: false, masterUploadsGlucoseToNightscout: false,
+                                    followerUploadsGlucoseToNightscout: false, nightscoutFollowType: .none)
+        var treatments: [ExperimentalTreatment] = []
+        context.performAndWait {
+            treatments = ExperimentalTreatment.fetch(from: start.addingTimeInterval(-60), to: start.addingTimeInterval(60),
+                                                     in: context, policy: policy) ?? []
+        }
+        XCTAssertEqual(treatments.map(\.kind), [.basalInjection])
+        XCTAssertEqual(treatments.first?.insulin(bolusDefault: .aspart, basalDefault: .glargineU100), .degludec)
+    }
+
+    // MARK: Power saving
+
+    func testPowerSavingNeverAppliesWhileChargingAndAutomaticFollowsLowPowerOrBattery() {
+        XCTAssertFalse(ExperimentalPowerSaving.isActive(mode: .off, lowPowerMode: true, batteryLevel: 0.05, charging: false))
+        XCTAssertTrue(ExperimentalPowerSaving.isActive(mode: .on, lowPowerMode: false, batteryLevel: 0.9, charging: false))
+        XCTAssertFalse(ExperimentalPowerSaving.isActive(mode: .on, lowPowerMode: false, batteryLevel: 0.9, charging: true))
+        XCTAssertTrue(ExperimentalPowerSaving.isActive(mode: .automatic, lowPowerMode: true, batteryLevel: 0.9, charging: false))
+        XCTAssertTrue(ExperimentalPowerSaving.isActive(mode: .automatic, lowPowerMode: false, batteryLevel: 0.25, charging: false))
+        XCTAssertFalse(ExperimentalPowerSaving.isActive(mode: .automatic, lowPowerMode: false, batteryLevel: 0.26, charging: false))
+        XCTAssertFalse(ExperimentalPowerSaving.isActive(mode: .automatic, lowPowerMode: false, batteryLevel: nil, charging: false))
+        XCTAssertFalse(ExperimentalPowerSaving.isActive(mode: .automatic, lowPowerMode: true, batteryLevel: 0.05, charging: true))
+    }
+
+    func testPowerSavingOffAlwaysRefreshes() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "ExperimentalPowerSavingTests"))
+        defaults.removePersistentDomain(forName: "ExperimentalPowerSavingTests")
+        XCTAssertTrue(ExperimentalPowerSaving.allowsRefresh("widgets", urgent: false, now: start, defaults: defaults))
+        XCTAssertTrue(ExperimentalPowerSaving.allowsRefresh("widgets", urgent: false, now: start.addingTimeInterval(60), defaults: defaults))
+        defaults.set(70.0, forKey: UserDefaults.Key.lowMarkValue.rawValue)
+        defaults.set(180.0, forKey: UserDefaults.Key.highMarkValue.rawValue)
+        XCTAssertTrue(ExperimentalPowerSaving.isUrgent(mgDl: 65, defaults: defaults))
+        XCTAssertTrue(ExperimentalPowerSaving.isUrgent(mgDl: 190, defaults: defaults))
+        XCTAssertFalse(ExperimentalPowerSaving.isUrgent(mgDl: 120, defaults: defaults))
+        XCTAssertFalse(ExperimentalPowerSaving.isUrgent(mgDl: nil, defaults: defaults))
+    }
+
     // MARK: Chart cursor
 
     func testCursorFindsTheNearestReading() {
@@ -457,7 +503,7 @@ final class ExperimentalFeaturesTests: XCTestCase {
     }
 
     @MainActor
-    func testExperimentalSectionSitsBeforeAboutWithItsFourRows() throws {
+    func testExperimentalSectionSitsBeforeAboutWithItsRows() throws {
         let sections = SettingsListFactory.makeRootSections(coreDataManager: nil, selectedFollowerActions: .none,
                                                             presenter: SettingsActionPresenter(router: SettingsRouter()))
         let experimentalID = SettingsRootSection.experimental.rawValue * 10
@@ -465,7 +511,8 @@ final class ExperimentalFeaturesTests: XCTestCase {
         let aboutIndex = try XCTUnwrap(sections.firstIndex { $0.id == SettingsRootSection.about.rawValue * 10 })
         XCTAssertLessThan(index, aboutIndex)
         XCTAssertEqual(sections[index].section().rows.map(\.id),
-                       ["experimental.chartStyle", "experimental.chartCursor", "experimental.prediction", "experimental.insulins"])
+                       ["experimental.chartStyle", "experimental.chartCursor", "experimental.prediction", "experimental.insulins",
+                        "experimental.powerSaving"])
     }
 }
 

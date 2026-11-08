@@ -25,6 +25,12 @@ extension SettingsViewGroupedSettingsViewModel {
                     title: ExperimentalTexts.text("insulins", "Insulins"),
                     detail: { UserDefaults.standard.experimentalInsulinsEnabled ? Texts_Common.on : Texts_Common.off },
                     settingsScreen: { ExperimentalSettingsViewModel.insulinScreen }
+                ),
+                SettingsGroupedRow(
+                    id: "experimental.powerSaving",
+                    title: ExperimentalTexts.text("powerSaving", "Power saving"),
+                    detail: { ExperimentalSettingsViewModel.title(for: UserDefaults.standard.experimentalPowerSavingMode) },
+                    settingsScreen: { ExperimentalSettingsViewModel.powerSavingScreen }
                 )
             ],
             leadingRows: { [ExperimentalSettingsViewModel.chartStyleRow(), ExperimentalSettingsViewModel.chartCursorRow()] }
@@ -33,7 +39,7 @@ extension SettingsViewGroupedSettingsViewModel {
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins }
+    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
@@ -49,6 +55,29 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         SettingsScreen(title: ExperimentalTexts.text("insulins", "Insulins"),
                        introduction: { ExperimentalTexts.text("insulinsIntroduction", "Experimental. Each insulin has its own action curve, from JugglucoNG's catalogue. A bolus or basal injection uses the insulin named in its notes; the treatment editor offers a choice. Otherwise the defaults below apply.") },
                        providers: { [ExperimentalSettingsViewModel(group: .insulins)] })
+    }
+
+    static var powerSavingScreen: SettingsScreen {
+        SettingsScreen(title: ExperimentalTexts.text("powerSaving", "Power saving"),
+                       introduction: { ExperimentalTexts.text("powerSavingIntroduction", "Experimental. Spends less battery on what can wait. Readings, alarms, the predicted low alert and the watch are never slowed down.") },
+                       providers: { [ExperimentalSettingsViewModel(group: .powerSaving)] })
+    }
+
+    static func title(for mode: ExperimentalPowerSavingMode) -> String {
+        switch mode {
+        case .off: return ExperimentalTexts.text("powerSavingOff", "Off")
+        case .on: return ExperimentalTexts.text("powerSavingOn", "On")
+        case .automatic: return ExperimentalTexts.text("powerSavingAutomatic", "Automatic")
+        }
+    }
+
+    /// Whether power saving applies right now, and why not while charging.
+    static func powerSavingStatusText() -> String {
+        if ExperimentalPowerSaving.isActive() { return ExperimentalTexts.text("powerSavingActive", "Saving") }
+        if UserDefaults.standard.experimentalPowerSavingMode != .off, ExperimentalPowerSaving.battery().charging {
+            return ExperimentalTexts.text("powerSavingCharging", "Charging, not saving")
+        }
+        return ExperimentalTexts.text("powerSavingInactive", "Not saving")
     }
 
     /// Glucose drawn as dots or as a line.
@@ -196,6 +225,21 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                 AnyView(NavigationLink(ExperimentalTexts.text("accuracyShow", "Prediction accuracy")) { ExperimentalPredictionAccuracyView() })
                             }))
             ]
+        case .powerSaving:
+            return [
+                SettingsRow(id: "experimental.powerSaving.mode", title: ExperimentalTexts.text("powerSavingMode", "Mode"), accessory: .none,
+                            control: .menu(options: {
+                                let selected = UserDefaults.standard.experimentalPowerSavingMode
+                                return ExperimentalPowerSavingMode.allCases.map { SettingsMenuOption(title: Self.title(for: $0), isSelected: $0 == selected) }
+                            }, selectOption: { index in
+                                let modes = ExperimentalPowerSavingMode.allCases
+                                guard modes.indices.contains(index) else { return }
+                                UserDefaults.standard.experimentalPowerSavingMode = modes[index]
+                            }),
+                            reloadScope: .all),
+                SettingsRow(id: "experimental.powerSaving.status", title: ExperimentalTexts.text("powerSavingNow", "Now"),
+                            detail: Self.powerSavingStatusText())
+            ]
         case .insulins:
             return [
                 SettingsRow(id: "experimental.insulins.enabled", title: ExperimentalTexts.text("insulinsShow", "Show insulin activity on the chart"),
@@ -309,7 +353,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
 
     func sectionTitle() -> String? {
         switch group {
-        case .predictionMain, .insulins: return nil
+        case .predictionMain, .insulins, .powerSaving: return nil
         case .predictionAdaptive: return ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction")
         case .predictionModel: return ExperimentalTexts.text("predictionModel", "Model")
         case .predictionAlert: return Texts_Alerts.predictedLowAlertTitle
@@ -332,6 +376,8 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("predictionNightscoutFooter", "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.")
         case .predictionAccuracy:
             return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
+        case .powerSaving:
+            return ExperimentalTexts.text("powerSavingFooter", "While it saves: Nightscout, Apple Health and Dexcom Share get one reading every five minutes instead of every reading; the Live Activity and widgets refresh at most every five minutes, at once when glucose leaves the target range; the Home chart redraws its forecast and insulin every five minutes; the adaptive prediction relearns only while charging. Automatic saves while iPhone Low Power Mode is on or the battery is at 25 % or less. Nothing is saved while the phone charges.")
         case .insulins:
             return ExperimentalTexts.text("insulinsFooter", "The chart shows how fast each insulin is working, in units per hour, stacked in its own colour along the bottom. A curve ends where its source stopped measuring; nothing is extrapolated.")
         }

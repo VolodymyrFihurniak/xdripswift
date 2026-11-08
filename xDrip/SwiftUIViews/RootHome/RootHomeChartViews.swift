@@ -49,9 +49,13 @@ struct RootHomeMainChartView: View {
     // not dispatch another fetch and rebuild for each visible-range change.
     private var therapyStart: Date { Date(timeIntervalSince1970: floor(chartState.dataStartDate.timeIntervalSince1970 / 3600) * 3600) }
     private var therapyEnd: Date { Date(timeIntervalSince1970: ceil(chartState.dataEndDate.timeIntervalSince1970 / 3600) * 3600) }
-    private var seriesKey: String { scenePhase != .active ? "inactive" : "\(therapyStart)-\(therapyEnd)-\(showIOBCOB)-\(showsTreatments)-\(allowsTherapyCharts)-\(therapyRevision)-\(floor(Date().timeIntervalSince1970 / 60))" }
+    private var seriesKey: String { scenePhase != .active ? "inactive" : "\(therapyStart)-\(therapyEnd)-\(showIOBCOB)-\(showsTreatments)-\(allowsTherapyCharts)-\(therapyRevision)-\(refreshBucket)" }
+    /// The minute that redraws IOB/COB, forecast and insulin; five minutes while power saving.
+    private var refreshBucket: Double {
+        floor(Date().timeIntervalSince1970 / (ExperimentalPowerSaving.isActive() ? ExperimentalPowerSaving.interval : 60))
+    }
     private var experimentalKey: String {
-        scenePhase != .active ? "inactive" : "\(therapyStart)-\(therapyEnd)-\(showsTreatments)-\(allowsTherapyCharts)-\(experimentalRevision)-\(experimentalSettingsSignature)-\(chartState.endDate.timeIntervalSinceNow > -ConstantsGlucoseChartSwiftUI.experimentalPredictionPresentTolerance)-\(chartState.bgReadingDates.last?.timeIntervalSince1970 ?? 0)-\(floor(Date().timeIntervalSince1970 / 60))"
+        scenePhase != .active ? "inactive" : "\(therapyStart)-\(therapyEnd)-\(showsTreatments)-\(allowsTherapyCharts)-\(experimentalRevision)-\(experimentalSettingsSignature)-\(chartState.endDate.timeIntervalSinceNow > -ConstantsGlucoseChartSwiftUI.experimentalPredictionPresentTolerance)-\(chartState.bgReadingDates.last?.timeIntervalSince1970 ?? 0)-\(refreshBucket)"
     }
 
     private enum Layout {

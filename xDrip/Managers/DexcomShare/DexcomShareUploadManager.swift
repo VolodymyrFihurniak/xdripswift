@@ -85,7 +85,7 @@ struct DexcomShareUploadBatch {
             let readings = bgReadingsAccessor.getLatestBgReadings(
                 limit: nil, fromDate: fromDate, forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false
             ).filter(
-                minimumTimeBetweenTwoReadingsInMinutes: UserDefaults.standard.dexcomShareUploadEveryReading
+                minimumTimeBetweenTwoReadingsInMinutes: UserDefaults.standard.dexcomShareUploadEveryReading && !ExperimentalPowerSaving.isActive()
                     ? ConstantsDexcomShare.minimiumTimeBetweenTwoReadingsInMinutesFrequentUploads
                     : ConstantsDexcomShare.minimiumTimeBetweenTwoReadingsInMinutes,
                 lastConnectionStatusChangeTimeStamp: lastConnectionChange,

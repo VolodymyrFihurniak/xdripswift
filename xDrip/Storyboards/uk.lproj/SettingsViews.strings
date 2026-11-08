@@ -1104,3 +1104,14 @@
 "experimental.accuracyStandard" = "Стандартний прогноз";
 "experimental.accuracyAdaptive" = "Адаптивний прогноз";
 "experimental.accuracyAdaptiveFooter" = "Записується з тих самих показників щоразу, коли адаптивна модель може відповісти, навіть якщо її прогноз не показано.";
+"experimental.powerSaving" = "Режим економії";
+"experimental.powerSavingIntroduction" = "Експериментально. Витрачає менше заряду на те, що може зачекати. Показники, сигнали, сигнал прогнозованої низької глюкози й годинник ніколи не сповільнюються.";
+"experimental.powerSavingOff" = "Вимкнено";
+"experimental.powerSavingOn" = "Увімкнено";
+"experimental.powerSavingAutomatic" = "Автоматично";
+"experimental.powerSavingActive" = "Економія діє";
+"experimental.powerSavingCharging" = "Заряджається, економія не діє";
+"experimental.powerSavingInactive" = "Економія не діє";
+"experimental.powerSavingMode" = "Режим";
+"experimental.powerSavingNow" = "Зараз";
+"experimental.powerSavingFooter" = "Поки діє економія: Nightscout, Apple Health і Dexcom Share отримують один показник на п’ять хвилин замість кожного; Live Activity й віджети оновлюються щонайбільше раз на п’ять хвилин, а одразу — коли глюкоза виходить за цільовий діапазон; графік на головному екрані перемальовує прогноз та інсулін раз на п’ять хвилин; адаптивний прогноз перенавчається лише під час заряджання. «Автоматично» економить, коли ввімкнено режим енергозбереження iPhone або заряд 25 % і менше. Під час заряджання економія не діє.";

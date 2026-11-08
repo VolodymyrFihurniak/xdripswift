@@ -336,3 +336,16 @@
 "maxSensorAgeInDaysOverridenAnubis" = "Максимум днів сенсора";
 "maxSensorAgeInDaysOverridenAnubisMessage" = "Якщо ви користуєтеся трансмітером Anubis, тут можна вказати максимальну кількість днів роботи сенсора (не більше %@)\n\nЦе лише візуальне нагадування: після цього сеанс сенсора не завершиться.\n\nВведіть 0, щоб використати типові %@ дн.";
 "isAnubis" = "Це Anubis?";
+"sibionics.deviceInfoTitle" = "Дані сенсора";
+"sibionics.deviceInfoFooter" = "Повідомляє сам сенсор через Bluetooth. Рівень заряду зчитується під час кожного підключення та кожні шість годин; Sibionics 1 може його не повідомляти.";
+"sibionics.battery" = "Батарея сенсора";
+"sibionics.notReported" = "Ще не повідомлено";
+"sibionics.model" = "Модель";
+"sibionics.firmware" = "Прошивка";
+"sibionics.hardware" = "Апаратна версія";
+"sibionics.software" = "Програмна версія";
+"sibionics.manufacturer" = "Виробник";
+"sibionics.protocol" = "Протокол";
+"sibionics.protocolV120" = "V120 (шифрований)";
+"sibionics.protocolChinese" = "AA55 (китайський)";
+"sibionics.keyGroup" = "Група ключів";

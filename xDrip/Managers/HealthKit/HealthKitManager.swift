@@ -134,7 +134,8 @@ public class HealthKitManager: NSObject {
         let timeStampsCurrentlyInFlight: Set<Date> = timeStampsOfBgReadingsCurrentlyBeingSaved
         
         // user setting to allow more frequent HealthKit writes (e.g. Libre 2 Direct 60-second cadence)
-        let storeFrequentReadingsInHealthKit = UserDefaults.standard.storeFrequentReadingsInHealthKit
+        // Experimental power saving keeps Apple Health to one reading per five minutes.
+        let storeFrequentReadingsInHealthKit = UserDefaults.standard.storeFrequentReadingsInHealthKit && !ExperimentalPowerSaving.isActive()
         
         // get readings to store, limit to 2016 = maximum 1 week - just to avoid a huge array is being returned here, applying minimumTimeBetweenTwoReadingsInMinutes filter
         let bgReadingsToStore = bgReadingsAccessor.getLatestBgReadingSnapshots(limit: 2016, fromDate: UserDefaults.standard.timeStampLatestHealthKitStoreBgReading, forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false).filter(minimumTimeBetweenTwoReadingsInMinutes: storeFrequentReadingsInHealthKit ? 0 : ConstantsHealthKit.minimiumTimeBetweenTwoReadingsInMinutes, lastConnectionStatusChangeTimeStamp: nil, timeStampLastProcessedBgReading: UserDefaults.standard.timeStampLatestHealthKitStoreBgReading)

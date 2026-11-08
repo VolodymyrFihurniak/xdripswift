@@ -629,3 +629,14 @@
 "experimental.accuracyStandard" = "Standard forecast";
 "experimental.accuracyAdaptive" = "Adaptive forecast";
 "experimental.accuracyAdaptiveFooter" = "Recorded from the same readings whenever the adaptive model could answer, whether or not it is drawn.";
+"experimental.powerSaving" = "Power saving";
+"experimental.powerSavingIntroduction" = "Experimental. Spends less battery on what can wait. Readings, alarms, the predicted low alert and the watch are never slowed down.";
+"experimental.powerSavingOff" = "Off";
+"experimental.powerSavingOn" = "On";
+"experimental.powerSavingAutomatic" = "Automatic";
+"experimental.powerSavingActive" = "Saving";
+"experimental.powerSavingCharging" = "Charging, not saving";
+"experimental.powerSavingInactive" = "Not saving";
+"experimental.powerSavingMode" = "Mode";
+"experimental.powerSavingNow" = "Now";
+"experimental.powerSavingFooter" = "While it saves: Nightscout, Apple Health and Dexcom Share get one reading every five minutes instead of every reading; the Live Activity and widgets refresh at most every five minutes, at once when glucose leaves the target range; the Home chart redraws its forecast and insulin every five minutes; the adaptive prediction relearns only while charging. Automatic saves while iPhone Low Power Mode is on or the battery is at 25 % or less. Nothing is saved while the phone charges.";

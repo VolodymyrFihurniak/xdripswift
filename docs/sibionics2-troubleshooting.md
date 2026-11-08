@@ -93,3 +93,12 @@ Instead of typing the probe code, open the Sibionics 2 device and tap **Scan sen
 - a `P…` serial yields the short code of its structured identity (`"1"` + first 15 characters, last 11, first 8), used when no probe code is set.
 
 Sensitivity order for Sibionics 2: probe code, label short code, Bluetooth name, then the `0316015A` fallback (1.44). A Sibionics 1 label is refused, and a label without a decodable code leaves the current setting unchanged.
+
+## Sensor information
+
+The device screen lists what the sensor reports over Bluetooth: the battery level (Battery service,
+read at each connection and every six hours) with when it was read, and the Device Information
+model number, firmware, hardware and software revisions and manufacturer when the sensor publishes
+them. It also shows the wire protocol (V120 or the Chinese AA55) and the registration key group that
+produced readings. Sibionics 1 may report none of these.
+

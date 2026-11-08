@@ -460,7 +460,7 @@ public class NightscoutSyncManager: NSObject, ObservableObject {
 
             if uploadSucceeded, let newestTimeStamp = newestTimeStamp {
                 let currentTimeStampLatestNightscoutUploadedBgReading = UserDefaults.standard.timeStampLatestNightscoutUploadedBgReading ?? .distantPast
-                let minimiumTimeBetweenTwoReadingsInMinutes = UserDefaults.standard.storeFrequentReadingsInNightscout ? ConstantsNightscout.minimiumTimeBetweenTwoReadingsInMinutesFrequentUploads : ConstantsNightscout.minimiumTimeBetweenTwoReadingsInMinutes
+                let minimiumTimeBetweenTwoReadingsInMinutes = (UserDefaults.standard.storeFrequentReadingsInNightscout && !ExperimentalPowerSaving.isActive()) ? ConstantsNightscout.minimiumTimeBetweenTwoReadingsInMinutesFrequentUploads : ConstantsNightscout.minimiumTimeBetweenTwoReadingsInMinutes
                 let replacementHandoffTimeStamp = newestTimeStamp.addingTimeInterval(-minimiumTimeBetweenTwoReadingsInMinutes * 60.0)
 
                 // A historical overwrite can finish only a few seconds before the next live reading.
@@ -1526,7 +1526,7 @@ public class NightscoutSyncManager: NSObject, ObservableObject {
             }
         }
         
-        let minimiumTimeBetweenTwoReadingsInMinutes = UserDefaults.standard.storeFrequentReadingsInNightscout ? ConstantsNightscout.minimiumTimeBetweenTwoReadingsInMinutesFrequentUploads : ConstantsNightscout.minimiumTimeBetweenTwoReadingsInMinutes
+        let minimiumTimeBetweenTwoReadingsInMinutes = (UserDefaults.standard.storeFrequentReadingsInNightscout && !ExperimentalPowerSaving.isActive()) ? ConstantsNightscout.minimiumTimeBetweenTwoReadingsInMinutesFrequentUploads : ConstantsNightscout.minimiumTimeBetweenTwoReadingsInMinutes
         
         // get latest readings, filter : minimiumTimeBetweenTwoReadingsInMinutes beteen two readings, except for the first if a dis/reconnect occured since the latest reading
         // Historical records imported from this same Nightscout site are local read-only copies.

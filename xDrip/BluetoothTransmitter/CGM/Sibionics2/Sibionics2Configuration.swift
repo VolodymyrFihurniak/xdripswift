@@ -126,6 +126,68 @@ enum Sibionics2Battery {
     }
 }
 
+/// What a Sibionics sensor reports about itself over the standard Bluetooth services, kept per
+/// peripheral for its device screen: the Battery Level (read at each connection and every six
+/// hours, as JugglucoNG does) and the Device Information strings.
+enum Sibionics2DeviceStatus {
+    /// Device Information (180A) strings shown on the device screen.
+    enum Field: String, CaseIterable {
+        case modelNumber = "2A24"
+        case firmwareRevision = "2A26"
+        case hardwareRevision = "2A27"
+        case softwareRevision = "2A28"
+        case manufacturerName = "2A29"
+
+        var uuid: CBUUID { CBUUID(string: rawValue) }
+
+        static func field(for uuid: CBUUID) -> Field? { allCases.first { $0.uuid == uuid } }
+    }
+
+    private static let prefix = "sibionics2.deviceStatus."
+
+    private static func key(_ name: String, _ identifier: String) -> String { prefix + name + "." + identifier.uppercased() }
+
+    static func setBattery(_ percentage: Int, at date: Date, for identifier: String, userDefaults: UserDefaults = .standard) {
+        guard (0...100).contains(percentage) else { return }
+        userDefaults.set(percentage, forKey: key("battery", identifier))
+        userDefaults.set(date, forKey: key("batteryReadAt", identifier))
+    }
+
+    static func battery(for identifier: String, userDefaults: UserDefaults = .standard) -> (percentage: Int, readAt: Date)? {
+        guard let percentage = userDefaults.object(forKey: key("battery", identifier)) as? Int,
+              let readAt = userDefaults.object(forKey: key("batteryReadAt", identifier)) as? Date else { return nil }
+        return (percentage, readAt)
+    }
+
+    static func setText(_ text: String?, for field: Field, identifier: String, userDefaults: UserDefaults = .standard) {
+        if let text, !text.isEmpty {
+            userDefaults.set(text, forKey: key(field.rawValue, identifier))
+        } else {
+            userDefaults.removeObject(forKey: key(field.rawValue, identifier))
+        }
+    }
+
+    static func text(_ field: Field, for identifier: String, userDefaults: UserDefaults = .standard) -> String? {
+        userDefaults.string(forKey: key(field.rawValue, identifier))
+    }
+
+    static func clear(for identifier: String, userDefaults: UserDefaults = .standard) {
+        for name in ["battery", "batteryReadAt"] + Field.allCases.map(\.rawValue) {
+            userDefaults.removeObject(forKey: key(name, identifier))
+        }
+    }
+
+    /// A Device Information value as text: printable UTF-8 without padding, else hex.
+    static func text(from value: Data) -> String? {
+        let trimmed = value.prefix { $0 != 0 }
+        if let text = String(data: trimmed, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty, text.unicodeScalars.allSatisfy({ $0.value >= 0x20 && $0.value < 0x7F }) {
+            return text
+        }
+        return value.isEmpty ? nil : value.map { String(format: "%02X", $0) }.joined()
+    }
+}
+
 /// Confirmed wire protocol for a Sibionics 1 peripheral, keyed by iOS BLE UUID.
 enum Sibionics1ProtocolMode: Int {
     case chinese = 1

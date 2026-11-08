@@ -3029,7 +3029,10 @@ import AppIntents
                        let startDate = activeSensor?.startDate {
                         contentState.sensorWarmupConfirmationUntil = transmitter.sensorWarmupConfirmationUntil(for: startDate)
                     }
-                    LiveActivityManager.shared.update(contentState: contentState, forceRestart: forceRestart)
+                    // Experimental power saving: at most every five minutes, at once out of range.
+                    if forceRestart || ExperimentalPowerSaving.allowsRefresh("liveActivity", urgent: ExperimentalPowerSaving.isUrgent(mgDl: latestBgReadings.first?.finalValue)) {
+                        LiveActivityManager.shared.update(contentState: contentState, forceRestart: forceRestart)
+                    }
                 } else {
                     Task { await LiveActivityManager.shared.endAllActivities() }
                 }
@@ -3051,6 +3054,8 @@ import AppIntents
                 // Compare the complete widget model, including history, settings and status.
                 if !bgReadingValues.isEmpty,
                    widgetPublication.shouldPublish(widgetSharedUserDefaultsModel, at: publicationDate, force: forceRestart),
+                   // Experimental power saving: at most every five minutes, at once out of range.
+                   forceRestart || ExperimentalPowerSaving.allowsRefresh("widgets", urgent: ExperimentalPowerSaving.isUrgent(mgDl: latestBgReadings.first?.finalValue)),
                    let widgetData = try? JSONEncoder().encode(widgetSharedUserDefaultsModel) {
                     UserDefaults.storeInSharedUserDefaults(
                         value: widgetData,
