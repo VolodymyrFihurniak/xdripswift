@@ -1007,7 +1007,7 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                 (row.id != "sibionics2-label-scan" || !isSibionics1)
             }
         )
-        return [connectionSection, settingsSection]
+        return [connectionSection, sibionicsDeviceInfoSection(address: address, isSibionics1: isSibionics1), settingsSection]
     }
 
     private func makeGenericHeartbeatSettingsSections() -> [BluetoothPeripheralDetailSection] {
@@ -1033,6 +1033,55 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         // separately when the next connection begins; saving here never triggers a reconnect.
         trace("Generic heartbeat settings changed: %{public}@ -> %{public}@", log: log, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info, troubleshooting: .standard(.configuration(.heartbeatSubscriptionsChanged(previous: previous.mode.logDescription, updated: settings.mode.logDescription))), previous.mode.logDescription, settings.mode.logDescription)
         refresh()
+    }
+
+    /// What the sensor reported about itself: battery, Device Information, and the wire protocol
+    /// and registration key group that produced readings.
+    private func sibionicsDeviceInfoSection(address: String, isSibionics1: Bool) -> BluetoothPeripheralDetailSection {
+        var rows = [BluetoothPeripheralDetailRow]()
+        let battery = Sibionics2DeviceStatus.battery(for: address)
+        rows.append(row(
+            id: "sibionics-battery",
+            title: Texts_BluetoothPeripheralView.sibionicsBattery,
+            detail: battery.map { "\($0.percentage) % · \(RelativeDateTimeFormatter().localizedString(for: $0.readAt, relativeTo: Date()))" }
+                ?? Texts_BluetoothPeripheralView.sibionicsNotReported,
+            detailIndicator: battery.map { SettingsIndicator(color: $0.percentage <= 10 ? Color.red : $0.percentage <= 25 ? Color.orange : Color.green) }
+        ))
+        let fields: [(Sibionics2DeviceStatus.Field, String)] = [
+            (.modelNumber, Texts_BluetoothPeripheralView.sibionicsModel),
+            (.firmwareRevision, Texts_BluetoothPeripheralView.sibionicsFirmware),
+            (.hardwareRevision, Texts_BluetoothPeripheralView.sibionicsHardware),
+            (.softwareRevision, Texts_BluetoothPeripheralView.sibionicsSoftware),
+            (.manufacturerName, Texts_BluetoothPeripheralView.sibionicsManufacturer)
+        ]
+        for (field, title) in fields {
+            if let text = Sibionics2DeviceStatus.text(field, for: address) {
+                rows.append(row(id: "sibionics-info-\(field.rawValue)", title: title, detail: text))
+            }
+        }
+        let protocolText: String? = isSibionics1
+            ? Sibionics2Configuration.protocolMode(for: address).map {
+                $0 == .chinese ? Texts_BluetoothPeripheralView.sibionicsProtocolChinese : Texts_BluetoothPeripheralView.sibionicsProtocolV120
+            }
+            : Texts_BluetoothPeripheralView.sibionicsProtocolV120
+        if let protocolText {
+            rows.append(row(id: "sibionics-protocol", title: Texts_BluetoothPeripheralView.sibionicsProtocol, detail: protocolText))
+        }
+        if let keyGroup = Sibionics2Configuration.confirmedKeyGroup(for: address) {
+            let name: String
+            switch keyGroup {
+            case .eco: name = "Eco"
+            case .sijoy: name = "Sijoy (EU)"
+            case .hematonix: name = "Hematonix"
+            }
+            rows.append(row(id: "sibionics-key-group", title: Texts_BluetoothPeripheralView.sibionicsKeyGroup, detail: name))
+        }
+        return BluetoothPeripheralDetailSection(
+            id: "sibionics-device-info",
+            title: Texts_BluetoothPeripheralView.sibionicsDeviceInfoTitle,
+            footer: Texts_BluetoothPeripheralView.sibionicsDeviceInfoFooter,
+            rows: rows
+        )
     }
 
     private func row(

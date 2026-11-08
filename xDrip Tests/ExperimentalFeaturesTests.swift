@@ -266,6 +266,26 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertTrue(plots.onBoard(at: start.addingTimeInterval(3600)).isEmpty)
     }
 
+    func testUploadedBasalInjectionStillCountsButAnImportedNoteDoesNot() throws {
+        let coreDataManager = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
+        let context = coreDataManager.mainManagedObjectContext
+        // Uploaded to Nightscout: an id and the Note event type, as the treatment editor stores it.
+        _ = TreatmentEntry(id: "uploaded", date: start, value: 20, treatmentType: .BasalInjection,
+                           nightscoutEventType: ConstantsNightscout.noteEventType, enteredBy: "Test", notes: "Tresiba", nsManagedObjectContext: context)
+        _ = TreatmentEntry(id: "imported", date: start, value: 4, treatmentType: .Insulin,
+                           nightscoutEventType: "Correction Bolus", enteredBy: "Nightscout", nsManagedObjectContext: context)
+        let policy = DataFlowPolicy(isMaster: true, followerDataSource: .nightscout, therapyDataSourceSelection: .none,
+                                    nightscoutEnabled: false, masterUploadsGlucoseToNightscout: false,
+                                    followerUploadsGlucoseToNightscout: false, nightscoutFollowType: .none)
+        var treatments: [ExperimentalTreatment] = []
+        context.performAndWait {
+            treatments = ExperimentalTreatment.fetch(from: start.addingTimeInterval(-60), to: start.addingTimeInterval(60),
+                                                     in: context, policy: policy) ?? []
+        }
+        XCTAssertEqual(treatments.map(\.kind), [.basalInjection])
+        XCTAssertEqual(treatments.first?.insulin(bolusDefault: .aspart, basalDefault: .glargineU100), .degludec)
+    }
+
     // MARK: Chart cursor
 
     func testCursorFindsTheNearestReading() {

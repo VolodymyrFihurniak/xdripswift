@@ -760,10 +760,13 @@ struct GlucoseChartView: View {
             ? chartState?.minimumChartValueInMgDl ?? ConstantsGlucoseChartSwiftUI.yAxisAbsoluteMinimumChartValueInMgDl
             : ConstantsGlucoseChartSwiftUI.yAxisAbsoluteMinimumChartValueInMgDl
         // Gate curves at rendering too, so cached series cannot bypass treatment visibility.
-        let visibleTherapy = showsTreatments && usesMainChartYAxisContext ? therapySeries.clipped(from: visibleStartDate, to: visibleEndDate) : TherapyChartSeries()
         let experimentalXScaleEndDate = renderedXScaleEndDate()
         let visibleInsulinLayers = showsTreatments && usesMainChartYAxisContext
             ? experimentalPlotData.insulinLayers(from: visibleStartDate, to: experimentalXScaleEndDate) : []
+        // The experimental insulin layers already show the insulin along the bottom: xDrip's own IOB
+        // curve, in the same blue, would be drawn on top of them, so only COB stays beside them.
+        let clippedTherapy = showsTreatments && usesMainChartYAxisContext ? therapySeries.clipped(from: visibleStartDate, to: visibleEndDate) : TherapyChartSeries()
+        let visibleTherapy = visibleInsulinLayers.isEmpty ? clippedTherapy : TherapyChartSeries(iob: [], cob: clippedTherapy.cob)
         let hasTherapy = !visibleTherapy.iob.isEmpty || !visibleTherapy.cob.isEmpty || !visibleInsulinLayers.isEmpty
         let therapyBaseline = ConstantsGlucoseChartSwiftUI.minimumChartValueWithBottomSpace(hours: hoursToShow)
         let therapyScale = TherapyChartScale(series: visibleTherapy, baseline: therapyBaseline)

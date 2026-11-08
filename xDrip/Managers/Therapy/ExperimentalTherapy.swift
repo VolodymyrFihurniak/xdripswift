@@ -723,7 +723,13 @@ extension ExperimentalTreatment {
             start as NSDate, end as NSDate,
             [TreatmentType.Insulin.rawValue, TreatmentType.BasalInjection.rawValue, TreatmentType.Carbs.rawValue, TreatmentType.Exercise.rawValue])
         request.sortDescriptors = [NSSortDescriptor(key: "date", ascending: true)]
-        return (try? context.fetch(request))?.filter { TherapyMetricsManager.includesTherapyTreatment($0, policy: policy) }.compactMap { entry -> ExperimentalTreatment? in
+        // A basal injection is stored with Nightscout's Note event type, so once uploaded the source
+        // filter took it for an imported note and dropped it: Tresiba then had no activity layer and
+        // no basal on board. Basal injections are only ever logged in xDrip or synced back as the
+        // same record, so they always count (CareLink never sends them).
+        return (try? context.fetch(request))?.filter {
+            $0.treatmentType == .BasalInjection || TherapyMetricsManager.includesTherapyTreatment($0, policy: policy)
+        }.compactMap { entry -> ExperimentalTreatment? in
             let kind: ExperimentalTreatment.Kind
             switch entry.treatmentType {
             case .Insulin: kind = .bolus

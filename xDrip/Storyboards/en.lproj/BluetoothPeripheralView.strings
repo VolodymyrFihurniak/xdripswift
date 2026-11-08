@@ -235,3 +235,16 @@
 "sibionics.manualSensitivityTitle" = "Manual sensitivity";
 "sibionics.manualSensitivityOff" = "Off";
 "sibionics.manualSensitivityMessage" = "A value from 0.8 to 2.5 overrides the probe code, label and sensor name, and history is recalculated with it. Leave empty to use the codes again.";
+"sibionics.deviceInfoTitle" = "Sensor information";
+"sibionics.deviceInfoFooter" = "Reported by the sensor over Bluetooth. The battery level is read at each connection and every six hours; Sibionics 1 may not report it.";
+"sibionics.battery" = "Sensor battery";
+"sibionics.notReported" = "Not reported yet";
+"sibionics.model" = "Model";
+"sibionics.firmware" = "Firmware";
+"sibionics.hardware" = "Hardware";
+"sibionics.software" = "Software";
+"sibionics.manufacturer" = "Manufacturer";
+"sibionics.protocol" = "Protocol";
+"sibionics.protocolV120" = "V120 (encrypted)";
+"sibionics.protocolChinese" = "AA55 (Chinese)";
+"sibionics.keyGroup" = "Key group";

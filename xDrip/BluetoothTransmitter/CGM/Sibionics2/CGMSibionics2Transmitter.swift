@@ -193,6 +193,11 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 pendingDeviceInformationReads += 1
                 peripheral.readValue(for: characteristic)
             }
+            // Model, firmware, hardware, software and manufacturer, for the device screen only:
+            // they are not counted as pending, so authentication never waits for them.
+            for characteristic in service.characteristics ?? [] where Sibionics2DeviceStatus.Field.field(for: characteristic.uuid) != nil {
+                peripheral.readValue(for: characteristic)
+            }
             if pendingDeviceInformationReads == 0, sessionStartDeferred {
                 sessionStartDeferred = false
                 startSession()
@@ -281,7 +286,16 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     ) {
         super.peripheral(peripheral, didUpdateValueFor: characteristic, error: error)
         if characteristic.uuid == Sibionics2Battery.levelCharacteristicUUID {
-            receiveBatteryLevel(characteristic.value, error: error)
+            receiveBatteryLevel(characteristic.value, error: error, identifier: peripheral.identifier.uuidString)
+            return
+        }
+        if let field = Sibionics2DeviceStatus.Field.field(for: characteristic.uuid) {
+            if error == nil, let value = characteristic.value {
+                let text = Sibionics2DeviceStatus.text(from: value)
+                Sibionics2DeviceStatus.setText(text, for: field, identifier: peripheral.identifier.uuidString)
+                trace("Sibionics device information %{public}@=%{public}@", log: transmitterLog,
+                      category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info, field.rawValue, text ?? "empty")
+            }
             return
         }
         if characteristic.uuid == Sibionics2AuthenticationAddress.systemIDCharacteristicUUID ||
@@ -300,8 +314,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         receiveNotification(value, at: Date())
     }
 
-    private func receiveBatteryLevel(_ value: Data?, error: Error?) {
+    private func receiveBatteryLevel(_ value: Data?, error: Error?, identifier: String) {
         guard error == nil, let percentage = value.flatMap(Sibionics2Battery.percentage(from:)) else { return }
+        Sibionics2DeviceStatus.setBattery(percentage, at: Date(), for: identifier)
         trace("Sibionics 2 battery level=%{public}@%%", log: transmitterLog,
               category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info, percentage.description)
         DispatchQueue.main.async { [weak self] in
