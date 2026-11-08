@@ -26,6 +26,80 @@ enum ExperimentalGlucoseChartStyle: Int, CaseIterable {
     case line = 1
 }
 
+/// When power saving applies: never, always (except while charging), or automatically while iOS Low
+/// Power Mode is on or the battery is low.
+enum ExperimentalPowerSavingMode: Int, CaseIterable {
+    case off = 0
+    case on = 1
+    case automatic = 2
+}
+
+/// Power saving: spends less battery on what can wait, never on readings or alarms. While it
+/// applies, uploads take one reading per five minutes, the Live Activity and widgets refresh at
+/// most every five minutes (at once when glucose leaves the target range), the Home chart redraws
+/// its forecast and insulin every five minutes, and the adaptive prediction relearns only while
+/// charging. Nothing is saved while the phone charges.
+enum ExperimentalPowerSaving {
+    static let interval: TimeInterval = 5 * 60
+    /// Automatic mode saves at or below this battery level.
+    static let automaticBatteryLevel: Float = 0.25
+
+    private static let lock = NSLock()
+    private static var cachedBattery: (level: Float, charging: Bool)?
+
+    /// The battery level (0...1, nil when unknown) and whether it charges. UIDevice is read on the
+    /// main thread; other threads get the last value read there.
+    static func battery() -> (level: Float?, charging: Bool) {
+        if Thread.isMainThread {
+            let device = UIDevice.current
+            if !device.isBatteryMonitoringEnabled { device.isBatteryMonitoringEnabled = true }
+            let snapshot = (level: device.batteryLevel, charging: device.batteryState == .charging || device.batteryState == .full)
+            lock.lock()
+            cachedBattery = snapshot
+            lock.unlock()
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        guard let cached = cachedBattery else { return (nil, false) }
+        return (cached.level >= 0 ? cached.level : nil, cached.charging)
+    }
+
+    static func isActive(defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.experimentalPowerSavingMode != .off else { return false }
+        let battery = battery()
+        return isActive(mode: defaults.experimentalPowerSavingMode, lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
+                        batteryLevel: battery.level, charging: battery.charging)
+    }
+
+    static func isActive(mode: ExperimentalPowerSavingMode, lowPowerMode: Bool, batteryLevel: Float?, charging: Bool) -> Bool {
+        guard !charging else { return false }
+        switch mode {
+        case .off: return false
+        case .on: return true
+        case .automatic: return lowPowerMode || (batteryLevel.map { $0 <= automaticBatteryLevel } ?? false)
+        }
+    }
+
+    /// Whether `surface` may refresh now: always outside power saving; while saving, at once when
+    /// `urgent`, else once per `interval`. A refresh that is allowed is remembered.
+    static func allowsRefresh(_ surface: String, urgent: Bool, now: Date = Date(), defaults: UserDefaults = .standard) -> Bool {
+        let key = "experimentalPowerSavingLastRefresh." + surface
+        guard isActive(defaults: defaults) else {
+            defaults.removeObject(forKey: key)
+            return true
+        }
+        if !urgent, let last = defaults.object(forKey: key) as? Date, now.timeIntervalSince(last) < interval - 10 { return false }
+        defaults.set(now, forKey: key)
+        return true
+    }
+
+    /// Glucose outside the target range always refreshes at once.
+    static func isUrgent(mgDl: Double?, defaults: UserDefaults = .standard) -> Bool {
+        guard let mgDl, mgDl > 0 else { return false }
+        return mgDl <= defaults.lowMarkValue || mgDl >= defaults.highMarkValue
+    }
+}
+
 /// Prediction horizons offered in Settings. JugglucoNG clamps the horizon to 30...360 minutes.
 enum ExperimentalPredictionHorizon {
     static let choices = [60, 90, 120, 180, 240]
@@ -40,6 +114,7 @@ extension UserDefaults {
         static let predictionHorizon = "experimentalPredictionHorizonMinutes"
         static let predictionMomentum = "experimentalPredictionTrendMomentum"
         static let predictionAdaptive = "experimentalPredictionAdaptive"
+        static let powerSavingMode = "experimentalPowerSavingMode"
         static let predictionCarbRatio = "experimentalPredictionCarbRatio"
         static let predictionSensitivity = "experimentalPredictionInsulinSensitivityMgDl"
         static let predictionAbsorption = "experimentalPredictionCarbAbsorption"
@@ -78,6 +153,12 @@ extension UserDefaults {
     var experimentalPredictionTrendMomentum: Bool {
         get { object(forKey: ExperimentalKey.predictionMomentum) == nil || bool(forKey: ExperimentalKey.predictionMomentum) }
         set { set(newValue, forKey: ExperimentalKey.predictionMomentum) }
+    }
+
+    /// Power saving (Settings > Experimental > Power saving). Off by default.
+    var experimentalPowerSavingMode: ExperimentalPowerSavingMode {
+        get { ExperimentalPowerSavingMode(rawValue: integer(forKey: ExperimentalKey.powerSavingMode)) ?? .off }
+        set { set(newValue.rawValue, forKey: ExperimentalKey.powerSavingMode) }
     }
 
     /// JugglucoNG's adaptive forecast is drawn instead of the standard one. Off by default, as there.

@@ -103,6 +103,10 @@ Adaptive prediction (`xDrip/Managers/Therapy/AdaptiveGlucoseForecast.swift`): Ju
 `AdaptiveGlucoseForecast` + `AdaptivePredictionStore`; model JSON in UserDefaults
 (`experimentalAdaptiveForecastModel`), daily refit on a private-queue context over 29 days of
 `BgReading` dictionaries; alerts and Nightscout stay on the standard forecast.
+Power saving (`ExperimentalPowerSaving`, mode Off/On/Automatic, never while charging) throttles the
+"every reading" uploads, Live Activity/widget refresh (`allowsRefresh`, urgent out of range), the
+Home chart minute redraw and the adaptive refit — never readings or alarms. Basal injections
+(Nightscout event type Note) always count in `ExperimentalTreatment.fetch`.
 
 ## Localisation
 

@@ -149,3 +149,27 @@ measured per kilogram use the study's reference dose.
   after bolus.
 - The IOB/COB numbers and curves of the Treatments settings are unchanged.
 
+## Power saving
+
+Settings → Experimental features → **Power saving**: Off (default), On, or Automatic (while iPhone
+Low Power Mode is on or the battery is at 25 % or less). Nothing is saved while the phone charges.
+While it saves:
+
+- Nightscout, Apple Health and Dexcom Share take one reading per five minutes instead of every
+  reading (the "every reading" toggles are kept and apply again afterwards);
+- the Live Activity and the widgets refresh at most every five minutes, at once when the newest
+  reading is at or outside the low/high marks;
+- the Home chart redraws xDrip's IOB/COB, the forecast and the insulin layers every five minutes
+  instead of every minute (a new reading still redraws the forecast);
+- the adaptive prediction does not relearn until the phone charges.
+
+Readings, alarms (the predicted low alert included), the watch and the Nightscout forecast upload
+are never slowed down.
+
+## Basal insulin and the chart
+
+A basal injection is stored with Nightscout's Note event type. Before this fork's fix it was taken
+for an imported note once uploaded, so Tresiba and the other basal insulins had no activity layer
+and no insulin on board. Basal injections now always count. With the insulin layers on, xDrip's
+own IOB curve is not drawn (it covered them in the same colour); COB stays.
+

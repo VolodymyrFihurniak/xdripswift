@@ -469,7 +469,8 @@ enum AdaptiveForecastStore {
         } else {
             due = true
         }
-        guard due else { return }
+        // Power saving postpones the four-week fit until the phone charges.
+        guard due, !ExperimentalPowerSaving.isActive(defaults: defaults) else { return }
         lock.lock()
         guard !isFitting else { lock.unlock(); return }
         isFitting = true
