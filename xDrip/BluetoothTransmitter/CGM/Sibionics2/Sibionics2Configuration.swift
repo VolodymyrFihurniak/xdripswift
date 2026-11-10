@@ -172,8 +172,44 @@ enum Sibionics2DeviceStatus {
     }
 
     static func clear(for identifier: String, userDefaults: UserDefaults = .standard) {
-        for name in ["battery", "batteryReadAt"] + Field.allCases.map(\.rawValue) {
+        for name in ["battery", "batteryReadAt", "pendingRead"] + Field.allCases.map(\.rawValue)
+            + Field.allCases.map({ "skip." + $0.rawValue }) {
             userDefaults.removeObject(forKey: key(name, identifier))
+        }
+    }
+
+    // The information strings are only for display, so reading them must never cost a session.
+    // A sensor that does not answer a GATT read stalls every later request on the link until
+    // iOS drops the connection after 30 seconds. So each string is read once per sensor, one
+    // at a time, after glucose is streaming; a read that was still unanswered when the session
+    // ended is not tried again.
+
+    /// The next string to read: not stored yet and not given up on. A read left unanswered by an
+    /// earlier session is given up on here.
+    static func nextFieldToRead(for identifier: String, available: [Field], userDefaults: UserDefaults = .standard) -> Field? {
+        if let raw = userDefaults.string(forKey: key("pendingRead", identifier)), let unanswered = Field(rawValue: raw) {
+            userDefaults.set(true, forKey: key("skip." + unanswered.rawValue, identifier))
+            userDefaults.removeObject(forKey: key("pendingRead", identifier))
+        }
+        return Field.allCases.first {
+            available.contains($0) && text($0, for: identifier, userDefaults: userDefaults) == nil
+                && !userDefaults.bool(forKey: key("skip." + $0.rawValue, identifier))
+        }
+    }
+
+    static func beginRead(_ field: Field, for identifier: String, userDefaults: UserDefaults = .standard) {
+        userDefaults.set(field.rawValue, forKey: key("pendingRead", identifier))
+    }
+
+    /// The sensor answered (with a value, nothing or an error): the read no longer blocks the link.
+    static func finishRead(_ field: Field, value: String?, for identifier: String, userDefaults: UserDefaults = .standard) {
+        if userDefaults.string(forKey: key("pendingRead", identifier)) == field.rawValue {
+            userDefaults.removeObject(forKey: key("pendingRead", identifier))
+        }
+        if let value, !value.isEmpty {
+            setText(value, for: field, identifier: identifier, userDefaults: userDefaults)
+        } else {
+            userDefaults.set(true, forKey: key("skip." + field.rawValue, identifier))
         }
     }
 
@@ -202,6 +238,9 @@ enum Sibionics2ConnectionPolicy {
     static let automaticResetRecheckInterval: TimeInterval = 15 * Sibionics2Time.secondsPerMinute
     static let chinesePollInterval: TimeInterval = Sibionics2Time.secondsPerMinute
     static let chineseDataRetryInterval: TimeInterval = 30
+    /// Requests without a first data page before the connection is restarted (three minutes,
+    /// the same patience as `readingsStallTimeout`).
+    static let maximumChineseDataRetries = 6
     /// JugglucoNG reconnects when streaming has produced no reading for three minutes.
     static let readingsStallTimeout: TimeInterval = 3 * Sibionics2Time.secondsPerMinute
 

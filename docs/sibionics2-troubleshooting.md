@@ -102,3 +102,11 @@ model number, firmware, hardware and software revisions and manufacturer when th
 them. It also shows the wire protocol (V120 or the Chinese AA55) and the registration key group that
 produced readings. Sibionics 1 may report none of these.
 
+The battery level is read at connection. The Device Information strings are display-only, so they
+are read one at a time after glucose is streaming, once per sensor; a string the sensor did not
+answer before the session ended is not asked for again. (Read at connection, ahead of
+authentication, an unanswered read blocks the link until iOS drops it after 30 seconds.)
+
+A Chinese Sibionics 1 that is connected but returns neither an echo nor a data page for six
+requests (three minutes) is reconnected.
+

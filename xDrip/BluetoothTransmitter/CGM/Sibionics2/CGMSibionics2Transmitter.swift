@@ -47,6 +47,10 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var readingPollGeneration = 0
     private var streamingWatchdogGeneration = 0
     private var batteryLevelCharacteristic: CBCharacteristic?
+    /// Device Information strings for the device screen, read one at a time once glucose streams.
+    private var informationCharacteristics = [CBCharacteristic]()
+    /// Unanswered Chinese requests in this connection; see `scheduleChineseDataRetry`.
+    private var chineseDataRetryCount = 0
     private var lastBatteryReadAt: Date?
     private var autoResetCheckGeneration = 0
     private var resetDisconnectGeneration = 0
@@ -193,10 +197,11 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 pendingDeviceInformationReads += 1
                 peripheral.readValue(for: characteristic)
             }
-            // Model, firmware, hardware, software and manufacturer, for the device screen only:
-            // they are not counted as pending, so authentication never waits for them.
-            for characteristic in service.characteristics ?? [] where Sibionics2DeviceStatus.Field.field(for: characteristic.uuid) != nil {
-                peripheral.readValue(for: characteristic)
+            // Model, firmware, hardware, software and manufacturer are for the device screen only.
+            // They are not read here: queued ahead of authentication, a read the sensor does
+            // not answer blocks the link until iOS drops it. See `readNextInformationString`.
+            informationCharacteristics = (service.characteristics ?? []).filter {
+                Sibionics2DeviceStatus.Field.field(for: $0.uuid) != nil
             }
             if pendingDeviceInformationReads == 0, sessionStartDeferred {
                 sessionStartDeferred = false
@@ -229,6 +234,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         deviceInformationGeneration += 1
         streamingWatchdogGeneration += 1
         batteryLevelCharacteristic = nil
+        informationCharacteristics = []
+        chineseDataRetryCount = 0
         resetSentThisConnection = false
         handshake = nil
         streamingReady = false
@@ -290,12 +297,11 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             return
         }
         if let field = Sibionics2DeviceStatus.Field.field(for: characteristic.uuid) {
-            if error == nil, let value = characteristic.value {
-                let text = Sibionics2DeviceStatus.text(from: value)
-                Sibionics2DeviceStatus.setText(text, for: field, identifier: peripheral.identifier.uuidString)
-                trace("Sibionics device information %{public}@=%{public}@", log: transmitterLog,
-                      category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info, field.rawValue, text ?? "empty")
-            }
+            let text = error == nil ? characteristic.value.flatMap(Sibionics2DeviceStatus.text(from:)) : nil
+            Sibionics2DeviceStatus.finishRead(field, value: text, for: peripheral.identifier.uuidString)
+            trace("Sibionics device information %{public}@=%{public}@", log: transmitterLog,
+                  category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info, field.rawValue, text ?? "not available")
+            readNextInformationString(from: peripheral)
             return
         }
         if characteristic.uuid == Sibionics2AuthenticationAddress.systemIDCharacteristicUUID ||
@@ -327,6 +333,20 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 sensorAge: nil
             )
         }
+    }
+
+    /// Reads the next Device Information string this sensor has not given yet, one at a time.
+    private func readNextInformationString(from peripheral: CBPeripheral) {
+        let identifier = peripheral.identifier.uuidString
+        let available = informationCharacteristics.compactMap { Sibionics2DeviceStatus.Field.field(for: $0.uuid) }
+        guard let field = Sibionics2DeviceStatus.nextFieldToRead(for: identifier, available: available),
+              let characteristic = informationCharacteristics.first(where: { $0.uuid == field.uuid }) else {
+            informationCharacteristics = []
+            return
+        }
+        informationCharacteristics.removeAll { $0.uuid == field.uuid }
+        Sibionics2DeviceStatus.beginRead(field, for: identifier)
+        peripheral.readValue(for: characteristic)
     }
 
     /// JugglucoNG refreshes the standard battery level every six hours while streaming.
@@ -418,6 +438,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             case .requestEcho:
                 // JugglucoNG treats the AA55 echo as proof of the Chinese protocol and
                 // keeps re-requesting data; falling back to V120 here broke these sensors.
+                // An echo shows the link is alive, so it is not a silent session.
+                chineseDataRetryCount = 0
                 guard sibionics1Connection?.confirmed == false, let address = deviceAddress else { return }
                 sibionics1Connection?.receiveEcho()
                 sibionics1Connection?.confirm(.chinese)
@@ -806,6 +828,16 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         runOnCentralQueue(after: Sibionics2ConnectionPolicy.chineseDataRetryInterval) { [weak self] in
             guard let self, self.probeGeneration == generation,
                   self.notificationEnabled, !self.streamingReady, self.usesChineseProtocol else { return }
+            self.chineseDataRetryCount += 1
+            if self.chineseDataRetryCount >= Sibionics2ConnectionPolicy.maximumChineseDataRetries {
+                // Connected but silent: asking again on this link has not helped, and nothing
+                // else ends such a session. A fresh connection does.
+                trace("Sibionics 1 gave no data page after %{public}@ requests; reconnecting",
+                      log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
+                      self.chineseDataRetryCount.description)
+                self.disconnect()
+                return
+            }
             _ = self.sendChineseDataRequest(for: address)
             self.scheduleChineseDataRetry(for: address)
         }
@@ -1143,6 +1175,10 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         if !readings.isEmpty {
             scheduleStreamingWatchdog()
             refreshBatteryLevelIfDue(now: receivedAt)
+            // Glucose is flowing: the display-only strings can be asked for now.
+            if let peripheral = informationCharacteristics.first?.service?.peripheral {
+                readNextInformationString(from: peripheral)
+            }
         }
         var currentProcessor = batchProcessor ?? makeBatchProcessor(for: address)
         let previousStartDate = currentProcessor.state?.sensorStartDate ?? probeReplaySessionStartDate
