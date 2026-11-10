@@ -312,6 +312,31 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertFalse(ExperimentalPowerSaving.isUrgent(mgDl: nil, defaults: defaults))
     }
 
+    // MARK: Sibionics device information
+
+    func testSibionicsInformationStringsAreReadOnceAndAnUnansweredReadIsNotRepeated() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "SibionicsDeviceStatusTests"))
+        defaults.removePersistentDomain(forName: "SibionicsDeviceStatusTests")
+        let id = "AAAA"
+        let available: [Sibionics2DeviceStatus.Field] = [.modelNumber, .firmwareRevision, .manufacturerName]
+        XCTAssertEqual(Sibionics2DeviceStatus.nextFieldToRead(for: id, available: available, userDefaults: defaults), .modelNumber)
+        Sibionics2DeviceStatus.beginRead(.modelNumber, for: id, userDefaults: defaults)
+        Sibionics2DeviceStatus.finishRead(.modelNumber, value: "GS1", for: id, userDefaults: defaults)
+        XCTAssertEqual(Sibionics2DeviceStatus.text(.modelNumber, for: id, userDefaults: defaults), "GS1")
+        // The firmware read is never answered: the session ends with it pending.
+        XCTAssertEqual(Sibionics2DeviceStatus.nextFieldToRead(for: id, available: available, userDefaults: defaults), .firmwareRevision)
+        Sibionics2DeviceStatus.beginRead(.firmwareRevision, for: id, userDefaults: defaults)
+        // Next connection: firmware is given up on, the manufacturer is next.
+        XCTAssertEqual(Sibionics2DeviceStatus.nextFieldToRead(for: id, available: available, userDefaults: defaults), .manufacturerName)
+        // An answer without a value is not asked for again either.
+        Sibionics2DeviceStatus.beginRead(.manufacturerName, for: id, userDefaults: defaults)
+        Sibionics2DeviceStatus.finishRead(.manufacturerName, value: nil, for: id, userDefaults: defaults)
+        XCTAssertNil(Sibionics2DeviceStatus.nextFieldToRead(for: id, available: available, userDefaults: defaults))
+        // Deleting the sensor forgets all of it.
+        Sibionics2DeviceStatus.clear(for: id, userDefaults: defaults)
+        XCTAssertEqual(Sibionics2DeviceStatus.nextFieldToRead(for: id, available: available, userDefaults: defaults), .modelNumber)
+    }
+
     // MARK: Chart cursor
 
     func testCursorFindsTheNearestReading() {
