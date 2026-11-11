@@ -221,7 +221,15 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                   : characteristicWriteType == .withResponse ? "withResponse" : "unsupported")
     }
 
+    /// Adds an event to this sensor's connection log (see `Sibionics2ConnectionLog`).
+    private func logEvent(_ text: String) {
+        guard let address = deviceAddress else { return }
+        Sibionics2ConnectionLog.add(variant.productName + ": " + text, for: address)
+    }
+
     override func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        logEvent("disconnected" + (error.map { ": " + $0.localizedDescription } ?? "")
+                 + (streamingReady ? "" : " (before streaming)"))
         probeGeneration += 1
         sibionics1Connection = nil
         readingPollGeneration += 1
@@ -252,6 +260,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             // never streamed is the only sign the address was wrong.
             authenticationAddressAwaitingReadings = false
             addressCandidateIndex += 1
+            logEvent("session ended without readings; next connection tries another authentication address")
             trace("Sibionics 2 session ended without readings; next connection tries another authentication address",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
         }
@@ -269,6 +278,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
               characteristic.uuid == Sibionics2ProtocolCodec.notifyUUID,
               characteristic.isNotifying else { return }
         notificationEnabled = true
+        logEvent("connected, notifications enabled")
         let deviceInformationUndiscovered = peripheral.services?.contains {
             $0.uuid == Sibionics2AuthenticationAddress.deviceInformationServiceUUID && $0.characteristics == nil
         } ?? false
@@ -280,6 +290,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let generation = deviceInformationGeneration
         runOnCentralQueue(after: Sibionics2ConnectionPolicy.deviceInformationTimeout) { [weak self] in
             guard let self, self.deviceInformationGeneration == generation, self.sessionStartDeferred else { return }
+            self.logEvent("device information not answered")
             trace("Sibionics 2 device information not answered; authenticating without it",
                   log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
             self.sessionStartDeferred = false
@@ -463,6 +474,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         case .authenticationRequired:
             // An unanswered auth is handled by its own timeout; only restart a session that moved past it.
             guard handshake?.isAwaitingAuthentication != true, let address = deviceAddress else { return }
+            logEvent("sensor asked for authentication again")
             trace("Sibionics 2 FF31 requested authentication; restarting handshake",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
             streamingReady = false
@@ -495,6 +507,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 if let address = deviceAddress {
                     markStreamingReady(for: address)
                 }
+                logEvent("streaming started")
                 trace("Sibionics 2 streaming started with first data packet (ready ACK optional)",
                       log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
             }
@@ -692,6 +705,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                   self.streamingWatchdogGeneration == generation,
                   self.streamingReady,
                   self.getConnectionStatus() == .connected else { return }
+            self.logEvent("no readings for 3 minutes while streaming; reconnecting")
             trace("Sibionics 2 no readings for %{public}@ seconds while streaming; reconnecting",
                   log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
                   Sibionics2ConnectionPolicy.readingsStallTimeout.description)
@@ -722,12 +736,14 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         readingPollGeneration += 1
         resetDisconnectGeneration += 1
         let generation = resetDisconnectGeneration
+        logEvent("reset command sent")
         trace("Sibionics 2 reset command queued; keeping local session until restart is confirmed",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
         runOnCentralQueue(after: Sibionics2ConnectionPolicy.resetRestartConfirmationDelay) { [weak self] in
             guard let self,
                   self.resetDisconnectGeneration == generation,
                   Sibionics2Configuration.awaitingResetRestart(for: address) else { return }
+            self.logEvent("reset did not disconnect; reconnecting")
             trace("Sibionics 2 reset did not disconnect; reconnecting to probe for a new session",
                   log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
             self.disconnect()
@@ -834,6 +850,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             if self.chineseDataRetryCount >= Sibionics2ConnectionPolicy.maximumChineseDataRetries {
                 // Connected but silent: asking again on this link has not helped, and nothing
                 // else ends such a session. A fresh connection does.
+                self.logEvent("no data page after repeated requests; reconnecting")
                 trace("Sibionics 1 gave no data page after %{public}@ requests; reconnecting",
                       log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
                       self.chineseDataRetryCount.description)
@@ -910,12 +927,14 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             guard let self, self.handshakeAttempt == attempt else { return }
             if self.streamingReady {
                 guard !self.receivedNonEmptyReadingsPacket else { return }
+                self.logEvent("streaming ready but no readings")
                 trace("Sibionics 2 received streaming-ready but no glucose readings after %{public}@ seconds",
                       log: self.transmitterLog,
                       category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
                       Sibionics2ConnectionPolicy.streamingTimeout.description)
                 return
             }
+            self.logEvent("handshake stalled; reconnecting")
             trace("Sibionics 2 handshake stalled: FF31 has not begun streaming",
                   log: self.transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
@@ -935,6 +954,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
             return false
         }
+        logEvent("authentication, key group " + keyGroups[authenticationKeyGroupIndex].applicationIdentifier)
         trace("Sibionics 2 authentication keyGroup=%{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
               type: .info, keyGroups[authenticationKeyGroupIndex].applicationIdentifier)
@@ -971,6 +991,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 self.tryNextAuthenticationKeyGroup(for: address)
             } else if self.handshakeRestartCount < Sibionics2ConnectionPolicy.maximumHandshakeRestartsPerConnection {
                 self.handshakeRestartCount += 1
+                self.logEvent("handshake step timed out; restarting authentication")
                 trace("Sibionics 2 handshake step timed out; restarting authentication",
                       log: self.transmitterLog,
                       category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
@@ -984,6 +1005,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         guard authenticationKeyGroupIndex < authenticationKeyGroups(for: address).count else {
             authenticationKeyGroupIndex = 0
         connectionKeyGroups = []
+            logEvent("authentication not answered with any key group")
             trace("Sibionics 2 authentication was not answered with any key group",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
             reconnectAfterStalledHandshake()
@@ -1011,6 +1033,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         guard Sibionics2Configuration.confirmedKeyGroup(for: address) != group else { return }
         let previousSensitivity = factorySensitivity(for: address)
         Sibionics2Configuration.setConfirmedKeyGroup(group, for: address)
+        logEvent("key group confirmed: " + group.applicationIdentifier)
         trace("Sibionics authentication key group confirmed: %{public}@",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
               type: .info, group.applicationIdentifier)
@@ -1113,6 +1136,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             if let address = deviceAddress {
                 markStreamingReady(for: address)
             }
+            logEvent("streaming ready")
             trace("Sibionics 2 received streaming-ready ACK; waiting for glucose readings",
                   log: transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
@@ -1159,6 +1183,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private func reconnectForMissingHistory() {
         guard historyReconnectCount < Sibionics2ConnectionPolicy.maximumHistoryReconnectAttempts,
               getConnectionStatus() == .connected else {
+            logEvent("history page still missing")
             trace("Sibionics 2 history page still missing; saved cursor retained",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
                   type: .error)
@@ -1166,6 +1191,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
         historyReconnectCount += 1
         historyRecoveryToken += 1
+        logEvent("reconnecting for a missing history page")
         trace("Sibionics 2 reconnecting for missing history page",
               log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager,
               type: .info)
@@ -1226,6 +1252,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             resetDisconnectGeneration += 1
             autoResetCheckGeneration += 1
             scheduleStreamingWatchdog()
+            logEvent("new sensor session after reset")
             trace("Sibionics 2 confirmed a new sensor session after reset; local processor state has advanced",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
         }

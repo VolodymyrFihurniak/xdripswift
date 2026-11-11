@@ -224,6 +224,51 @@ enum Sibionics2DeviceStatus {
     }
 }
 
+/// A short, persistent history of what happened on a Sibionics sensor's Bluetooth link
+/// (JugglucoNG's always-available sensor connection log): connections, disconnects with their
+/// error, authentication attempts, stalls and recoveries. Kept per peripheral so an unstable
+/// sensor can be diagnosed after the fact, without a developer trace.
+enum Sibionics2ConnectionLog {
+    struct Entry: Codable, Equatable {
+        let date: Date
+        let text: String
+    }
+
+    static let maximumEntries = 200
+    private static let lock = NSLock()
+
+    private static func key(_ identifier: String) -> String { "sibionics2.connectionLog." + identifier.uppercased() }
+
+    static func entries(for identifier: String, userDefaults: UserDefaults = .standard) -> [Entry] {
+        guard let data = userDefaults.data(forKey: key(identifier)) else { return [] }
+        return (try? JSONDecoder().decode([Entry].self, from: data)) ?? []
+    }
+
+    /// Appends an event, dropping the oldest beyond `maximumEntries`. An event equal to the newest
+    /// one within ten seconds is not repeated.
+    static func add(_ text: String, for identifier: String, at date: Date = Date(), userDefaults: UserDefaults = .standard) {
+        lock.lock()
+        defer { lock.unlock() }
+        var all = entries(for: identifier, userDefaults: userDefaults)
+        if let last = all.last, last.text == text, date.timeIntervalSince(last.date) < 10 { return }
+        all.append(Entry(date: date, text: text))
+        if all.count > maximumEntries { all.removeFirst(all.count - maximumEntries) }
+        if let data = try? JSONEncoder().encode(all) { userDefaults.set(data, forKey: key(identifier)) }
+    }
+
+    static func clear(for identifier: String, userDefaults: UserDefaults = .standard) {
+        userDefaults.removeObject(forKey: key(identifier))
+    }
+
+    /// The whole log as text, oldest first, for copying into a report.
+    static func text(for identifier: String, userDefaults: UserDefaults = .standard) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = .current
+        return entries(for: identifier, userDefaults: userDefaults)
+            .map { formatter.string(from: $0.date) + "  " + $0.text }.joined(separator: "\n")
+    }
+}
+
 /// Confirmed wire protocol for a Sibionics 1 peripheral, keyed by iOS BLE UUID.
 enum Sibionics1ProtocolMode: Int {
     case chinese = 1

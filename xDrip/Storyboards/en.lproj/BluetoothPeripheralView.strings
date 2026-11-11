@@ -248,3 +248,8 @@
 "sibionics.protocolV120" = "V120 (encrypted)";
 "sibionics.protocolChinese" = "AA55 (Chinese)";
 "sibionics.keyGroup" = "Key group";
+"sibionics.logTitle" = "Connection log";
+"sibionics.logFooter" = "The latest events on the sensor link, newest first; up to 200 are kept. Copy the log to send it with a problem report.";
+"sibionics.logCopy" = "Copy log";
+"sibionics.logCopied" = "Copied";
+"sibionics.logEmpty" = "No events yet";

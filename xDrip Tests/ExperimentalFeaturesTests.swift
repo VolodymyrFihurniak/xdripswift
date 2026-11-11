@@ -467,6 +467,24 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertEqual(Sibionics2DeviceStatus.nextFieldToRead(for: id, available: available, userDefaults: defaults), .modelNumber)
     }
 
+    func testSibionicsConnectionLogKeepsTheNewestEventsAndSkipsQuickRepeats() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "SibionicsConnectionLogTests"))
+        defaults.removePersistentDomain(forName: "SibionicsConnectionLogTests")
+        Sibionics2ConnectionLog.add("connected", for: "id", at: start, userDefaults: defaults)
+        Sibionics2ConnectionLog.add("connected", for: "id", at: start.addingTimeInterval(5), userDefaults: defaults)
+        Sibionics2ConnectionLog.add("connected", for: "id", at: start.addingTimeInterval(20), userDefaults: defaults)
+        XCTAssertEqual(Sibionics2ConnectionLog.entries(for: "ID", userDefaults: defaults).count, 2)
+        for index in 0..<(Sibionics2ConnectionLog.maximumEntries + 5) {
+            Sibionics2ConnectionLog.add("event \(index)", for: "id", at: start.addingTimeInterval(100 + Double(index)), userDefaults: defaults)
+        }
+        let entries = Sibionics2ConnectionLog.entries(for: "id", userDefaults: defaults)
+        XCTAssertEqual(entries.count, Sibionics2ConnectionLog.maximumEntries)
+        XCTAssertEqual(entries.last?.text, "event \(Sibionics2ConnectionLog.maximumEntries + 4)")
+        XCTAssertTrue(Sibionics2ConnectionLog.text(for: "id", userDefaults: defaults).hasSuffix("event \(Sibionics2ConnectionLog.maximumEntries + 4)"))
+        Sibionics2ConnectionLog.clear(for: "id", userDefaults: defaults)
+        XCTAssertTrue(Sibionics2ConnectionLog.entries(for: "id", userDefaults: defaults).isEmpty)
+    }
+
     // MARK: Chart cursor
 
     func testCursorFindsTheNearestReading() {

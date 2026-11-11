@@ -110,3 +110,10 @@ authentication, an unanswered read blocks the link until iOS drops it after 30 s
 A Chinese Sibionics 1 that is connected but returns neither an echo nor a data page for six
 requests (three minutes) is reconnected.
 
+## Connection log
+
+The device screen keeps a **Connection log** per sensor: connections, disconnects with the
+Bluetooth error, authentication attempts and key groups, stalled handshakes, missing readings,
+resets and reconnects, up to 200 events. The newest twelve are listed; **Copy log** puts the whole
+log on the clipboard for a problem report. It is cleared when the sensor is deleted.
+

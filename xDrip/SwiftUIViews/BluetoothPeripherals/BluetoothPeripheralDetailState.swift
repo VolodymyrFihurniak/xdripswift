@@ -1008,7 +1008,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             }
         )
         let deviceInfoSection = sibionicsDeviceInfoSection(address: address, isSibionics1: isSibionics1)
-        return [connectionSection] + (deviceInfoSection.rows.isEmpty ? [] : [deviceInfoSection]) + [settingsSection]
+        return [connectionSection] + (deviceInfoSection.rows.isEmpty ? [] : [deviceInfoSection]) + [settingsSection,
+                                                                                                      sibionicsConnectionLogSection(address: address)]
     }
 
     private func makeGenericHeartbeatSettingsSections() -> [BluetoothPeripheralDetailSection] {
@@ -1034,6 +1035,33 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         // separately when the next connection begins; saving here never triggers a reconnect.
         trace("Generic heartbeat settings changed: %{public}@ -> %{public}@", log: log, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info, troubleshooting: .standard(.configuration(.heartbeatSubscriptionsChanged(previous: previous.mode.logDescription, updated: settings.mode.logDescription))), previous.mode.logDescription, settings.mode.logDescription)
         refresh()
+    }
+
+    /// The newest events of the sensor's connection log, and a row that copies all of it.
+    private func sibionicsConnectionLogSection(address: String) -> BluetoothPeripheralDetailSection {
+        let entries = Sibionics2ConnectionLog.entries(for: address)
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .medium
+        var rows = [row(
+            id: "sibionics-log-copy",
+            title: Texts_BluetoothPeripheralView.sibionicsLogCopy,
+            detail: entries.isEmpty ? Texts_BluetoothPeripheralView.sibionicsLogEmpty : "\(entries.count)",
+            isEnabled: !entries.isEmpty,
+            action: { [weak self] in
+                UIPasteboard.general.string = Sibionics2ConnectionLog.text(for: address)
+                self?.refresh()
+            }
+        )]
+        for (index, entry) in entries.suffix(12).reversed().enumerated() {
+            rows.append(row(id: "sibionics-log-\(index)", title: formatter.string(from: entry.date), detail: entry.text, detailLineLimit: 3))
+        }
+        return BluetoothPeripheralDetailSection(
+            id: "sibionics-connection-log",
+            title: Texts_BluetoothPeripheralView.sibionicsLogTitle,
+            footer: Texts_BluetoothPeripheralView.sibionicsLogFooter,
+            rows: rows
+        )
     }
 
     /// What the sensor reported about itself: battery, Device Information, and the wire protocol

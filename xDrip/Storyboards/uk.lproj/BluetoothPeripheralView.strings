@@ -349,3 +349,8 @@
 "sibionics.protocolV120" = "V120 (шифрований)";
 "sibionics.protocolChinese" = "AA55 (китайський)";
 "sibionics.keyGroup" = "Група ключів";
+"sibionics.logTitle" = "Журнал з’єднання";
+"sibionics.logFooter" = "Останні події на з’єднанні із сенсором, новіші зверху; зберігається до 200. Скопіюйте журнал, щоб надіслати його разом з описом проблеми.";
+"sibionics.logCopy" = "Скопіювати журнал";
+"sibionics.logCopied" = "Скопійовано";
+"sibionics.logEmpty" = "Подій ще немає";
