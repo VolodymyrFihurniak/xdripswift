@@ -32,6 +32,12 @@ extension SettingsViewGroupedSettingsViewModel {
                     settingsScreen: { ExperimentalSettingsViewModel.alertsScreen }
                 ),
                 SettingsGroupedRow(
+                    id: "experimental.restricted",
+                    title: ExperimentalTexts.text("restricted", "Restricted mode"),
+                    detail: { RestrictedMode.pin() != nil ? Texts_Common.on : Texts_Common.off },
+                    settingsScreen: { ExperimentalSettingsViewModel.restrictedScreen }
+                ),
+                SettingsGroupedRow(
                     id: "experimental.powerSaving",
                     title: ExperimentalTexts.text("powerSaving", "Power saving"),
                     detail: { ExperimentalSettingsViewModel.title(for: UserDefaults.standard.experimentalPowerSavingMode) },
@@ -44,7 +50,7 @@ extension SettingsViewGroupedSettingsViewModel {
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving, alerts }
+    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving, alerts, doseHints, restricted }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
@@ -53,7 +59,8 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                        providers: { [ExperimentalSettingsViewModel(group: .predictionMain), ExperimentalSettingsViewModel(group: .predictionAdaptive),
                                      ExperimentalSettingsViewModel(group: .predictionModel),
                                      ExperimentalSettingsViewModel(group: .predictionAlert), ExperimentalSettingsViewModel(group: .predictionAccuracy),
-                                     ExperimentalSettingsViewModel(group: .predictionNightscout)] })
+                                     ExperimentalSettingsViewModel(group: .predictionNightscout),
+                                     ExperimentalSettingsViewModel(group: .doseHints)] })
     }
 
     static var insulinScreen: SettingsScreen {
@@ -66,6 +73,12 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         SettingsScreen(title: ExperimentalTexts.text("alerts", "Alarms"),
                        introduction: { ExperimentalTexts.text("alertsIntroduction", "Experimental additions to the alarms, from JugglucoNG. Both are off by default.") },
                        providers: { [ExperimentalSettingsViewModel(group: .alerts)] })
+    }
+
+    static var restrictedScreen: SettingsScreen {
+        SettingsScreen(title: ExperimentalTexts.text("restricted", "Restricted mode"),
+                       introduction: { ExperimentalTexts.text("restrictedIntroduction", "Experimental. Locks the Settings and Devices tabs behind a PIN, for a child's or another person's phone.") },
+                       providers: { [ExperimentalSettingsViewModel(group: .restricted)] })
     }
 
     static var powerSavingScreen: SettingsScreen {
@@ -239,6 +252,38 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                 AnyView(NavigationLink(ExperimentalTexts.text("accuracyShow", "Prediction accuracy")) { ExperimentalPredictionAccuracyView() })
                             }))
             ]
+        case .restricted:
+            return [
+                SettingsRow(id: "experimental.restricted.pin", title: ExperimentalTexts.text("restrictedPINRow", "PIN"),
+                            control: .custom(content: {
+                                AnyView(NavigationLink {
+                                    RestrictedModeSettingsView()
+                                } label: {
+                                    LabeledContent(ExperimentalTexts.text("restrictedPINRow", "PIN"),
+                                                   value: RestrictedMode.pin() != nil ? Texts_Common.on : ExperimentalTexts.text("notSet", "Not set"))
+                                })
+                            }))
+            ]
+        case .doseHints:
+            let isMgDl = defaults.bloodGlucoseUnitIsMgDl
+            let range = DoseHintCalculator.targetRange
+            return [
+                SettingsRow(id: "experimental.doseHints.enabled", title: ExperimentalTexts.text("doseHints", "Show dose hints"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalDoseHintsEnabled },
+                                             setIsOn: { UserDefaults.standard.experimentalDoseHintsEnabled = $0 }),
+                            reloadScope: .all),
+                numberRow(id: "experimental.doseHints.target", title: ExperimentalTexts.text("doseTarget", "Dose target"),
+                          value: defaults.experimentalDoseTargetMgDl.mgDlToMmol(mgDl: isMgDl),
+                          unit: isMgDl ? Texts_Common.mgdl : Texts_Common.mmol, fractionDigits: isMgDl ? 0 : 1,
+                          range: range.lowerBound.mgDlToMmol(mgDl: isMgDl)...range.upperBound.mgDlToMmol(mgDl: isMgDl),
+                          isEnabled: defaults.experimentalDoseHintsEnabled) { value in
+                    UserDefaults.standard.experimentalDoseTargetMgDl = isMgDl ? value : value / ConstantsBloodGlucose.mgDlToMmoll
+                },
+                SettingsRow(id: "experimental.doseHints.inRange", title: ExperimentalTexts.text("doseHintInRange", "Also correct inside the range"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalDoseHintCorrectInRange },
+                                             setIsOn: { UserDefaults.standard.experimentalDoseHintCorrectInRange = $0 }),
+                            isEnabled: defaults.experimentalDoseHintsEnabled)
+            ]
         case .alerts:
             return [
                 SettingsRow(id: "experimental.alerts.muteHighFalling", title: ExperimentalTexts.text("muteHighFalling", "No High alarm while falling"),
@@ -376,7 +421,8 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
 
     func sectionTitle() -> String? {
         switch group {
-        case .predictionMain, .insulins, .powerSaving, .alerts: return nil
+        case .predictionMain, .insulins, .powerSaving, .alerts, .restricted: return nil
+        case .doseHints: return ExperimentalTexts.text("doseHintsTitle", "Dose hints")
         case .predictionAdaptive: return ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction")
         case .predictionModel: return ExperimentalTexts.text("predictionModel", "Model")
         case .predictionAlert: return Texts_Alerts.predictedLowAlertTitle
@@ -400,6 +446,9 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("predictionNightscoutFooter", "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.")
         case .predictionAccuracy:
             return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
+        case .restricted: return nil
+        case .doseHints:
+            return ExperimentalTexts.text("doseHintsFooter", "NOT MEDICAL ADVICE. A line on the Home chart with arithmetic from your logged treatments and the model above: carbs when glucose is falling with insulin on board and would pass below the dose target within 45 minutes (rounded up, at least 5 g), or a correction when glucose is above the range and not coming down (the gap to the target divided by sensitivity, minus all insulin on board, rounded down to 0.5 U). Nothing is hinted within 20 mg/dL (1.1 mmol/L) of the target. It knows nothing about unlogged food, illness or exercise, and a wrong sensitivity or carb ratio makes it wrong. Decide doses with your own rules and your care team's.")
         case .alerts:
             return ExperimentalTexts.text("alertsFooter", "No High alarm while falling: the High alarm stays quiet while glucose is already falling by at least 0.5 mg/dL (0.03 mmol/L) a minute; Very High always alarms. Notify when signal is restored: one notification when readings come back after a gap at least as long as the Missed Reading alarm's delay (30 minutes when that alarm is off).")
         case .powerSaving:
@@ -587,5 +636,112 @@ struct ExperimentalPredictionAccuracyView: View {
         let adaptive = forecasts.filter(\.isAdaptive)
         adaptiveReport = adaptive.isEmpty ? [] : PredictionAccuracy.report(forecasts: adaptive, readings: readings)
         isLoading = false
+    }
+}
+
+// MARK: - Restricted mode
+
+/// JugglucoNG's restricted mode, for a child's or another person's phone: with a PIN set, the
+/// Settings and Devices tabs open only after it is entered. Readings, alarms, the chart and
+/// treatments stay available. The lock returns when the app goes to the background.
+enum RestrictedMode {
+    static let pinKey = "experimentalRestrictedModePIN"
+    static let pinLength = 4...8
+
+    static func pin(defaults: UserDefaults = .standard) -> String? {
+        guard let pin = defaults.string(forKey: pinKey), isValid(pin) else { return nil }
+        return pin
+    }
+
+    static func isValid(_ pin: String) -> Bool {
+        pinLength.contains(pin.count) && pin.allSatisfy { $0.isASCII && $0.isNumber }
+    }
+
+    /// Stores a valid PIN, or removes it with nil. Returns false for an invalid PIN.
+    @discardableResult
+    static func setPIN(_ pin: String?, defaults: UserDefaults = .standard) -> Bool {
+        guard let pin else {
+            defaults.removeObject(forKey: pinKey)
+            return true
+        }
+        guard isValid(pin) else { return false }
+        defaults.set(pin, forKey: pinKey)
+        return true
+    }
+}
+
+/// Covers its content with a PIN prompt while restricted mode is on and the PIN was not entered.
+struct RestrictedModeGate: ViewModifier {
+    @AppStorage(RestrictedMode.pinKey) private var storedPIN = ""
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var isUnlocked = false
+    @State private var entered = ""
+    @State private var wrong = false
+
+    func body(content: Content) -> some View {
+        if RestrictedMode.isValid(storedPIN) && !isUnlocked {
+            VStack(spacing: 16) {
+                Image(systemName: "lock.fill").font(.largeTitle).foregroundStyle(ConstantsAppColors.secondaryText)
+                Text(ExperimentalTexts.text("restrictedPrompt", "Enter the PIN to open this tab"))
+                    .multilineTextAlignment(.center)
+                SecureField(ExperimentalTexts.text("restrictedPIN", "PIN"), text: $entered)
+                    .keyboardType(.numberPad)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 200)
+                if wrong {
+                    Text(ExperimentalTexts.text("restrictedWrong", "Wrong PIN")).foregroundStyle(Color.red).font(.footnote)
+                }
+                Button(ExperimentalTexts.text("restrictedUnlock", "Unlock")) {
+                    if entered == storedPIN {
+                        isUnlocked = true
+                        wrong = false
+                    } else {
+                        wrong = true
+                    }
+                    entered = ""
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(entered.isEmpty)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            content
+                .onChange(of: scenePhase) { phase in
+                    if phase == .background { isUnlocked = false }
+                }
+        }
+    }
+}
+
+/// Sets, changes or removes the restricted mode PIN.
+struct RestrictedModeSettingsView: View {
+    @AppStorage(RestrictedMode.pinKey) private var storedPIN = ""
+    @State private var newPIN = ""
+    @State private var repeatPIN = ""
+
+    private var canSave: Bool { RestrictedMode.isValid(newPIN) && newPIN == repeatPIN }
+
+    var body: some View {
+        List {
+            Section(footer: Text(ExperimentalTexts.text("restrictedFooter", "With a PIN set, the Settings and Devices tabs open only after it is entered; the lock returns when the app goes to the background. Readings, alarms, the chart and treatments stay available. 4 to 8 digits. The PIN is stored on this phone without encryption: it keeps settings from being changed by accident, not from a determined person. If it is forgotten, reinstalling the app removes it."))) {
+                LabeledContent(ExperimentalTexts.text("restricted", "Restricted mode"),
+                               value: RestrictedMode.isValid(storedPIN) ? Texts_Common.on : Texts_Common.off)
+                SecureField(ExperimentalTexts.text("restrictedNewPIN", "New PIN"), text: $newPIN).keyboardType(.numberPad)
+                SecureField(ExperimentalTexts.text("restrictedRepeatPIN", "Repeat PIN"), text: $repeatPIN).keyboardType(.numberPad)
+                Button(ExperimentalTexts.text("restrictedSave", "Set PIN")) {
+                    RestrictedMode.setPIN(newPIN)
+                    newPIN = ""
+                    repeatPIN = ""
+                }
+                .disabled(!canSave)
+                if RestrictedMode.isValid(storedPIN) {
+                    Button(ExperimentalTexts.text("restrictedRemove", "Remove PIN"), role: .destructive) {
+                        RestrictedMode.setPIN(nil)
+                    }
+                }
+            }
+        }
+        .navigationTitle(ExperimentalTexts.text("restricted", "Restricted mode"))
     }
 }

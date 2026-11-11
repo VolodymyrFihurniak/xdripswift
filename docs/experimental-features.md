@@ -196,3 +196,25 @@ own IOB curve is not drawn (it covered them in the same colour); COB stays.
 Sensor expiry already has two alarms upstream (Sensor Ending Soon, Expected Expiry), so
 JugglucoNG's multiple expiry warnings were not ported.
 
+## Dose hints
+
+Settings → Experimental features → Glucose prediction → **Dose hints** (off by default). A port of
+JugglucoNG's `StateDoseHintCalculator`: one line above the Home chart, read off the current state.
+**It is arithmetic, not medical advice.**
+
+- *Carbs*: glucose is falling (recency-weighted slope over 30 minutes at or below −0.3 mg/dL a
+  minute, no rise in the last five minutes), insulin is on board, and at this rate glucose is
+  below the dose target within 45 minutes. Amount = the gap between the 45-minute projection and
+  the target ÷ sensitivity × carb ratio, rounded up, at least 5 g.
+- *Correction*: glucose is above the range (or, with *Also correct inside the range*, more than
+  25 mg/dL above the target) and has not been coming down for 20 minutes. Amount = (current −
+  target) ÷ sensitivity − all IOB, rounded **down** to 0.5 U.
+- Nothing within 20 mg/dL of the target. Dose target 70–180 mg/dL, default 90.
+
+## Restricted mode
+
+Settings → Experimental features → **Restricted mode**: with a 4–8 digit PIN set, the Settings and
+Devices tabs open only after it is entered, and lock again when the app goes to the background.
+Readings, alarms, the chart and treatments stay available. The PIN is kept in the app's settings
+unencrypted; reinstalling the app removes it.
+

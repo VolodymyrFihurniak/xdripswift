@@ -116,6 +116,9 @@ extension UserDefaults {
         static let predictionAdaptive = "experimentalPredictionAdaptive"
         static let powerSavingMode = "experimentalPowerSavingMode"
         static let predictedLowEvidence = "experimentalPredictedLowEvidence"
+        static let doseHintsEnabled = "experimentalDoseHintsEnabled"
+        static let doseTarget = "experimentalDoseTargetMgDl"
+        static let doseHintInRange = "experimentalDoseHintCorrectInRange"
         static let muteHighWhileFalling = "experimentalMuteHighWhileFalling"
         static let signalRestored = "experimentalSignalRestoredNotification"
         static let predictionCarbRatio = "experimentalPredictionCarbRatio"
@@ -162,6 +165,24 @@ extension UserDefaults {
     var experimentalPredictedLowEvidence: Bool {
         get { bool(forKey: ExperimentalKey.predictedLowEvidence) }
         set { set(newValue, forKey: ExperimentalKey.predictedLowEvidence) }
+    }
+
+    /// JugglucoNG dose hints beside IOB. Off by default: they are arithmetic, not advice.
+    var experimentalDoseHintsEnabled: Bool {
+        get { bool(forKey: ExperimentalKey.doseHintsEnabled) }
+        set { set(newValue, forKey: ExperimentalKey.doseHintsEnabled) }
+    }
+
+    /// What a hinted correction aims at, mg/dL (JugglucoNG `DoseTarget`: 90, range 70...180).
+    var experimentalDoseTargetMgDl: Double {
+        get { Self.experimentalValue(object(forKey: ExperimentalKey.doseTarget), fallback: DoseHintCalculator.defaultTargetMgDl, range: DoseHintCalculator.targetRange) }
+        set { set(newValue, forKey: ExperimentalKey.doseTarget) }
+    }
+
+    /// Also hint a correction for a value inside the range but well above the dose target.
+    var experimentalDoseHintCorrectInRange: Bool {
+        get { bool(forKey: ExperimentalKey.doseHintInRange) }
+        set { set(newValue, forKey: ExperimentalKey.doseHintInRange) }
     }
 
     /// JugglucoNG: the high alarm stays quiet while glucose is already falling. Off by default.
@@ -888,6 +909,109 @@ enum PredictedLowAlert {
                                                  policy: UserDefaults.standard.dataFlowPolicy) ?? []
         }
         return result
+    }
+}
+
+// MARK: - Dose hints (JugglucoNG data/prediction/StateDoseHint.kt)
+
+/// JugglucoNG's `StateDoseHintCalculator`: a hint read off the current state, not off the far end
+/// of the forecast.
+///
+/// - Falling with insulin on board, and on the current rate below the dose target within the
+///   horizon: the carbs that raise the projection back to the target, rounded up.
+/// - High and not coming down (or, when enabled, in range but well above the target): the insulin
+///   the gap needs after subtracting ALL insulin on board, on the current value, rounded down to
+///   half a unit.
+///
+/// The two errors are not symmetric: too many carbs show within the hour, too much insulin only
+/// hours later. Within 20 mg/dL of the target nothing is hinted. It is arithmetic on the logged
+/// treatments and the model's sensitivity and carb ratio, never medical advice.
+enum DoseHintCalculator {
+    struct Hint: Equatable, Sendable {
+        let isCarbs: Bool
+        /// Grams for carbs, units for insulin.
+        let amount: Double
+        let targetMgDl: Double
+        /// When the state is still ahead (carbs); nil for insulin, which is about now.
+        let minutesAhead: Int?
+    }
+
+    static let defaultTargetMgDl = 90.0
+    static let targetRange = 70.0...180.0
+    static let horizonMinutes = 45.0
+    static let trendWindowMinutes = 30.0
+    static let trendMinimumSamples = 3
+    static let trendMinimumSpanMinutes = 10.0
+    static let fallFloor = 0.3
+    static let stagnantSlope = -0.2
+    static let riseMinimumSpanMinutes = 20.0
+    static let hysteresisMgDl = 20.0
+    static let inRangeMarginMgDl = 25.0
+    static let minimumCarbsGrams = 5.0
+    static let penStepUnits = 0.5
+    static let maximumReadingAge: TimeInterval = 15 * 60
+
+    /// `TrendEngine.recencyWeightedSlope`: least squares with weights decaying over five reading
+    /// intervals, mg/dL per minute. `readings` ascending.
+    static func recencyWeightedSlope(_ readings: [(date: Date, mgDl: Double)]) -> Double? {
+        guard readings.count >= 2, let newest = readings.last?.date else { return nil }
+        let gaps = zip(readings, readings.dropFirst()).map { $1.date.timeIntervalSince($0.date) / 60 }.filter { $0 > 0 }.sorted()
+        guard !gaps.isEmpty else { return nil }
+        let tau = 5 * gaps[gaps.count / 2]
+        guard tau.isFinite, tau > 0 else { return nil }
+        var sw = 0.0, sx = 0.0, sy = 0.0, sxy = 0.0, sxx = 0.0
+        for reading in readings {
+            let x = reading.date.timeIntervalSince(newest) / 60
+            let weight = exp(x / tau)
+            sw += weight; sx += weight * x; sy += weight * reading.mgDl
+            sxy += weight * x * reading.mgDl; sxx += weight * x * x
+        }
+        let denominator = sw * sxx - sx * sx
+        guard denominator > 1e-6 else { return nil }
+        let slope = (sw * sxy - sx * sy) / denominator
+        return slope.isFinite ? slope : nil
+    }
+
+    /// - Parameters:
+    ///   - readings: date and mg/dL, any order.
+    ///   - highMgDl: upper bound of the target range, which tells "high" from "in range".
+    ///   - iobUnits: all insulin on board, including doses that have not started acting.
+    static func hint(readings: [(date: Date, mgDl: Double)], highMgDl: Double, targetMgDl: Double, iobUnits: Double,
+                     insulinSensitivityMgDl: Double, carbRatio: Double, correctInRange: Bool, now: Date) -> Hint? {
+        let valid = readings.filter { $0.mgDl.isFinite && $0.mgDl > 0 && $0.date <= now }.sorted { $0.date < $1.date }
+        guard let latest = valid.last, now.timeIntervalSince(latest.date) <= maximumReadingAge,
+              targetMgDl.isFinite, targetMgDl > 0, insulinSensitivityMgDl.isFinite, insulinSensitivityMgDl > 0,
+              abs(latest.mgDl - targetMgDl) > hysteresisMgDl, iobUnits.isFinite, iobUnits >= 0 else { return nil }
+        let window = valid.filter { latest.date.timeIntervalSince($0.date) <= trendWindowMinutes * 60 }
+        guard window.count >= trendMinimumSamples, let first = window.first else { return nil }
+        let span = latest.date.timeIntervalSince(first.date) / 60
+        guard span >= trendMinimumSpanMinutes, let slope = recencyWeightedSlope(window) else { return nil }
+
+        if slope <= -fallFloor {
+            // A measured five-minute rise overrules the smoothed fall: no carbs against it.
+            if let previous = valid.last(where: { latest.date.timeIntervalSince($0.date) >= 4 * 60 }),
+               latest.date.timeIntervalSince(previous.date) <= 10 * 60, latest.mgDl > previous.mgDl { return nil }
+            // A fall with nothing on board is not being driven by insulin.
+            guard iobUnits > 0, carbRatio.isFinite, carbRatio > 0 else { return nil }
+            let minutesAhead = latest.mgDl <= targetMgDl ? 0 : (targetMgDl - latest.mgDl) / slope
+            guard minutesAhead.isFinite, minutesAhead >= 0, minutesAhead <= horizonMinutes else { return nil }
+            let riseNeeded = targetMgDl - (latest.mgDl + slope * horizonMinutes)
+            guard riseNeeded > 0 else { return nil }
+            let grams = (riseNeeded / insulinSensitivityMgDl * carbRatio).rounded(.up)
+            guard grams.isFinite, grams >= minimumCarbsGrams else { return nil }
+            return Hint(isCarbs: true, amount: grams, targetMgDl: targetMgDl, minutesAhead: Int(minutesAhead.rounded()))
+        }
+
+        guard highMgDl.isFinite, span >= riseMinimumSpanMinutes, slope >= stagnantSlope else { return nil }
+        if latest.mgDl <= highMgDl {
+            guard correctInRange, latest.mgDl > targetMgDl + inRangeMarginMgDl else { return nil }
+        }
+        let needed = (latest.mgDl - targetMgDl) / insulinSensitivityMgDl - iobUnits
+        guard needed.isFinite, needed > 0 else { return nil }
+        // Down to the step, never up: rounding up hands out insulin the arithmetic did not ask for.
+        let units = (needed / penStepUnits + 1e-4).rounded(.down) * penStepUnits
+        guard units >= penStepUnits else { return nil }
+        return Hint(isCarbs: false, amount: units, targetMgDl: targetMgDl, minutesAhead: nil)
     }
 }
 
@@ -1768,7 +1892,8 @@ enum ExperimentalChartInputs {
                 model.bolusInsulin.rawValue, model.basalInsulin.rawValue, defaults.bloodGlucoseUnitIsMgDl.description,
                 model.bodyWeightKg?.description ?? "-", ExperimentalPredictionPeriod.encode(model.periods), model.macrosEnabled.description,
                 defaults.lowMarkValue.description, defaults.highMarkValue.description,
-                defaults.experimentalPredictionAdaptive.description].joined(separator: "|")
+                defaults.experimentalPredictionAdaptive.description, defaults.experimentalDoseHintsEnabled.description,
+                defaults.experimentalDoseTargetMgDl.description, defaults.experimentalDoseHintCorrectInRange.description].joined(separator: "|")
     }
 
     /// How far back insulin can still be acting: two days, or eight for a once-weekly basal.
@@ -1826,7 +1951,8 @@ enum ExperimentalChartInputs {
         let atPresent = chartState.endDate.timeIntervalSince(now) > -ConstantsGlucoseChartSwiftUI.experimentalPredictionPresentTolerance
         let wantsPrediction = defaults.experimentalPredictionEnabled && atPresent
         let wantsInsulin = defaults.experimentalInsulinsEnabled && showsInsulin
-        guard wantsPrediction || wantsInsulin else { return plots }
+        let wantsHint = defaults.experimentalDoseHintsEnabled && showsInsulin && atPresent
+        guard wantsPrediction || wantsInsulin || wantsHint else { return plots }
 
         let futureEnd = now.addingTimeInterval(TimeInterval(model.horizonMinutes * 60))
         let lookBack = max(ExperimentalPredictionModel.lookBack, wantsInsulin ? insulinLookBack(basal: model.basalInsulin) : 0)
@@ -1854,6 +1980,22 @@ enum ExperimentalChartInputs {
                 plots.predictionIsAdaptive = shown.isAdaptive
             }
             plots.prediction = forecast.map { GlucoseChartExperimentalPlots.PredictionPoint(date: $0.date, mgDl: $0.value) }
+        }
+
+        if wantsHint {
+            let parameters = model.parameters(at: now)
+            let recent = zip(chartState.bgReadingDates, chartState.bgReadingValues)
+                .filter { $0.0 >= now.addingTimeInterval(-40 * 60) && $0.0 <= now }.map { (date: $0.0, mgDl: $0.1) }
+            // All insulin of the forecast's insulins still to act, doses before onset included (IOB, not eIOB).
+            let onBoard = InsulinActivityStack.onBoard(treatments: treatments, at: now, bolusDefault: model.bolusInsulin,
+                                                       basalDefault: model.basalInsulin, bodyWeightKg: model.bodyWeightKg)
+                .filter { $0.insulin.countsTowardPrediction }.reduce(0) { $0 + $1.units }
+            if let hint = DoseHintCalculator.hint(readings: recent, highMgDl: defaults.highMarkValue, targetMgDl: defaults.experimentalDoseTargetMgDl,
+                                                  iobUnits: onBoard, insulinSensitivityMgDl: parameters.insulinSensitivityMgDl,
+                                                  carbRatio: parameters.carbRatio, correctInRange: defaults.experimentalDoseHintCorrectInRange, now: now) {
+                plots.doseHint = GlucoseChartExperimentalPlots.DoseHint(isCarbs: hint.isCarbs, amount: hint.amount, targetMgDl: hint.targetMgDl,
+                                                                        minutesAhead: hint.minutesAhead)
+            }
         }
 
         if wantsInsulin {

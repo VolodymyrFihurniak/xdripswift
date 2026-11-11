@@ -416,6 +416,61 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertEqual(grouped.first?.date, start.addingTimeInterval(60))
     }
 
+    // MARK: Dose hints (JugglucoNG StateDoseHintCalculator)
+
+    private func line(from mgDl: Double, slope: Double, minutes: Int = 30) -> [(date: Date, mgDl: Double)] {
+        (0...minutes / 5).map { (date: start.addingTimeInterval(Double($0) * 300), mgDl: mgDl + slope * Double($0) * 5) }
+    }
+
+    private func hint(_ readings: [(date: Date, mgDl: Double)], iob: Double, inRange: Bool = false) -> DoseHintCalculator.Hint? {
+        DoseHintCalculator.hint(readings: readings, highMgDl: 180, targetMgDl: 90, iobUnits: iob, insulinSensitivityMgDl: 54,
+                                carbRatio: 10, correctInRange: inRange, now: start.addingTimeInterval(30 * 60))
+    }
+
+    func testCarbHintForAFallWithInsulinOnBoard() throws {
+        // 165 falling 1.5 mg/dL a minute to 120: 20 minutes from the target of 90; in 45 minutes at 52.5.
+        let falling = line(from: 165, slope: -1.5)
+        XCTAssertEqual(try XCTUnwrap(DoseHintCalculator.recencyWeightedSlope(falling)), -1.5, accuracy: 1e-9)
+        let carbs = try XCTUnwrap(hint(falling, iob: 2))
+        XCTAssertTrue(carbs.isCarbs)
+        XCTAssertEqual(carbs.minutesAhead, 20)
+        // 37.5 mg/dL to make up: 37.5 / 54 x 10 g = 6.9, rounded up.
+        XCTAssertEqual(carbs.amount, 7)
+        // A slower fall needs under 5 g: nothing worth showing.
+        XCTAssertNil(hint(line(from: 150, slope: -1), iob: 2))
+        // Nothing on board: the fall is not insulin's doing, no hint.
+        XCTAssertNil(hint(falling, iob: 0))
+    }
+
+    func testInsulinHintOnlyWhenHighAndNotComingDown() throws {
+        let high = line(from: 250, slope: 0)
+        // (250 - 90) / 54 = 2.96 U, minus 1 U on board = 1.96, down to 1.5.
+        let correction = try XCTUnwrap(hint(high, iob: 1))
+        XCTAssertFalse(correction.isCarbs)
+        XCTAssertEqual(correction.amount, 1.5)
+        XCTAssertNil(correction.minutesAhead)
+        // Enough on board already.
+        XCTAssertNil(hint(high, iob: 3))
+        // In range: only when asked, and only well above the target.
+        let inRange = line(from: 160, slope: 0)
+        XCTAssertNil(hint(inRange, iob: 0))
+        XCTAssertEqual(hint(inRange, iob: 0, inRange: true)?.amount, 1)
+        // Near the target nothing is hinted in either direction.
+        XCTAssertNil(hint(line(from: 105, slope: 0), iob: 0, inRange: true))
+    }
+
+    func testRestrictedModePINIsFourToEightDigits() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "RestrictedModeTests"))
+        defaults.removePersistentDomain(forName: "RestrictedModeTests")
+        XCTAssertNil(RestrictedMode.pin(defaults: defaults))
+        XCTAssertFalse(RestrictedMode.setPIN("123", defaults: defaults))
+        XCTAssertFalse(RestrictedMode.setPIN("12a4", defaults: defaults))
+        XCTAssertTrue(RestrictedMode.setPIN("1234", defaults: defaults))
+        XCTAssertEqual(RestrictedMode.pin(defaults: defaults), "1234")
+        RestrictedMode.setPIN(nil, defaults: defaults)
+        XCTAssertNil(RestrictedMode.pin(defaults: defaults))
+    }
+
     // MARK: Power saving
 
     func testPowerSavingNeverAppliesWhileChargingAndAutomaticFollowsLowPowerOrBattery() {
@@ -685,7 +740,7 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertLessThan(index, aboutIndex)
         XCTAssertEqual(sections[index].section().rows.map(\.id),
                        ["experimental.chartStyle", "experimental.chartCursor", "experimental.prediction", "experimental.insulins",
-                        "experimental.alerts", "experimental.powerSaving"])
+                        "experimental.alerts", "experimental.restricted", "experimental.powerSaving"])
     }
 }
 

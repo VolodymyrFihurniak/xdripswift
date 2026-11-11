@@ -1716,6 +1716,15 @@ struct GlucoseChartExperimentalPlots {
 
     var prediction: [PredictionPoint] = []
     var insulin: [InsulinLayer] = []
+    /// JugglucoNG dose hint for the current state (see `DoseHintCalculator`), when enabled.
+    struct DoseHint: Equatable {
+        let isCarbs: Bool
+        let amount: Double
+        let targetMgDl: Double
+        let minutesAhead: Int?
+    }
+
+    var doseHint: DoseHint?
     /// Every insulin still on board now, largest first, whatever window the chart shows.
     var onBoardNow: [OnBoard] = []
     var drawsGlucoseAsLine = false
