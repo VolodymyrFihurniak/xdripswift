@@ -938,8 +938,8 @@ struct GlucoseChartView: View {
 
                 // Basal injections share the bolus row; draw them first so carbs and boluses stay in front.
                 treatmentSymbolMarks(points: visibleTreatmentPoints.basalInjections, systemImage: GlucoseChartTreatmentStyle.basalInjectionSymbol, size: { _ in treatmentSymbolSize() * GlucoseChartTreatmentStyle.basalInjectionScale }, color: GlucoseChartTreatmentStyle.basalInjectionColor, labelPosition: .bottom, xOffset: { basalInjectionOffset($0, boluses: visibleTreatmentPoints.boluses) })
-                treatmentSymbolMarks(points: visibleTreatmentPoints.carbs, systemImage: GlucoseChartTreatmentStyle.carbsSymbol, size: carbsSymbolSizing.size, color: GlucoseChartTreatmentStyle.carbsColor, labelPosition: .top, minimumLabelValue: smallCarbTreatmentThreshold)
-                treatmentSymbolMarks(points: visibleTreatmentPoints.boluses, systemImage: GlucoseChartTreatmentStyle.bolusSymbol, size: bolusSymbolSizing.size, color: GlucoseChartTreatmentStyle.bolusColor, labelPosition: .bottom, minimumLabelValue: smallBolusTreatmentThreshold)
+                treatmentSymbolMarks(points: groupedTreatmentPoints(visibleTreatmentPoints.carbs, fractionDigits: 0, idPrefix: "carbs-group"), systemImage: GlucoseChartTreatmentStyle.carbsSymbol, size: carbsSymbolSizing.size, color: GlucoseChartTreatmentStyle.carbsColor, labelPosition: .top, minimumLabelValue: smallCarbTreatmentThreshold)
+                treatmentSymbolMarks(points: groupedTreatmentPoints(visibleTreatmentPoints.boluses, fractionDigits: 2, idPrefix: "bolus-group"), systemImage: GlucoseChartTreatmentStyle.bolusSymbol, size: bolusSymbolSizing.size, color: GlucoseChartTreatmentStyle.bolusColor, labelPosition: .bottom, minimumLabelValue: smallBolusTreatmentThreshold)
             }
 
             // Extra glucose-like data sets, such as original/raw glucose values, can provide lines, points or bordered points.
@@ -1366,6 +1366,16 @@ struct GlucoseChartView: View {
         }
     }
 
+    /// JugglucoNG groups journal markers that would overlap: doses of one kind closer together than
+    /// a marker's width become one marker at the newest of them, labelled with their total and count
+    /// ("7.5 ×3"). Only the main chart groups; the total also sets the marker's size.
+    private func groupedTreatmentPoints(_ points: [GlucoseChartTreatmentPoint], fractionDigits: Int, idPrefix: String) -> [GlucoseChartTreatmentPoint] {
+        guard usesMainChartYAxisContext, points.count > 1 else { return points }
+        let pointsPerSecond = chartWidth / max(visibleEndDate.timeIntervalSince(visibleStartDate), 60)
+        return GlucoseChartExperimentalPlots.grouped(points, minimumSeconds: GlucoseChartExperimentalPlots.markerGroupingWidth / max(pointsPerSecond, 0.000001),
+                                                     fractionDigits: fractionDigits, idPrefix: idPrefix)
+    }
+
     /// Moves a basal injection sideways when a bolus marker on the same row would cover it,
     /// so the two insulins sit side by side: before the bolus when injected earlier, else after it.
     private func basalInjectionOffset(_ point: GlucoseChartTreatmentPoint, boluses: [GlucoseChartTreatmentPoint]) -> Double {
@@ -1657,6 +1667,8 @@ struct GlucoseChartExperimentalPlots {
         let units: Double
         /// When its last dose stops acting; nil where only the amount is known.
         var activeUntil: Date?
+        /// JugglucoNG eIOB: the units weighted by how hard the doses act now.
+        var effectiveUnits: Double = 0
     }
 
     struct LinePoint: Identifiable {
@@ -1669,6 +1681,34 @@ struct GlucoseChartExperimentalPlots {
         let id: Int
         let color: Color
         let points: [LinePoint]
+    }
+
+    /// Markers of one kind closer than this many points are drawn as one.
+    static let markerGroupingWidth: Double = 16
+
+    /// Merges consecutive points less than `minimumSeconds` after the first of their group.
+    static func grouped(_ points: [GlucoseChartTreatmentPoint], minimumSeconds: TimeInterval, fractionDigits: Int,
+                        idPrefix: String) -> [GlucoseChartTreatmentPoint] {
+        var result: [GlucoseChartTreatmentPoint] = []
+        var group: [GlucoseChartTreatmentPoint] = []
+        func close() {
+            guard let last = group.last else { return }
+            if group.count == 1 {
+                result.append(last)
+            } else {
+                let total = group.reduce(0) { $0 + $1.treatmentValue }
+                let text = total.formatted(.number.precision(.fractionLength(0...fractionDigits)))
+                result.append(GlucoseChartTreatmentPoint(date: last.date, yValue: last.yValue, treatmentValue: total,
+                                                         label: "\(text) ×\(group.count)", notes: nil, idPrefix: idPrefix))
+            }
+            group = []
+        }
+        for point in points.sorted(by: { $0.date < $1.date }) {
+            if let first = group.first, point.date.timeIntervalSince(first.date) >= minimumSeconds { close() }
+            group.append(point)
+        }
+        close()
+        return result
     }
 
     /// JugglucoNG `GlucoseChartGap.THRESHOLD_MS`: readings further apart are not connected.

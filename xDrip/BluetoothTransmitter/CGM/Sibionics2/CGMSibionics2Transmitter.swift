@@ -183,7 +183,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     override func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         super.peripheral(peripheral, didDiscoverCharacteristicsFor: service, error: error)
         if error == nil, service.uuid == Sibionics2Battery.serviceUUID {
-            batteryLevelCharacteristic = service.characteristics?.first { $0.uuid == Sibionics2Battery.levelCharacteristicUUID }
+            // JugglucoNG shows the battery percentage for Sibionics 2 only; a Sibionics 1 is not asked.
+            batteryLevelCharacteristic = variant == .sibionics2
+                ? service.characteristics?.first { $0.uuid == Sibionics2Battery.levelCharacteristicUUID } : nil
             if let batteryLevelCharacteristic {
                 lastBatteryReadAt = Date()
                 peripheral.readValue(for: batteryLevelCharacteristic)

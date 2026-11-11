@@ -173,3 +173,26 @@ for an imported note once uploaded, so Tresiba and the other basal insulins had 
 and no insulin on board. Basal injections now always count. With the insulin layers on, xDrip's
 own IOB curve is not drawn (it covered them in the same colour); COB stays.
 
+## Additions from JugglucoNG 1.2–1.3
+
+- **Predicted low: Consider IOB and recent glucose** (JugglucoNG `ForecastLowConfidencePolicy`,
+  off by default). The alert then needs a falling trend (at least 0.5 mg/dL a minute over the
+  last ten minutes) and carbs on board that do not cover the shortfall. It alerts at once within
+  15 mg/dL of the value, when the current rate reaches it within ten minutes, or when insulin
+  acting in the next 30 minutes explains half the distance (and 10 mg/dL). With no insulin on
+  board, a fall that only returns from a recent rise (quiet five-minute baseline, then at least
+  15 mg/dL up in 3–15 minutes) waits while glucose is above baseline − 3 mg/dL. Otherwise two
+  readings a minute apart must agree. Low and Very Low are untouched.
+- **Alarms** screen: *No High alarm while falling* (High stays quiet while glucose falls by
+  0.5 mg/dL a minute or more; Very High always alarms) and *Notify when signal is restored* (one
+  notification when readings return after a gap as long as the Missed Reading delay, or 30 min).
+- **eIOB** on the active insulin card: IOB weighted by how hard each dose is acting now.
+- **Nightscout**: the forecast devicestatus also carries `openaps.iob.iob` and `suggested.COB`
+  from the logged treatments.
+- **Grouped markers**: boluses (and carbs) closer together than a marker's width are drawn as one
+  marker with their total and count, e.g. `7.5 ×3`.
+- Sibionics battery level is read and shown for Sibionics 2 only, as JugglucoNG does.
+
+Sensor expiry already has two alarms upstream (Sensor Ending Soon, Expected Expiry), so
+JugglucoNG's multiple expiry warnings were not ported.
+

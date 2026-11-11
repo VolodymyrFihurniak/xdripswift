@@ -1007,7 +1007,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                 (row.id != "sibionics2-label-scan" || !isSibionics1)
             }
         )
-        return [connectionSection, sibionicsDeviceInfoSection(address: address, isSibionics1: isSibionics1), settingsSection]
+        let deviceInfoSection = sibionicsDeviceInfoSection(address: address, isSibionics1: isSibionics1)
+        return [connectionSection] + (deviceInfoSection.rows.isEmpty ? [] : [deviceInfoSection]) + [settingsSection]
     }
 
     private func makeGenericHeartbeatSettingsSections() -> [BluetoothPeripheralDetailSection] {
@@ -1040,13 +1041,14 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
     private func sibionicsDeviceInfoSection(address: String, isSibionics1: Bool) -> BluetoothPeripheralDetailSection {
         var rows = [BluetoothPeripheralDetailRow]()
         let battery = Sibionics2DeviceStatus.battery(for: address)
-        rows.append(row(
+        // Battery is a Sibionics 2 value, as in JugglucoNG.
+        if !isSibionics1 { rows.append(row(
             id: "sibionics-battery",
             title: Texts_BluetoothPeripheralView.sibionicsBattery,
             detail: battery.map { "\($0.percentage) % · \(RelativeDateTimeFormatter().localizedString(for: $0.readAt, relativeTo: Date()))" }
                 ?? Texts_BluetoothPeripheralView.sibionicsNotReported,
             detailIndicator: battery.map { SettingsIndicator(color: $0.percentage <= 10 ? Color.red : $0.percentage <= 25 ? Color.orange : Color.green) }
-        ))
+        )) }
         let fields: [(Sibionics2DeviceStatus.Field, String)] = [
             (.modelNumber, Texts_BluetoothPeripheralView.sibionicsModel),
             (.firmwareRevision, Texts_BluetoothPeripheralView.sibionicsFirmware),

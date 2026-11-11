@@ -559,6 +559,7 @@ struct ActiveInsulinCard: View {
 
     private var iob: Double { onBoard.filter(\.countsTowardIOB).reduce(0) { $0 + $1.units } }
     private var basal: Double { onBoard.filter { !$0.countsTowardIOB }.reduce(0) { $0 + $1.units } }
+    private var effective: Double { onBoard.filter(\.countsTowardIOB).reduce(0) { $0 + $1.effectiveUnits } }
 
     var body: some View {
         Button {
@@ -569,6 +570,11 @@ struct ActiveInsulinCard: View {
                     if iob > ChartCursorCard.minimumUnits {
                         Text(String(format: ChartCursorCard.iobFormat, ChartCursorCard.units(iob)))
                             .fontWeight(.semibold)
+                    }
+                    if iob > ChartCursorCard.minimumUnits {
+                        // How much of it is working right now (JugglucoNG eIOB).
+                        Text(String(format: ChartCursorCard.eiobFormat, ChartCursorCard.units(effective)))
+                            .foregroundStyle(ConstantsAppColors.secondaryText)
                     }
                     if basal > ChartCursorCard.minimumUnits {
                         Text(String(format: ChartCursorCard.basalFormat, ChartCursorCard.units(basal)))
@@ -627,6 +633,7 @@ struct ChartCursorCard: View {
 
     static let minimumUnits = 0.005
     static var iobFormat: String { ExperimentalTexts.text("iobValue", "IOB %@") }
+    static var eiobFormat: String { ExperimentalTexts.text("eiobValue", "eIOB %@") }
     static var cobFormat: String { ExperimentalTexts.text("cobValue", "COB %@") }
     static var basalFormat: String { ExperimentalTexts.text("basalOnBoardValue", "Basal %@") }
     static var untilFormat: String { ExperimentalTexts.text("activeUntil", "until %@") }

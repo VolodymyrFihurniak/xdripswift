@@ -286,6 +286,136 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertEqual(treatments.first?.insulin(bolusDefault: .aspart, basalDefault: .glargineU100), .degludec)
     }
 
+    // MARK: Predicted low evidence (JugglucoNG ForecastLowConfidencePolicy)
+
+    private func evidence(_ policy: inout PredictedLowEvidence, current: Double, projected: Double = 65, rate: Double = -1,
+                          at minutes: Double = 0, next30: Double? = nil, classic: Double? = nil, cob: Double = 0,
+                          baseline: Double? = nil) -> PredictedLowEvidence.Decision {
+        let date = start.addingTimeInterval(minutes * 60)
+        return policy.evaluate(currentMgDl: current, thresholdMgDl: 70, projectedMgDl: projected, rate: rate, readingDate: date, now: date,
+                               iobNext30: next30, classicIOB: classic, cobGrams: cob, carbRatio: 10, insulinSensitivityMgDl: 54,
+                               recentRiseBaseline: baseline)
+    }
+
+    func testPredictedLowEvidenceUrgentCasesAlertAtOnce() {
+        var policy = PredictedLowEvidence()
+        XCTAssertEqual(evidence(&policy, current: 85), .nearThreshold)
+        policy = PredictedLowEvidence()
+        // 30 mg/dL above at 4 mg/dL a minute: 7.5 minutes away.
+        XCTAssertEqual(evidence(&policy, current: 100, rate: -4), .imminent)
+        policy = PredictedLowEvidence()
+        // 1 U in the next 30 minutes at 54 mg/dL per unit explains more than half of 50 mg/dL.
+        XCTAssertEqual(evidence(&policy, current: 120, next30: 1, classic: 2), .insulinSupported)
+    }
+
+    func testPredictedLowEvidenceNeedsASecondReadingOtherwise() {
+        var policy = PredictedLowEvidence()
+        XCTAssertEqual(evidence(&policy, current: 120), .confirming)
+        // The same reading again (a second check) does not confirm.
+        XCTAssertEqual(evidence(&policy, current: 120), .confirming)
+        XCTAssertEqual(evidence(&policy, current: 115, at: 5), .confirmed)
+        // A rise starts over.
+        XCTAssertEqual(evidence(&policy, current: 118, at: 10), .confirming)
+    }
+
+    func testPredictedLowEvidenceRejectsFlatTrendAndCoveredByCarbs() {
+        var policy = PredictedLowEvidence()
+        XCTAssertEqual(evidence(&policy, current: 120, rate: -0.3), .noCandidate)
+        // 5 g at 10 g/U and 54 mg/dL per unit is 27 mg/dL: more than the 5 mg/dL shortfall.
+        XCTAssertEqual(evidence(&policy, current: 85, cob: 5), .coveredByCarbs)
+        XCTAssertFalse(PredictedLowEvidence.cobCoversLow(projectedMgDl: 60, thresholdMgDl: 70, cobGrams: 1, carbRatio: 10, insulinSensitivityMgDl: 54))
+        XCTAssertFalse(PredictedLowEvidence.Decision.coveredByCarbs.allowsAlert)
+        XCTAssertTrue(PredictedLowEvidence.Decision.confirmed.allowsAlert)
+    }
+
+    func testPredictedLowEvidenceWaitsForAReturnToBaselineOnlyWithoutInsulin() {
+        var policy = PredictedLowEvidence()
+        XCTAssertEqual(evidence(&policy, current: 120, next30: 0, classic: 0, baseline: 118), .returningToBaseline)
+        XCTAssertEqual(evidence(&policy, current: 110, at: 5, next30: 0, classic: 0, baseline: 118), .belowBaseline)
+        policy = PredictedLowEvidence()
+        // Unknown insulin does not qualify for the wait.
+        XCTAssertEqual(evidence(&policy, current: 120, baseline: 118), .confirming)
+    }
+
+    func testRecentRiseBaselineFindsAQuietBaselineBeforeARise() {
+        // Ten quiet minutes at 100, a rise to 120 in five minutes, then two minutes of falling.
+        let values: [Double] = Array(repeating: 100, count: 10) + [104, 108, 112, 116, 120, 116, 112]
+        let readings = values.enumerated().map { (date: start.addingTimeInterval(Double($0.offset) * 60), mgDl: $0.element) }
+        let now = start.addingTimeInterval(16 * 60)
+        XCTAssertEqual(PredictedLowEvidence.recentRiseBaseline(readings: readings, now: now), 100)
+        // A steady fall has no rise to return from.
+        let falling = (0..<17).map { (date: start.addingTimeInterval(Double($0) * 60), mgDl: 150 - Double($0) * 2) }
+        XCTAssertNil(PredictedLowEvidence.recentRiseBaseline(readings: falling, now: now))
+        XCTAssertEqual(try XCTUnwrap(PredictedLowEvidence.rate(readings: falling, now: now)), -2, accuracy: 1e-9)
+    }
+
+    func testInsulinAndCarbsOnBoardForTheEvidence() {
+        let model = ExperimentalPredictionModel()
+        let treatments = [ExperimentalTreatment(date: start, amount: 6, kind: .bolus, notes: nil),
+                          ExperimentalTreatment(date: start, amount: 20, kind: .basalInjection, notes: nil),
+                          ExperimentalTreatment(date: start, amount: 35, kind: .carbs, notes: nil)]
+        let insulin = PredictedLowEvidence.insulin(treatments: treatments, model: model, at: start.addingTimeInterval(3600))
+        // Aspart after an hour (Python port): 4.5093 U left; basal does not count.
+        XCTAssertEqual(insulin.classic, 4.5093, accuracy: 0.001)
+        XCTAssertGreaterThan(insulin.next30, 0)
+        XCTAssertLessThan(insulin.next30, insulin.classic)
+        // 35 g at 35 g/h is absorbed linearly over an hour.
+        XCTAssertEqual(PredictedLowEvidence.carbsOnBoard(treatments: treatments, model: model, at: start.addingTimeInterval(1800)), 17.5, accuracy: 1e-9)
+    }
+
+    // MARK: Alarm additions
+
+    func testHighAlarmIsQuietOnlyWhileFalling() {
+        let earlier = start, later = start.addingTimeInterval(300)
+        XCTAssertTrue(AlertKind.isFalling(newest: (later, 197), previous: (earlier, 200)))
+        XCTAssertFalse(AlertKind.isFalling(newest: (later, 199), previous: (earlier, 200)))
+        XCTAssertFalse(AlertKind.isFalling(newest: (later, 205), previous: (earlier, 200)))
+        // Readings too far apart say nothing about the trend.
+        XCTAssertFalse(AlertKind.isFalling(newest: (start.addingTimeInterval(900), 150), previous: (earlier, 200)))
+    }
+
+    func testSignalRestoredNeedsALossAndNotifiesOncePerReading() {
+        let previous = start, newest = start.addingTimeInterval(40 * 60)
+        XCTAssertTrue(AlertManager.signalWasRestored(newest: newest, previous: previous, lossMinutes: 30, lastNotified: nil))
+        XCTAssertFalse(AlertManager.signalWasRestored(newest: newest, previous: previous, lossMinutes: 30, lastNotified: newest))
+        XCTAssertFalse(AlertManager.signalWasRestored(newest: start.addingTimeInterval(300), previous: previous, lossMinutes: 30, lastNotified: nil))
+        XCTAssertFalse(AlertManager.signalWasRestored(newest: newest, previous: nil, lossMinutes: 30, lastNotified: nil))
+    }
+
+    // MARK: eIOB, Nightscout IOB/COB, grouped markers
+
+    func testEffectiveInsulinIsZeroAtTheDoseAndNeverAboveIOB() throws {
+        let treatments = [ExperimentalTreatment(date: start, amount: 6, kind: .bolus, notes: nil)]
+        let atDose = try XCTUnwrap(InsulinActivityStack.onBoard(treatments: treatments, at: start, bolusDefault: .aspart, basalDefault: .glargineU100).first)
+        XCTAssertEqual(atDose.units, 6, accuracy: 1e-9)
+        XCTAssertEqual(atDose.effectiveUnits, 0, accuracy: 1e-9)
+        let later = try XCTUnwrap(InsulinActivityStack.onBoard(treatments: treatments, at: start.addingTimeInterval(3600), bolusDefault: .aspart, basalDefault: .glargineU100).first)
+        XCTAssertGreaterThan(later.effectiveUnits, 0)
+        XCTAssertLessThanOrEqual(later.effectiveUnits, later.units)
+    }
+
+    func testDeviceStatusCarriesIOBAndCOBWhenGiven() throws {
+        let points = (0...2).map { GlucosePredictionPoint(date: start.addingTimeInterval(Double($0) * 300), value: 100, confidence: 1, unclampedValue: 100) }
+        let status = try XCTUnwrap(ExperimentalNightscoutPrediction.deviceStatus(forecast: points, now: start, iob: 2.345, cob: 17.54))
+        let openaps = try XCTUnwrap(status["openaps"] as? [String: Any])
+        XCTAssertEqual((openaps["iob"] as? [String: Any])?["iob"] as? Double, 2.35)
+        let suggested = try XCTUnwrap(openaps["suggested"] as? [String: Any])
+        XCTAssertEqual(suggested["COB"] as? Double, 17.5)
+        XCTAssertEqual(suggested["IOB"] as? Double, 2.35)
+        let plain = try XCTUnwrap(ExperimentalNightscoutPrediction.deviceStatus(forecast: points, now: start)?["openaps"] as? [String: Any])
+        XCTAssertNil(plain["iob"])
+    }
+
+    func testOverlappingMarkersBecomeOneWithTotalAndCount() {
+        func point(_ seconds: TimeInterval, _ value: Double) -> GlucoseChartTreatmentPoint {
+            GlucoseChartTreatmentPoint(date: start.addingTimeInterval(seconds), yValue: 100, treatmentValue: value, label: "\(Int(value))", notes: nil, idPrefix: "bolus")
+        }
+        let grouped = GlucoseChartExperimentalPlots.grouped([point(0, 2), point(60, 3), point(3600, 4)], minimumSeconds: 300, fractionDigits: 2, idPrefix: "group")
+        XCTAssertEqual(grouped.map(\.treatmentValue), [5, 4])
+        XCTAssertEqual(grouped.map(\.label), ["5 ×2", "4"])
+        XCTAssertEqual(grouped.first?.date, start.addingTimeInterval(60))
+    }
+
     // MARK: Power saving
 
     func testPowerSavingNeverAppliesWhileChargingAndAutomaticFollowsLowPowerOrBattery() {
@@ -537,7 +667,7 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertLessThan(index, aboutIndex)
         XCTAssertEqual(sections[index].section().rows.map(\.id),
                        ["experimental.chartStyle", "experimental.chartCursor", "experimental.prediction", "experimental.insulins",
-                        "experimental.powerSaving"])
+                        "experimental.alerts", "experimental.powerSaving"])
     }
 }
 

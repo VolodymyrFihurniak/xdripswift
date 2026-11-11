@@ -27,6 +27,11 @@ extension SettingsViewGroupedSettingsViewModel {
                     settingsScreen: { ExperimentalSettingsViewModel.insulinScreen }
                 ),
                 SettingsGroupedRow(
+                    id: "experimental.alerts",
+                    title: ExperimentalTexts.text("alerts", "Alarms"),
+                    settingsScreen: { ExperimentalSettingsViewModel.alertsScreen }
+                ),
+                SettingsGroupedRow(
                     id: "experimental.powerSaving",
                     title: ExperimentalTexts.text("powerSaving", "Power saving"),
                     detail: { ExperimentalSettingsViewModel.title(for: UserDefaults.standard.experimentalPowerSavingMode) },
@@ -39,7 +44,7 @@ extension SettingsViewGroupedSettingsViewModel {
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving }
+    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving, alerts }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
@@ -55,6 +60,12 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         SettingsScreen(title: ExperimentalTexts.text("insulins", "Insulins"),
                        introduction: { ExperimentalTexts.text("insulinsIntroduction", "Experimental. Each insulin has its own action curve, from JugglucoNG's catalogue. A bolus or basal injection uses the insulin named in its notes; the treatment editor offers a choice. Otherwise the defaults below apply.") },
                        providers: { [ExperimentalSettingsViewModel(group: .insulins)] })
+    }
+
+    static var alertsScreen: SettingsScreen {
+        SettingsScreen(title: ExperimentalTexts.text("alerts", "Alarms"),
+                       introduction: { ExperimentalTexts.text("alertsIntroduction", "Experimental additions to the alarms, from JugglucoNG. Both are off by default.") },
+                       providers: { [ExperimentalSettingsViewModel(group: .alerts)] })
     }
 
     static var powerSavingScreen: SettingsScreen {
@@ -206,7 +217,10 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                 let choices = PredictedLowAlert.leadChoices
                                 guard choices.indices.contains(index) else { return }
                                 UserDefaults.standard.experimentalPredictedLowLeadMinutes = choices[index]
-                            }))
+                            })),
+                SettingsRow(id: "experimental.predictedLow.evidence", title: ExperimentalTexts.text("predictedLowEvidence", "Consider IOB and recent glucose"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalPredictedLowEvidence },
+                                             setIsOn: { UserDefaults.standard.experimentalPredictedLowEvidence = $0 }))
             ]
         case .predictionNightscout:
             return [
@@ -224,6 +238,15 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                             control: .custom(content: {
                                 AnyView(NavigationLink(ExperimentalTexts.text("accuracyShow", "Prediction accuracy")) { ExperimentalPredictionAccuracyView() })
                             }))
+            ]
+        case .alerts:
+            return [
+                SettingsRow(id: "experimental.alerts.muteHighFalling", title: ExperimentalTexts.text("muteHighFalling", "No High alarm while falling"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalMuteHighWhileFalling },
+                                             setIsOn: { UserDefaults.standard.experimentalMuteHighWhileFalling = $0 })),
+                SettingsRow(id: "experimental.alerts.signalRestored", title: ExperimentalTexts.text("signalRestored", "Notify when signal is restored"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalSignalRestoredNotification },
+                                             setIsOn: { UserDefaults.standard.experimentalSignalRestoredNotification = $0 }))
             ]
         case .powerSaving:
             return [
@@ -353,7 +376,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
 
     func sectionTitle() -> String? {
         switch group {
-        case .predictionMain, .insulins, .powerSaving: return nil
+        case .predictionMain, .insulins, .powerSaving, .alerts: return nil
         case .predictionAdaptive: return ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction")
         case .predictionModel: return ExperimentalTexts.text("predictionModel", "Model")
         case .predictionAlert: return Texts_Alerts.predictedLowAlertTitle
@@ -372,10 +395,13 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("predictionModelFooter", "Insulin sensitivity: how far one unit lowers glucose. Carb ratio: grams covered by one unit. Absorption sets how long carbs take to act. Periods change these by time of day; each treatment uses the values in force when it was logged. Body weight sharpens curves measured per kilogram (Fiasp, Levemir, regular insulin). Protein and fat add a late rise for carb entries that list them. Basal and premixed insulins are not part of the forecast, as in JugglucoNG.")
         case .predictionAlert:
             return ExperimentalTexts.text("predictedLowFooter", "Warns when the forecast falls below the alarm value within this time while glucose is still above it. Turn it on and set the value, sound and snooze in Settings > Alerts > Predicted Low. It uses the model above even when the prediction is not drawn.")
+                + "\n\n" + ExperimentalTexts.text("predictedLowEvidenceFooter", "Consider IOB and recent glucose cuts false warnings: the alert then needs a falling trend and carbs on board that do not cover the drop. It warns at once when glucose is within 15 mg/dL (0.8 mmol/L) of the value, would reach it within 10 minutes, or insulin acting in the next 30 minutes explains the drop. With no insulin on board, a fall that only returns from a recent rise waits. Otherwise a second reading must confirm it. The Low and Very Low alarms are not affected.")
         case .predictionNightscout:
             return ExperimentalTexts.text("predictionNightscoutFooter", "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.")
         case .predictionAccuracy:
             return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
+        case .alerts:
+            return ExperimentalTexts.text("alertsFooter", "No High alarm while falling: the High alarm stays quiet while glucose is already falling by at least 0.5 mg/dL (0.03 mmol/L) a minute; Very High always alarms. Notify when signal is restored: one notification when readings come back after a gap at least as long as the Missed Reading alarm's delay (30 minutes when that alarm is off).")
         case .powerSaving:
             return ExperimentalTexts.text("powerSavingFooter", "While it saves: Nightscout, Apple Health and Dexcom Share get one reading every five minutes instead of every reading; the Live Activity and widgets refresh at most every five minutes, at once when glucose leaves the target range; the Home chart redraws its forecast and insulin every five minutes; the adaptive prediction relearns only while charging. Automatic saves while iPhone Low Power Mode is on or the battery is at 25 % or less. Nothing is saved while the phone charges.")
         case .insulins:

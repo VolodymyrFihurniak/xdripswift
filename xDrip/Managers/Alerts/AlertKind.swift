@@ -320,6 +320,14 @@ public enum AlertKind: Int, CaseIterable {
         }
     }
     
+    /// Falling by at least 0.5 mg/dL a minute (JugglucoNG's flat-arrow limit) between two readings
+    /// at most 5 minutes (+10 s) apart.
+    static func isFalling(newest: (date: Date, mgDl: Double), previous: (date: Date, mgDl: Double)) -> Bool {
+        let minutes = newest.date.timeIntervalSince(previous.date) / 60
+        guard minutes > 0, minutes <= 5 + 10.0 / 60, newest.mgDl > 0, previous.mgDl > 0 else { return false }
+        return (previous.mgDl - newest.mgDl) / minutes >= 0.5
+    }
+
     /// verify if alert needs to be fired or not.
     ///
     /// The caller of this function must have checked already checked that lastBgReading is recent and that it has a running sensor - and that calibration is also for the last sensor
@@ -372,6 +380,15 @@ public enum AlertKind: Int, CaseIterable {
         case .high, .veryhigh:
             // if alertEntry not enabled, return false
             if !currentAlertEntry.alertType.enabled { return (false, nil, nil, nil) }
+            // Experimental (JugglucoNG): the high alarm stays quiet while glucose is already falling
+            // by at least 0.5 mg/dL a minute between readings at most 5 minutes apart. Very high
+            // always alarms.
+            if self == .high, UserDefaults.standard.experimentalMuteHighWhileFalling,
+               let lastBgReading = lastBgReading, let lastButOneBgReading = lastButOneBgReading,
+               AlertKind.isFalling(newest: (lastBgReading.timeStamp, lastBgReading.finalValue),
+                                   previous: (lastButOneBgReading.timeStamp, lastButOneBgReading.finalValue)) {
+                return (false, nil, nil, nil)
+            }
                 
             if let lastBgReading = lastBgReading {
                 // first check if calculatedValue > 0.0, never know that it's not been checked by caller

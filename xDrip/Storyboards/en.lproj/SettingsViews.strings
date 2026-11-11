@@ -640,3 +640,11 @@
 "experimental.powerSavingMode" = "Mode";
 "experimental.powerSavingNow" = "Now";
 "experimental.powerSavingFooter" = "While it saves: Nightscout, Apple Health and Dexcom Share get one reading every five minutes instead of every reading; the Live Activity and widgets refresh at most every five minutes, at once when glucose leaves the target range; the Home chart redraws its forecast and insulin every five minutes; the adaptive prediction relearns only while charging. Automatic saves while iPhone Low Power Mode is on or the battery is at 25 % or less. Nothing is saved while the phone charges.";
+"experimental.predictedLowEvidence" = "Consider IOB and recent glucose";
+"experimental.predictedLowEvidenceFooter" = "Consider IOB and recent glucose cuts false warnings: the alert then needs a falling trend and carbs on board that do not cover the drop. It warns at once when glucose is within 15 mg/dL (0.8 mmol/L) of the value, would reach it within 10 minutes, or insulin acting in the next 30 minutes explains the drop. With no insulin on board, a fall that only returns from a recent rise waits. Otherwise a second reading must confirm it. The Low and Very Low alarms are not affected.";
+"experimental.alerts" = "Alarms";
+"experimental.alertsIntroduction" = "Experimental additions to the alarms, from JugglucoNG. Both are off by default.";
+"experimental.muteHighFalling" = "No High alarm while falling";
+"experimental.signalRestored" = "Notify when signal is restored";
+"experimental.alertsFooter" = "No High alarm while falling: the High alarm stays quiet while glucose is already falling by at least 0.5 mg/dL (0.03 mmol/L) a minute; Very High always alarms. Notify when signal is restored: one notification when readings come back after a gap at least as long as the Missed Reading alarm's delay (30 minutes when that alarm is off).";
+"experimental.eiobValue" = "eIOB %@";

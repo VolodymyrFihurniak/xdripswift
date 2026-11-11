@@ -236,7 +236,7 @@
 "sibionics.manualSensitivityOff" = "Off";
 "sibionics.manualSensitivityMessage" = "A value from 0.8 to 2.5 overrides the probe code, label and sensor name, and history is recalculated with it. Leave empty to use the codes again.";
 "sibionics.deviceInfoTitle" = "Sensor information";
-"sibionics.deviceInfoFooter" = "Reported by the sensor over Bluetooth. The battery level is read at each connection and every six hours; Sibionics 1 may not report it.";
+"sibionics.deviceInfoFooter" = "Reported by the sensor over Bluetooth. The battery level (Sibionics 2 only) is read at each connection and every six hours.";
 "sibionics.battery" = "Sensor battery";
 "sibionics.notReported" = "Not reported yet";
 "sibionics.model" = "Model";

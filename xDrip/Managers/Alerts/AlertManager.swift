@@ -193,6 +193,8 @@ public class AlertManager: NSObject {
                     lastButOneBgReading = latestBgReadings[1]
                 }
 
+                notifySignalRestoredIfNeeded(newest: lastBgReading.timeStamp, previous: lastButOneBgReading?.timeStamp)
+
                 // alerts are checked in order of importance - there should be only one alert raised, except missed reading alert which will always be checked.
                 
                 // create helper to check and fire alerts
@@ -860,6 +862,31 @@ public class AlertManager: NSObject {
         }
     }
     
+    /// Experimental (JugglucoNG "Signal restored"): one quiet notification when a reading arrives
+    /// after a loss at least as long as the Missed Reading alarm's delay (30 minutes when that
+    /// alarm is off). A first reading, with nothing before it, is not a restoration.
+    private func notifySignalRestoredIfNeeded(newest: Date, previous: Date?) {
+        guard UserDefaults.standard.experimentalSignalRestoredNotification else { return }
+        let (entry, _) = alertEntriesAccessor.getCurrentAndNextAlertEntry(forAlertKind: .missedreading, forWhen: Date(), alertTypesAccessor: alertTypesAccessor)
+        let lossMinutes = !entry.isDisabled && entry.alertType.enabled && entry.value > 0 ? Double(entry.value) : 30
+        let key = "experimentalSignalRestoredLastReading"
+        guard AlertManager.signalWasRestored(newest: newest, previous: previous, lossMinutes: lossMinutes,
+                                             lastNotified: UserDefaults.standard.object(forKey: key) as? Date) else { return }
+        UserDefaults.standard.set(newest, forKey: key)
+        let content = UNMutableNotificationContent()
+        content.title = Texts_Alerts.signalRestoredTitle
+        if let previous {
+            content.body = String(format: Texts_Alerts.signalRestoredBody, Int((newest.timeIntervalSince(previous) / 60).rounded()))
+        }
+        content.sound = .default
+        uNUserNotificationCenter.add(UNNotificationRequest(identifier: "experimentalSignalRestored", content: content, trigger: nil))
+    }
+
+    static func signalWasRestored(newest: Date, previous: Date?, lossMinutes: Double, lastNotified: Date?) -> Bool {
+        guard let previous, lossMinutes > 0, newest.timeIntervalSince(previous) >= lossMinutes * 60 else { return false }
+        return lastNotified.map { newest > $0 } ?? true
+    }
+
     /// will check if the alert of type alertKind needs to be fired and also fires it, plays the sound, and if yes returns true, otherwise false
     /// Forecast for the predicted low alert, or nil when that alert is off or cannot fire.
     private func predictedLowForecast() -> [GlucosePredictionPoint]? {
@@ -869,9 +896,18 @@ public class AlertManager: NSObject {
         let readings = bgReadingsAccessor.getLatestBgReadings(limit: nil, fromDate: since, forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
             .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
         let treatments = PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext)
-        return ExperimentalPredictionModel(defaults: .standard).forecast(
+        let model = ExperimentalPredictionModel(defaults: .standard)
+        let forecast = model.forecast(
             readings: readings, treatments: treatments, isMmol: !UserDefaults.standard.bloodGlucoseUnitIsMgDl,
             targetLowMgDl: UserDefaults.standard.lowMarkValue, targetHighMgDl: UserDefaults.standard.highMarkValue)
+        // JugglucoNG's optional evidence check: a forecast that is not confirmed yet does not alert.
+        if UserDefaults.standard.experimentalPredictedLowEvidence {
+            let decision = PredictedLowEvidence.decide(
+                forecast: forecast, readings: readings, treatments: treatments, thresholdMgDl: Double(entry.value),
+                leadMinutes: UserDefaults.standard.experimentalPredictedLowLeadMinutes, model: model)
+            guard decision.allowsAlert else { return nil }
+        }
+        return forecast
     }
 
     private func checkAlertAndFire(alertKind: AlertKind, lastBgReading: BgReading?, lastButOneBgReading: BgReading?, lastCalibration: Calibration?, transmitterBatteryInfo: TransmitterBatteryInfo?, deviceStatus: NotLoopingDeviceStatus? = nil, forecast: [GlucosePredictionPoint]? = nil) -> Bool {
