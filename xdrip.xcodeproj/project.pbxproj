@@ -274,6 +274,7 @@
 		4B0C00252F3B000100000001 /* DexcomG6SensorLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B0C00242F3B000100000001 /* DexcomG6SensorLabelTests.swift */; };
 		4C1000012F64000100000001 /* TreatmentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1000022F64000100000001 /* TreatmentsView.swift */; };
 		4C1000032F64000100000001 /* TreatmentEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1000042F64000100000001 /* TreatmentEditorView.swift */; };
+		F0A870E11F7A5873CA43B0A9 /* FoodLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A8F6252D143E2DC4F18600 /* FoodLibrary.swift */; };
 		4C1000062F64000100000001 /* TreatmentsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1000072F64000100000001 /* TreatmentsViewModel.swift */; };
 		4C1000082F64000100000001 /* TreatmentEditorViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1000092F64000100000001 /* TreatmentEditorViewModel.swift */; };
 		4C2000012F65000100000001 /* BluetoothPeripheralsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C2000022F65000100000001 /* BluetoothPeripheralsViewModel.swift */; };
@@ -1297,6 +1298,7 @@
 		4B0C00242F3B000100000001 /* DexcomG6SensorLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DexcomG6SensorLabelTests.swift; sourceTree = "<group>"; };
 		4C1000022F64000100000001 /* TreatmentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TreatmentsView.swift; sourceTree = "<group>"; };
 		4C1000042F64000100000001 /* TreatmentEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TreatmentEditorView.swift; sourceTree = "<group>"; };
+		F0A8F6252D143E2DC4F18600 /* FoodLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodLibrary.swift; sourceTree = "<group>"; };
 		4C1000072F64000100000001 /* TreatmentsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TreatmentsViewModel.swift; sourceTree = "<group>"; };
 		4C1000092F64000100000001 /* TreatmentEditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TreatmentEditorViewModel.swift; sourceTree = "<group>"; };
 		4C2000022F65000100000001 /* BluetoothPeripheralsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothPeripheralsViewModel.swift; sourceTree = "<group>"; };
@@ -2750,6 +2752,7 @@
 			isa = PBXGroup;
 			children = (
 				4C1000042F64000100000001 /* TreatmentEditorView.swift */,
+				F0A8F6252D143E2DC4F18600 /* FoodLibrary.swift */,
 				4C1000092F64000100000001 /* TreatmentEditorViewModel.swift */,
 				4C1000022F64000100000001 /* TreatmentsView.swift */,
 				4C1000072F64000100000001 /* TreatmentsViewModel.swift */,
@@ -5252,6 +5255,7 @@
 				4C20000C2F65000100000001 /* TransmitterReadSuccessView.swift in Sources */,
 				4C1000082F64000100000001 /* TreatmentEditorViewModel.swift in Sources */,
 				4C1000032F64000100000001 /* TreatmentEditorView.swift in Sources */,
+				F0A870E11F7A5873CA43B0A9 /* FoodLibrary.swift in Sources */,
 				4C1000062F64000100000001 /* TreatmentsViewModel.swift in Sources */,
 				4C1000012F64000100000001 /* TreatmentsView.swift in Sources */,
 				4B0C00022F3B000100000001 /* SensorManagementView.swift in Sources */,

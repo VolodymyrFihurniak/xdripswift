@@ -218,3 +218,21 @@ Devices tabs open only after it is entered, and lock again when the app goes to 
 Readings, alarms, the chart and treatments stay available. The PIN is kept in the app's settings
 unencrypted; reinstalling the app removes it.
 
+## Food library
+
+In the treatment editor, a carbs entry has a **Food library** button (it needs no setting). Pick
+foods, set their amounts in grams (or tap a portion such as "+1 piece"), and **Use** fills in the
+meal's carbs — and its protein and fat when *Protein and fat* is on. The meal itself is not stored,
+only the totals; the amount last used for a food is remembered.
+
+- **Staples**: JugglucoNG's 232 common foods with values per 100 g, named in Ukrainian or English.
+- **Your own foods**: *New food*, from a nutrition label (per 100 g, optional portion weight).
+  Swipe to delete.
+- **Open Food Facts**: packaged products by name (*Search Open Food Facts*, on a button — the
+  project asks apps not to search on every keystroke) or by barcode (*Scan a barcode*, iOS 16
+  devices that support live scanning). A product you pick is kept with your own foods, so it works
+  offline next time. Products without a carbohydrate value are left out.
+
+Nothing is sent anywhere until you search or scan: a search sends the typed words, a scan sends the
+barcode, to `openfoodfacts.org`. Open Food Facts is filled in by volunteers — check the figures
+against the package.

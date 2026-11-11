@@ -1142,3 +1142,27 @@
 "experimental.restrictedSave" = "Задати PIN-код";
 "experimental.restrictedRemove" = "Прибрати PIN-код";
 "experimental.restrictedFooter" = "Коли PIN-код задано, вкладки «Налаштування» та «Пристрої» відкриваються лише після його введення; блокування повертається, коли програма переходить у фон. Показники, сигнали, графік і записи лікування залишаються доступними. Від 4 до 8 цифр. PIN-код зберігається на цьому телефоні без шифрування: він захищає налаштування від випадкових змін, а не від наполегливої людини. Якщо його забуто, перевстановлення програми його прибере.";
+
+/* Food library */
+"experimental.food.library" = "Бібліотека продуктів";
+"experimental.food.meal" = "Страва";
+"experimental.food.search" = "Пошук продуктів";
+"experimental.food.searchOnline" = "Шукати в Open Food Facts";
+"experimental.food.scan" = "Сканувати штрихкод";
+"experimental.food.new" = "Новий продукт";
+"experimental.food.use" = "Застосувати";
+"experimental.food.totals" = "Вуглеводи %@ · білки %@ · жири %@";
+"experimental.food.per100" = "на 100 г: вуглеводи %@ · білки %@ · жири %@";
+"experimental.food.carbs" = "вуглеводи %@";
+"experimental.food.notFound" = "В Open Food Facts нічого не знайдено.";
+"experimental.food.barcodeNotFound" = "Штрихкоду %@ немає в Open Food Facts або для нього не вказано вуглеводи.";
+"experimental.food.editorFooter" = "Значення на 100 г (або 100 мл), як на етикетці. Порція необов’язкова: вага однієї порції.";
+"experimental.food.name" = "Назва";
+"experimental.food.portion" = "Порція";
+"experimental.food.portion.piece" = "шт.";
+"experimental.food.portion.cup" = "чашка";
+"experimental.food.portion.tbsp" = "ст. л.";
+"experimental.food.portion.tsp" = "ч. л.";
+"experimental.food.portion.glass" = "склянка";
+"experimental.food.portion.slice" = "скибка";
+"experimental.food.portion.serving" = "порція";

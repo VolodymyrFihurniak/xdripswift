@@ -933,3 +933,93 @@ final class AdaptiveGlucoseForecastTests: XCTestCase {
         XCTAssertEqual(AdaptiveForecastStore.status(defaults: defaults), .learning)
     }
 }
+
+// MARK: - Food library
+
+final class FoodLibraryTests: XCTestCase {
+    private let table = "apple|11.4|0.3|0.2|piece:182,cup:109|Apple|Яблуко\nbanana|20.2|1.1|0.3|piece:118|Banana|Банан\nbroken|x|1|1||Broken|Зламаний"
+
+    func testStaplesParseInBothLanguages() {
+        let english = FoodLibrary.parseStaples(table, ukrainian: false)
+        XCTAssertEqual(english.map(\.name), ["Apple", "Banana"])
+        XCTAssertEqual(english[0].key, "staple:apple")
+        XCTAssertEqual(english[0].portions, [FoodPortion(name: "piece", grams: 182), FoodPortion(name: "cup", grams: 109)])
+        XCTAssertEqual(FoodLibrary.parseStaples(table, ukrainian: true).map(\.name), ["Яблуко", "Банан"])
+    }
+
+    func testBundledStaplesAreComplete() {
+        XCTAssertEqual(FoodLibrary.staples.count, 232)
+        XCTAssertEqual(Set(FoodLibrary.staples.map(\.key)).count, 232)
+        XCTAssertTrue(FoodLibrary.staples.allSatisfy { $0.carbsPer100 >= 0 && $0.carbsPer100 <= 100 && !$0.name.isEmpty })
+    }
+
+    func testMealTotals() {
+        let foods = FoodLibrary.parseStaples(table, ukrainian: false)
+        let totals = MealTotals([MealIngredient(food: foods[0], grams: 182), MealIngredient(food: foods[1], grams: 59),
+                                 MealIngredient(food: foods[1], grams: -5)])
+        XCTAssertEqual(totals.carbs, 32.666, accuracy: 0.001)
+        XCTAssertEqual(totals.protein, 1.195, accuracy: 0.001)
+        XCTAssertEqual(totals.fat, 0.541, accuracy: 0.001)
+    }
+
+    func testSearchMatchesWordsAndPutsPrefixFirst() {
+        let foods = [FoodItem(key: "a", name: "Green apple", carbsPer100: 11, proteinPer100: 0, fatPer100: 0),
+                     FoodItem(key: "b", name: "Apple pie", carbsPer100: 34, proteinPer100: 2, fatPer100: 11),
+                     FoodItem(key: "c", name: "Crème brûlée", carbsPer100: 16, proteinPer100: 4, fatPer100: 13)]
+        XCTAssertEqual(FoodLibrary.search("APPLE", in: foods).map(\.key), ["b", "a"])
+        XCTAssertEqual(FoodLibrary.search("pie app", in: foods).map(\.key), ["b"])
+        XCTAssertEqual(FoodLibrary.search("creme", in: foods).map(\.key), ["c"])
+        XCTAssertEqual(FoodLibrary.search(" ", in: foods, recent: [FoodLibrary.Recent(key: "c", grams: 80)]).map(\.key), ["c", "a", "b"])
+        XCTAssertEqual(FoodLibrary.defaultGrams(for: foods[2], recent: [FoodLibrary.Recent(key: "c", grams: 80)]), 80)
+        XCTAssertEqual(FoodLibrary.defaultGrams(for: foods[0], recent: []), 100)
+    }
+
+    func testOpenFoodFactsProductParsing() throws {
+        let json = #"{"status":1,"product":{"code":"4820000000017","product_name":"Biscuits","product_name_uk":"Печиво","brands":"Roshen, Other","serving_quantity":"30","nutriments":{"carbohydrates_100g":"66,5","proteins_100g":7,"fat_100g":18.2}}}"#
+        let food = try XCTUnwrap(OpenFoodFacts.parseProduct(Data(json.utf8), language: "uk"))
+        XCTAssertEqual(food.key, "off:4820000000017")
+        XCTAssertEqual(food.name, "Печиво (Roshen)")
+        XCTAssertEqual(food.carbsPer100, 66.5, accuracy: 0.001)
+        XCTAssertEqual(food.proteinPer100, 7, accuracy: 0.001)
+        XCTAssertEqual(food.fatPer100, 18.2, accuracy: 0.001)
+        XCTAssertEqual(food.portions, [FoodPortion(name: "serving", grams: 30)])
+        XCTAssertEqual(OpenFoodFacts.parseProduct(Data(json.utf8), language: "en")?.name, "Biscuits (Roshen)")
+    }
+
+    func testOpenFoodFactsDropsWhatCannotBeCounted() {
+        let noCarbs = #"{"status":1,"product":{"code":"12345678","product_name":"Water","nutriments":{"proteins_100g":0}}}"#
+        XCTAssertNil(OpenFoodFacts.parseProduct(Data(noCarbs.utf8), language: "en"))
+        let missing = #"{"status":0,"status_verbose":"product not found"}"#
+        XCTAssertNil(OpenFoodFacts.parseProduct(Data(missing.utf8), language: "en"))
+        let search = #"{"hits":[{"code":"11111111","product_name":"Oat bar","nutriments":{"carbohydrates_100g":58}},{"code":"11111111","product_name":"Oat bar","nutriments":{"carbohydrates_100g":58}},{"code":"22222222","product_name":"","nutriments":{"carbohydrates_100g":5}},{"code":"33333333","product_name":"Cola","nutriments":{}}]}"#
+        XCTAssertEqual(OpenFoodFacts.parseSearch(Data(search.utf8), language: "en").map(\.key), ["off:11111111"])
+    }
+
+    func testBarcodesAndRequests() {
+        XCTAssertEqual(OpenFoodFacts.normalizedBarcode(" 4820000000017 "), "4820000000017")
+        XCTAssertNil(OpenFoodFacts.normalizedBarcode("1234567"))
+        XCTAssertNil(OpenFoodFacts.normalizedBarcode("48200000abc17"))
+        XCTAssertEqual(OpenFoodFacts.productURL(barcode: "12345678")?.host, "world.openfoodfacts.org")
+        let url = OpenFoodFacts.searchURL(query: " гречка ", language: "uk")
+        XCTAssertEqual(url?.host, "search.openfoodfacts.org")
+        XCTAssertEqual(URLComponents(url: url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "langs" }?.value, "uk,en")
+        XCTAssertEqual(URLComponents(url: url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "q" }?.value, "гречка")
+    }
+
+    func testCustomFoodsAndRecentsPersist() {
+        let defaults = UserDefaults(suiteName: "FoodLibraryTests")!
+        defaults.removePersistentDomain(forName: "FoodLibraryTests")
+        let food = FoodItem(key: "custom:1", name: "Borscht", carbsPer100: 6, proteinPer100: 2, fatPer100: 3)
+        FoodLibrary.save(food, defaults: defaults)
+        FoodLibrary.save(FoodItem(key: "custom:1", name: "Borscht", carbsPer100: 7, proteinPer100: 2, fatPer100: 3), defaults: defaults)
+        XCTAssertEqual(FoodLibrary.custom(defaults: defaults).map(\.carbsPer100), [7])
+        FoodLibrary.remember([MealIngredient(food: food, grams: 350)], defaults: defaults)
+        XCTAssertEqual(FoodLibrary.recentGrams(defaults: defaults), [FoodLibrary.Recent(key: "custom:1", grams: 350)])
+        FoodLibrary.delete(key: "custom:1", defaults: defaults)
+        XCTAssertTrue(FoodLibrary.custom(defaults: defaults).isEmpty)
+        XCTAssertTrue(FoodLibrary.recentGrams(defaults: defaults).isEmpty)
+        XCTAssertTrue(FoodEditorView.isValid(carbs: 60, protein: 10, fat: 30))
+        XCTAssertFalse(FoodEditorView.isValid(carbs: 60, protein: 30, fat: 30))
+        XCTAssertFalse(FoodEditorView.isValid(carbs: nil, protein: 1, fat: 1))
+    }
+}

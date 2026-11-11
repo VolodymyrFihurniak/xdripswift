@@ -667,3 +667,27 @@
 "experimental.restrictedSave" = "Set PIN";
 "experimental.restrictedRemove" = "Remove PIN";
 "experimental.restrictedFooter" = "With a PIN set, the Settings and Devices tabs open only after it is entered; the lock returns when the app goes to the background. Readings, alarms, the chart and treatments stay available. 4 to 8 digits. The PIN is stored on this phone without encryption: it keeps settings from being changed by accident, not from a determined person. If it is forgotten, reinstalling the app removes it.";
+
+/* Food library */
+"experimental.food.library" = "Food library";
+"experimental.food.meal" = "Meal";
+"experimental.food.search" = "Search foods";
+"experimental.food.searchOnline" = "Search Open Food Facts";
+"experimental.food.scan" = "Scan a barcode";
+"experimental.food.new" = "New food";
+"experimental.food.use" = "Use";
+"experimental.food.totals" = "Carbs %@ · protein %@ · fat %@";
+"experimental.food.per100" = "per 100 g: carbs %@ · protein %@ · fat %@";
+"experimental.food.carbs" = "carbs %@";
+"experimental.food.notFound" = "Nothing found in Open Food Facts.";
+"experimental.food.barcodeNotFound" = "Barcode %@ is not in Open Food Facts, or has no carbohydrate value.";
+"experimental.food.editorFooter" = "Values per 100 g (or 100 ml), as on the nutrition label. The portion is optional: the weight of one serving.";
+"experimental.food.name" = "Name";
+"experimental.food.portion" = "Portion";
+"experimental.food.portion.piece" = "piece";
+"experimental.food.portion.cup" = "cup";
+"experimental.food.portion.tbsp" = "tbsp";
+"experimental.food.portion.tsp" = "tsp";
+"experimental.food.portion.glass" = "glass";
+"experimental.food.portion.slice" = "slice";
+"experimental.food.portion.serving" = "serving";

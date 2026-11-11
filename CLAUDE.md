@@ -108,6 +108,11 @@ Power saving (`ExperimentalPowerSaving`, mode Off/On/Automatic, never while char
 Home chart minute redraw and the adaptive refit — never readings or alarms. Basal injections
 (Nightscout event type Note) always count in `ExperimentalTreatment.fetch`.
 
+Food library (`xDrip/SwiftUIViews/Treatments/FoodLibrary.swift`, button in the carbs treatment
+editor, no setting): JugglucoNG staples embedded as a `key|carbs|protein|fat|portions|en|uk` table,
+custom foods and recents as UserDefaults JSON, Open Food Facts search/barcode (network only on
+request). It fills the editor's carbs/protein/fat; the meal itself is not stored.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new

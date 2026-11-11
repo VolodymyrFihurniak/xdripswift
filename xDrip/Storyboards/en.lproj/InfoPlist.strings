@@ -4,7 +4,7 @@
 "NSBluetoothPeripheralUsageDescription" = "Connect to CGM Transmitter and M5Stack";
 "NSCalendarsFullAccessUsageDescription" = "To create events with BG reading values, so that they can be viewed on Apple Watch and CarPlay";
 "NSCalendarsUsageDescription" = "To create events with BG reading values, so that they can be viewed on Apple Watch and CarPlay";
-"NSCameraUsageDescription" = "xDrip4iOS uses the camera to scan Dexcom sensor labels.";
+"NSCameraUsageDescription" = "xDrip4iOS uses the camera to scan sensor labels and food barcodes.";
 "NSContactsUsageDescription" = "To update the contact photo with an image showing the current BG values";
 "NSHealthShareUsageDescription" = "Store bloodglucose readings";
 "NSHealthUpdateUsageDescription" = "Store bloodglucose readings";
