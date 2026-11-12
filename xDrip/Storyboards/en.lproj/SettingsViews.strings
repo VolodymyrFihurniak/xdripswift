@@ -718,3 +718,8 @@
 "experimental.pen.notAPen" = "This is not a supported insulin pen.";
 "experimental.pen.readFailed" = "The pen could not be read. Try again and hold the phone still.";
 "experimental.pen.done" = "Pen read.";
+
+/* Alert episodes */
+"experimental.snoozeEndsWhenResolved" = "End snooze when back in range";
+"experimental.trendOncePerEpisode" = "Fast change alarms once per episode";
+"experimental.alertsEpisodeFooter" = "End snooze when back in range: a snoozed Low, Very Low, High or Very High alarm is unsnoozed once glucose is at least 9 mg/dL (0.5 mmol/L) back on the safe side of its value, so a new episode alarms at once instead of waiting out the old snooze. Snooze All is not affected. Fast change alarms once per episode: Fast Drop and Fast Rise alarm once and then stay quiet until a reading no longer meets their condition.";

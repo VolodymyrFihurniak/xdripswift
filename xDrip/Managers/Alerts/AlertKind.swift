@@ -320,6 +320,28 @@ public enum AlertKind: Int, CaseIterable {
         }
     }
     
+    /// How far past its alarm value glucose must be before a Low or High episode counts as over.
+    /// Without the margin a value hovering on the limit would end the snooze again and again.
+    static let episodeResolvedMarginMgDl = 9.0
+
+    /// Whether a level alarm's episode is over: glucose is back on the safe side of the alarm
+    /// value by the margin. nil for alarms that are not about a glucose level.
+    static func episodeIsResolved(kind: AlertKind, valueMgDl: Double, thresholdMgDl: Double) -> Bool? {
+        guard valueMgDl > 0 else { return nil }
+        switch kind {
+        case .low, .verylow: return valueMgDl >= thresholdMgDl + episodeResolvedMarginMgDl
+        case .high, .veryhigh: return valueMgDl <= thresholdMgDl - episodeResolvedMarginMgDl
+        default: return nil
+        }
+    }
+
+    /// A trend alarm fires on entering its condition and not again while the condition holds.
+    /// - returns: whether to fire now, and whether the episode is running afterwards
+    static func trendEpisode(conditionMet: Bool, episodeRunning: Bool) -> (fire: Bool, episodeRunning: Bool) {
+        guard conditionMet else { return (false, false) }
+        return (!episodeRunning, true)
+    }
+
     /// Falling by at least 0.5 mg/dL a minute (JugglucoNG's flat-arrow limit) between two readings
     /// at most 5 minutes (+10 s) apart.
     static func isFalling(newest: (date: Date, mgDl: Double), previous: (date: Date, mgDl: Double)) -> Bool {

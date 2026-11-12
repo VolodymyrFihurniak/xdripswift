@@ -1024,6 +1024,44 @@ final class FoodLibraryTests: XCTestCase {
     }
 }
 
+// MARK: - Alert episodes
+
+final class AlertEpisodeTests: XCTestCase {
+    func testALevelEpisodeEndsOnlyPastTheMargin() {
+        XCTAssertEqual(AlertKind.episodeIsResolved(kind: .low, valueMgDl: 78, thresholdMgDl: 70), false)
+        XCTAssertEqual(AlertKind.episodeIsResolved(kind: .low, valueMgDl: 79, thresholdMgDl: 70), true)
+        XCTAssertEqual(AlertKind.episodeIsResolved(kind: .verylow, valueMgDl: 64, thresholdMgDl: 55), true)
+        XCTAssertEqual(AlertKind.episodeIsResolved(kind: .high, valueMgDl: 172, thresholdMgDl: 180), false)
+        XCTAssertEqual(AlertKind.episodeIsResolved(kind: .high, valueMgDl: 171, thresholdMgDl: 180), true)
+        XCTAssertEqual(AlertKind.episodeIsResolved(kind: .veryhigh, valueMgDl: 260, thresholdMgDl: 250), false)
+        // A missing value resolves nothing, and other alarms have no level to return from.
+        XCTAssertNil(AlertKind.episodeIsResolved(kind: .low, valueMgDl: 0, thresholdMgDl: 70))
+        XCTAssertNil(AlertKind.episodeIsResolved(kind: .fastdrop, valueMgDl: 120, thresholdMgDl: 3))
+        XCTAssertNil(AlertKind.episodeIsResolved(kind: .missedreading, valueMgDl: 120, thresholdMgDl: 30))
+    }
+
+    func testATrendAlarmFiresOncePerEpisode() {
+        var running = false
+        var fired: [Bool] = []
+        for conditionMet in [true, true, true, false, true, false, false, true] {
+            let decision = AlertKind.trendEpisode(conditionMet: conditionMet, episodeRunning: running)
+            running = decision.episodeRunning
+            fired.append(decision.fire)
+        }
+        XCTAssertEqual(fired, [true, false, false, false, true, false, false, true])
+    }
+
+    func testEpisodeSettingsAreOffByDefaultAndPersist() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "AlertEpisodeTests"))
+        defaults.removePersistentDomain(forName: "AlertEpisodeTests")
+        XCTAssertFalse(defaults.experimentalSnoozeEndsWhenResolved)
+        XCTAssertFalse(defaults.experimentalTrendAlertOncePerEpisode)
+        XCTAssertTrue(defaults.experimentalTrendAlertEpisodes.isEmpty)
+        defaults.experimentalTrendAlertEpisodes = [AlertKind.fastdrop.rawValue, AlertKind.fastrise.rawValue]
+        XCTAssertEqual(defaults.experimentalTrendAlertEpisodes, [7, 8])
+    }
+}
+
 // MARK: - Insulin pens (NFC)
 
 /// A simulated NovoPen: a Type 4 tag whose NDEF file carries the pen's side of the 11073

@@ -196,6 +196,18 @@ own IOB curve is not drawn (it covered them in the same colour); COB stays.
 Sensor expiry already has two alarms upstream (Sensor Ending Soon, Expected Expiry), so
 JugglucoNG's multiple expiry warnings were not ported.
 
+## Alarm episodes
+
+Settings → Experimental features → Alarms, both off by default (adapted from JugglucoNG's alert
+episodes to xDrip's snooze-based alarms):
+
+- **End snooze when back in range** — a snoozed Low, Very Low, High or Very High alarm is unsnoozed
+  once glucose is at least 9 mg/dL (0.5 mmol/L) back on the safe side of its value. A second low
+  an hour after the first then alarms at once instead of waiting out the old snooze. The margin
+  keeps a value hovering on the limit from re-alarming; Snooze All is not affected.
+- **Fast change alarms once per episode** — Fast Drop and Fast Rise alarm once, then stay quiet
+  until a reading no longer meets their condition.
+
 ## Dose hints
 
 Settings → Experimental features → Glucose prediction → **Dose hints** (off by default). A port of

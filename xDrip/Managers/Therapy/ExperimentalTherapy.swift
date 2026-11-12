@@ -121,6 +121,9 @@ extension UserDefaults {
         static let doseHintInRange = "experimentalDoseHintCorrectInRange"
         static let muteHighWhileFalling = "experimentalMuteHighWhileFalling"
         static let signalRestored = "experimentalSignalRestoredNotification"
+        static let snoozeEndsWhenResolved = "experimentalSnoozeEndsWhenResolved"
+        static let trendAlertOncePerEpisode = "experimentalTrendAlertOncePerEpisode"
+        static let trendAlertEpisodes = "experimentalTrendAlertEpisodes"
         static let predictionCarbRatio = "experimentalPredictionCarbRatio"
         static let predictionSensitivity = "experimentalPredictionInsulinSensitivityMgDl"
         static let predictionAbsorption = "experimentalPredictionCarbAbsorption"
@@ -195,6 +198,26 @@ extension UserDefaults {
     var experimentalSignalRestoredNotification: Bool {
         get { bool(forKey: ExperimentalKey.signalRestored) }
         set { set(newValue, forKey: ExperimentalKey.signalRestored) }
+    }
+
+    /// After JugglucoNG's alert episodes: a snoozed Low/High alarm is unsnoozed once glucose has
+    /// clearly left the alarm zone, so the next episode alarms at once. Off by default.
+    var experimentalSnoozeEndsWhenResolved: Bool {
+        get { bool(forKey: ExperimentalKey.snoozeEndsWhenResolved) }
+        set { set(newValue, forKey: ExperimentalKey.snoozeEndsWhenResolved) }
+    }
+
+    /// After JugglucoNG's alert episodes: a Fast Drop / Fast Rise alarm fires once and then stays
+    /// quiet until the fast change has stopped. Off by default.
+    var experimentalTrendAlertOncePerEpisode: Bool {
+        get { bool(forKey: ExperimentalKey.trendAlertOncePerEpisode) }
+        set { set(newValue, forKey: ExperimentalKey.trendAlertOncePerEpisode) }
+    }
+
+    /// Raw values of the trend alarm kinds whose episode is running.
+    var experimentalTrendAlertEpisodes: Set<Int> {
+        get { Set((array(forKey: ExperimentalKey.trendAlertEpisodes) as? [Int]) ?? []) }
+        set { set(Array(newValue).sorted(), forKey: ExperimentalKey.trendAlertEpisodes) }
     }
 
     /// Power saving (Settings > Experimental > Power saving). Off by default.

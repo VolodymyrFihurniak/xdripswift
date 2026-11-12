@@ -310,7 +310,13 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                              setIsOn: { UserDefaults.standard.experimentalMuteHighWhileFalling = $0 })),
                 SettingsRow(id: "experimental.alerts.signalRestored", title: ExperimentalTexts.text("signalRestored", "Notify when signal is restored"),
                             control: .toggle(isOn: { UserDefaults.standard.experimentalSignalRestoredNotification },
-                                             setIsOn: { UserDefaults.standard.experimentalSignalRestoredNotification = $0 }))
+                                             setIsOn: { UserDefaults.standard.experimentalSignalRestoredNotification = $0 })),
+                SettingsRow(id: "experimental.alerts.snoozeEndsWhenResolved", title: ExperimentalTexts.text("snoozeEndsWhenResolved", "End snooze when back in range"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalSnoozeEndsWhenResolved },
+                                             setIsOn: { UserDefaults.standard.experimentalSnoozeEndsWhenResolved = $0 })),
+                SettingsRow(id: "experimental.alerts.trendOncePerEpisode", title: ExperimentalTexts.text("trendOncePerEpisode", "Fast change alarms once per episode"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalTrendAlertOncePerEpisode },
+                                             setIsOn: { UserDefaults.standard.experimentalTrendAlertOncePerEpisode = $0 }))
             ]
         case .powerSaving:
             return [
@@ -470,6 +476,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("doseHintsFooter", "NOT MEDICAL ADVICE. A line on the Home chart with arithmetic from your logged treatments and the model above: carbs when glucose is falling with insulin on board and would pass below the dose target within 45 minutes (rounded up, at least 5 g), or a correction when glucose is above the range and not coming down (the gap to the target divided by sensitivity, minus all insulin on board, rounded down to 0.5 U). Nothing is hinted within 20 mg/dL (1.1 mmol/L) of the target. It knows nothing about unlogged food, illness or exercise, and a wrong sensitivity or carb ratio makes it wrong. Decide doses with your own rules and your care team's.")
         case .alerts:
             return ExperimentalTexts.text("alertsFooter", "No High alarm while falling: the High alarm stays quiet while glucose is already falling by at least 0.5 mg/dL (0.03 mmol/L) a minute; Very High always alarms. Notify when signal is restored: one notification when readings come back after a gap at least as long as the Missed Reading alarm's delay (30 minutes when that alarm is off).")
+                + "\n\n" + ExperimentalTexts.text("alertsEpisodeFooter", "End snooze when back in range: a snoozed Low, Very Low, High or Very High alarm is unsnoozed once glucose is at least 9 mg/dL (0.5 mmol/L) back on the safe side of its value, so a new episode alarms at once instead of waiting out the old snooze. Snooze All is not affected. Fast change alarms once per episode: Fast Drop and Fast Rise alarm once and then stay quiet until a reading no longer meets their condition.")
         case .powerSaving:
             return ExperimentalTexts.text("powerSavingFooter", "While it saves: Nightscout, Apple Health and Dexcom Share get one reading every five minutes instead of every reading; the Live Activity and widgets refresh at most every five minutes, at once when glucose leaves the target range; the Home chart redraws its forecast and insulin every five minutes; the adaptive prediction relearns only while charging. Automatic saves while iPhone Low Power Mode is on or the battery is at 25 % or less. Nothing is saved while the phone charges.")
         case .insulins:

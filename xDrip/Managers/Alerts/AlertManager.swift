@@ -958,6 +958,36 @@ public class AlertManager: NSObject {
         // check if alert is required
         let (alertNeeded, alertBody, alertTitle, delayInSeconds) = alertKind.alertNeeded(currentAlertEntry: currentAlertEntry, nextAlertEntry: nextAlertEntry, lastBgReading: lastBgReading, lastButOneBgReading, lastCalibration: lastCalibration, transmitterBatteryInfo: transmitterBatteryInfo, deviceStatus: deviceStatus, forecast: forecast)
 
+        // Experimental (after JugglucoNG's alert episodes): once glucose has clearly left a Low or
+        // High alarm's zone, its snooze ends, so the next episode alarms at once. A snooze of all
+        // alarms is left alone.
+        if !alertNeeded, snoozeValue.isSnoozed, UserDefaults.standard.experimentalSnoozeEndsWhenResolved,
+           let lastBgReading,
+           AlertKind.episodeIsResolved(kind: alertKind, valueMgDl: lastBgReading.finalValue,
+                                       thresholdMgDl: Double(currentAlertEntry.value)) == true {
+            trace("alert '%{public}@' episode is over, ending its snooze", log: log, category: ConstantsLog.categoryAlertManager,
+                  type: .info, alertKind.descriptionForLogging())
+            unSnooze(alertKind: alertKind)
+        }
+
+        // Experimental: a Fast Drop / Fast Rise alarm fires once per episode and then stays quiet
+        // until a reading no longer meets its condition. A snoozed alarm does not start an episode.
+        if alertKind == .fastdrop || alertKind == .fastrise {
+            var episodes = UserDefaults.standard.experimentalTrendAlertEpisodes
+            if !UserDefaults.standard.experimentalTrendAlertOncePerEpisode || !alertNeeded {
+                if episodes.remove(alertKind.rawValue) != nil { UserDefaults.standard.experimentalTrendAlertEpisodes = episodes }
+            } else if !conditionIsSuppressedBySnooze {
+                let decision = AlertKind.trendEpisode(conditionMet: true, episodeRunning: episodes.contains(alertKind.rawValue))
+                if !decision.fire {
+                    trace("alert '%{public}@' already fired for this episode", log: log, category: ConstantsLog.categoryAlertManager,
+                          type: .info, alertKind.descriptionForLogging())
+                    return false
+                }
+                episodes.insert(alertKind.rawValue)
+                UserDefaults.standard.experimentalTrendAlertEpisodes = episodes
+            }
+        }
+
         // A low initial Voltage B is not trustworthy during the configured initial period of Dexcom
         // hardware life. G5/G6/ONE use the transmitter start date. G7/ONE+/Stelo use the sensor
         // start date. This gate affects only notification firing. The raw response remains available
