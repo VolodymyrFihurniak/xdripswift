@@ -13,4 +13,8 @@ gradle -p Sibionics2Core assembleSibionics2CoreReleaseXCFramework
 Gradle task: `assembleSibionics2CoreReleaseXCFramework`  
 Output: `Sibionics2Core/build/XCFrameworks/release/Sibionics2Core.xcframework`
 
-The build requires JDK 17 and an Apple host with Xcode command-line tools. This execution environment has neither Swift/Xcode nor Gradle/Kotlin, so those builds and tests have not been run here.
+The build requires JDK 17 and an Apple host with Xcode command-line tools.
+
+## Adaptive V2
+
+`adaptive2/` vendors JugglucoNG's Adaptive V2 estimator (commit `426f453d89be7f418f4268aae836fbcfb29c2c26`), bridged by `SibionicsAdaptiveV2Facade`. A stock facade passes it the observation of the sample it has just processed (`processAdaptiveV2`). `jvmTest` checks determinism, exact continuation through chunked snapshots, rejection of damaged snapshots and the portable stream primitives against `java.io`. The JVM target has been built and tested on Linux with JDK 21; the iOS targets are built only in the macOS workflow.

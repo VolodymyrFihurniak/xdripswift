@@ -947,6 +947,29 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                     }
                 ),
                 row(
+                    id: "sibionics-glucose-model",
+                    title: Texts_BluetoothPeripheralView.sibionicsGlucoseModelTitle,
+                    detail: Sibionics2Configuration.glucoseModel(for: address).title,
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        let models = Sibionics2GlucoseModel.allCases
+                        self?.presentSelectionListView(BluetoothPeripheralSelectionList(
+                            title: Texts_BluetoothPeripheralView.sibionicsGlucoseModelTitle,
+                            explanation: Texts_BluetoothPeripheralView.sibionicsGlucoseModelFooter,
+                            data: models.map(\.title),
+                            selectedRow: models.firstIndex(of: Sibionics2Configuration.glucoseModel(for: address))
+                        ) { [weak self] index in
+                            guard let self, models.indices.contains(index),
+                                  models[index] != Sibionics2Configuration.glucoseModel(for: address) else { return }
+                            Sibionics2Configuration.setGlucoseModel(models[index], for: address)
+                            trace("Sibionics glucose model set to %{public}@", log: self.log,
+                                  category: ConstantsLog.categoryBluetoothPeripheralViewController, type: .info, models[index].title)
+                            // The saved processor state belongs to the other model: replay history with this one.
+                            self.sensitivityInputDidChange(for: bluetoothPeripheral)
+                        })
+                    }
+                ),
+                row(
                     id: "sibionics2-calibration-mode",
                     title: Texts_BluetoothPeripheralView.sibionics2CalibrationTitle,
                     detail: Sibionics2Configuration.calibrationMode(for: address).title,

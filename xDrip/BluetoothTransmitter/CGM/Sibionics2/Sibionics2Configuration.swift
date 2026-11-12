@@ -764,6 +764,23 @@ enum Sibionics2Configuration {
         return true
     }
 
+    /// The glucose model for this sensor; the manufacturer's algorithm unless another was chosen.
+    static func glucoseModel(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics2GlucoseModel {
+        guard let key = key("glucoseModel", identifier: identifier),
+              let raw = (userDefaults.object(forKey: key) as? NSNumber)?.intValue,
+              let model = Sibionics2GlucoseModel(rawValue: raw) else { return .stock }
+        return model
+    }
+
+    static func setGlucoseModel(_ model: Sibionics2GlucoseModel, for identifier: String, userDefaults: UserDefaults = .standard) {
+        guard let key = key("glucoseModel", identifier: identifier) else { return }
+        if model == .stock {
+            userDefaults.removeObject(forKey: key)
+        } else {
+            userDefaults.set(model.rawValue, forKey: key)
+        }
+    }
+
     /// Factory sensitivity entered by hand; it overrides the probe code, label and name.
     static func manualSensitivity(for identifier: String, userDefaults: UserDefaults = .standard) -> Double? {
         guard let key = key("manualSensitivity", identifier: identifier),

@@ -12,8 +12,24 @@ enum Sibionics2StockFamily {
     case v116a
 }
 
-private protocol SibionicsStockCore: AnyObject {
-    func process(rawMmol: Float, temperatureC: Float, index: Int32) -> Float
+/// The glucose model applied to the sensor signal. Raw values are JugglucoNG's storage ids.
+enum Sibionics2GlucoseModel: Int, CaseIterable {
+    /// The manufacturer's algorithm (V116A or V115G).
+    case stock = 0
+    /// JugglucoNG's Adaptive V2: a probabilistic estimator fed by the stock core's
+    /// sensor-state-calibrated signal instead of its filtered display value.
+    case adaptiveV2 = 8
+
+    var title: String {
+        switch self {
+        case .stock: return Texts_BluetoothPeripheralView.sibionicsGlucoseModelStock
+        case .adaptiveV2: return Texts_BluetoothPeripheralView.sibionicsGlucoseModelAdaptiveV2
+        }
+    }
+}
+
+/// Anything whose state crosses the Kotlin boundary as chunked hex.
+private protocol SibionicsSnapshotCore: AnyObject {
     func reset()
     func snapshotByteCount() -> Int32
     func snapshotHexChunk(offsetBytes: Int32, lengthBytes: Int32) -> String
@@ -22,8 +38,15 @@ private protocol SibionicsStockCore: AnyObject {
     func finishRestoreHex() -> Bool
 }
 
+private protocol SibionicsStockCore: SibionicsSnapshotCore {
+    func process(rawMmol: Float, temperatureC: Float, index: Int32) -> Float
+    func processAdaptiveV2(estimator: SibionicsAdaptiveV2Facade, temperatureC: Float,
+                           impedance: Float, eventTimeMs: Int64) -> Float
+}
+
 extension Sibionics2V116AFacade: SibionicsStockCore {}
 extension Sibionics1V115GFacade: SibionicsStockCore {}
+extension SibionicsAdaptiveV2Facade: SibionicsSnapshotCore {}
 
 enum Sibionics2ProcessingMode {
     case live
@@ -43,7 +66,9 @@ struct Sibionics2GlucoseProcessor {
     private var snapshotMagic: [UInt8] {
         stockFamily == .v115g ? [0x53, 0x31, 0x47, 0x50] : [0x53, 0x32, 0x47, 0x50] // S1GP / S2GP
     }
-    private static let snapshotVersion: UInt16 = 2
+    /// Version 2 is the stock layout; version 3 appends the Adaptive V2 state. A snapshot of
+    /// the other model is refused, which replays history with the selected one.
+    private var snapshotVersion: UInt16 { model == .adaptiveV2 ? 3 : 2 }
     private static let maximumCoreHexLength = 16_384
     private static let coreSnapshotChunkByteCount = 256
     private static let mmolToMgDlConversionFactor = 18.0
@@ -57,16 +82,19 @@ struct Sibionics2GlucoseProcessor {
 
     private final class CoreBox {
         let value: SibionicsStockCore
+        let adaptive: SibionicsAdaptiveV2Facade?
 
-        init(sensitivity: Float, stockFamily: Sibionics2StockFamily) {
+        init(sensitivity: Float, stockFamily: Sibionics2StockFamily, model: Sibionics2GlucoseModel) {
             switch stockFamily {
             case .v115g: value = Sibionics1V115GFacade(sensitivity: sensitivity)
             case .v116a: value = Sibionics2V116AFacade(sensitivity: sensitivity)
             }
+            adaptive = model == .adaptiveV2 ? SibionicsAdaptiveV2Facade(sensitivity: sensitivity) : nil
         }
     }
 
     private let stockFamily: Sibionics2StockFamily
+    private let model: Sibionics2GlucoseModel
     private let sensitivity: Float
     private let validSensitivity: Bool
     private var coreBox: CoreBox
@@ -74,14 +102,15 @@ struct Sibionics2GlucoseProcessor {
     private var replayDeltaMmol: Float?
     private var lastIndex: Int?
 
-    init(sensitivity: Double, stockFamily: Sibionics2StockFamily = .v116a) {
+    init(sensitivity: Double, stockFamily: Sibionics2StockFamily = .v116a, model: Sibionics2GlucoseModel = .stock) {
         let valid = Sibionics2FactorySensitivity.isSupported(sensitivity)
         self.stockFamily = stockFamily
+        self.model = model
         self.validSensitivity = valid
         self.sensitivity = Float(sensitivity)
         self.coreBox = CoreBox(
             sensitivity: valid ? Float(sensitivity) : Float(Sibionics2FactorySensitivity.defaultSensitivity),
-            stockFamily: stockFamily
+            stockFamily: stockFamily, model: model
         )
     }
 
@@ -102,7 +131,41 @@ struct Sibionics2GlucoseProcessor {
         )
         lastIndex = reading.index
 
-        let displayMmol: Float
+        // The estimator has to see every sample the stock core accepted, so it runs before
+        // anything can return. Its estimate replaces the stock value whenever it is usable;
+        // the stock value (and its deltas) stays the fallback and is never fed back into it.
+        var adaptiveMmol: Float?
+        if let adaptive = coreBox.adaptive {
+            let estimate = core.processAdaptiveV2(
+                estimator: adaptive,
+                temperatureC: Float(reading.temperatureC),
+                impedance: Float(reading.impedance),
+                eventTimeMs: Int64((reading.eventTime.timeIntervalSince1970 * 1000).rounded())
+            )
+            if estimate.isFinite,
+               estimate > Validation.minimumCandidateMmol,
+               estimate <= Validation.maximumCandidateMmol {
+                adaptiveMmol = Self.nativeRound(estimate)
+            }
+        }
+        let stockMmol = stockDisplayMmol(candidate: candidate, raw: raw, mode: mode)
+        guard let displayMmol = adaptiveMmol ?? stockMmol else { return nil }
+
+        let mgDl = Double(displayMmol) * Self.mmolToMgDlConversionFactor
+        guard mgDl.isFinite,
+              mgDl > 0,
+              mgDl <= Sibionics2SensorProfile.maximumReportableGlucoseMgDl else { return nil }
+        return Sibionics2ProcessedGlucose(
+            glucoseMgDl: mgDl,
+            index: reading.index,
+            eventTime: reading.eventTime,
+            trend: reading.trend
+        )
+    }
+
+    /// The stock value for a sample: the core's correction, or raw glucose carried by the
+    /// last stock delta while the core has none for this minute.
+    private mutating func stockDisplayMmol(candidate: Float, raw: Float, mode: Sibionics2ProcessingMode) -> Float? {
         if candidate.isFinite,
            candidate > Validation.minimumCandidateMmol,
            candidate <= Validation.maximumCandidateMmol {
@@ -116,7 +179,7 @@ struct Sibionics2GlucoseProcessor {
                 // Replay is the newer backfill immediately preceding live.
                 liveDeltaMmol = delta
             }
-            displayMmol = candidate
+            return candidate
         } else {
             let delta: Float?
             switch mode {
@@ -141,24 +204,14 @@ struct Sibionics2GlucoseProcessor {
             guard corrected.isFinite,
                   corrected > Validation.minimumCorrectedMmol,
                   corrected <= Validation.maximumCandidateMmol else { return nil }
-            displayMmol = Self.nativeRound(corrected)
+            return Self.nativeRound(corrected)
         }
-
-        let mgDl = Double(displayMmol) * Self.mmolToMgDlConversionFactor
-        guard mgDl.isFinite,
-              mgDl > 0,
-              mgDl <= Sibionics2SensorProfile.maximumReportableGlucoseMgDl else { return nil }
-        return Sibionics2ProcessedGlucose(
-            glucoseMgDl: mgDl,
-            index: reading.index,
-            eventTime: reading.eventTime,
-            trend: reading.trend
-        )
     }
 
     mutating func reset() {
         ensureUniqueCore()
         coreBox.value.reset()
+        coreBox.adaptive?.reset()
         liveDeltaMmol = nil
         replayDeltaMmol = nil
         lastIndex = nil
@@ -172,9 +225,15 @@ struct Sibionics2GlucoseProcessor {
         if liveDeltaMmol != nil { flags |= 1 }
         if replayDeltaMmol != nil { flags |= 2 }
         if lastIndex != nil { flags |= 4 }
+        var adaptiveBytes: [UInt8]?
+        if let adaptive = coreBox.adaptive {
+            guard let hex = Self.snapshotCoreHexBytes(from: adaptive),
+                  !hex.isEmpty, hex.count <= Self.maximumCoreHexLength else { return Data() }
+            adaptiveBytes = hex
+        }
 
         var data = Data(snapshotMagic)
-        data.appendUInt16BE(Self.snapshotVersion)
+        data.appendUInt16BE(snapshotVersion)
         data.append(flags)
         // The reserved field is one byte; an untyped literal selects Data.append<Int>.
         data.append(UInt8(0))
@@ -184,6 +243,10 @@ struct Sibionics2GlucoseProcessor {
         data.appendUInt32BE((replayDeltaMmol ?? 0).bitPattern)
         data.appendUInt32BE(UInt32(bytes.count))
         data.append(contentsOf: bytes)
+        if let adaptiveBytes {
+            data.appendUInt32BE(UInt32(adaptiveBytes.count))
+            data.append(contentsOf: adaptiveBytes)
+        }
         let checksum = Self.checksum(data)
         data.appendUInt32BE(checksum)
         return data
@@ -194,7 +257,7 @@ struct Sibionics2GlucoseProcessor {
         let checksumSize = 4
         guard validSensitivity, data.count >= headerSize + checksumSize,
               Array(data.prefix(4)) == snapshotMagic,
-              data.uint16BE(at: 4) == Self.snapshotVersion,
+              data.uint16BE(at: 4) == snapshotVersion,
               let flags = data.byte(at: 6), (flags & ~UInt8(7)) == 0,
               data.byte(at: 7) == 0,
               data.uint32BE(at: 8) == sensitivity.bitPattern,
@@ -204,14 +267,27 @@ struct Sibionics2GlucoseProcessor {
               let coreLength = data.uint32BE(at: 24),
               coreLength > 0, coreLength <= Self.maximumCoreHexLength,
               coreLength % 2 == 0,
-              data.count == headerSize + Int(coreLength) + checksumSize
+              data.count >= headerSize + Int(coreLength) + checksumSize
         else { return false }
+        let coreEnd = headerSize + Int(coreLength)
+        var adaptiveHexBytes: [UInt8]?
+        if model == .adaptiveV2 {
+            guard let adaptiveLength = data.uint32BE(at: coreEnd),
+                  adaptiveLength > 0, adaptiveLength <= Self.maximumCoreHexLength,
+                  adaptiveLength % 2 == 0,
+                  data.count == coreEnd + 4 + Int(adaptiveLength) + checksumSize
+            else { return false }
+            let start = data.index(data.startIndex, offsetBy: coreEnd + 4)
+            adaptiveHexBytes = Array(data[start..<data.index(start, offsetBy: Int(adaptiveLength))])
+        } else {
+            guard data.count == coreEnd + checksumSize else { return false }
+        }
 
         let checksumOffset = data.count - checksumSize
         guard let storedChecksum = data.uint32BE(at: checksumOffset),
               Self.checksum(Data(data.prefix(checksumOffset))) == storedChecksum
         else { return false }
-        let coreHexBytes = Array(data[headerSize..<checksumOffset])
+        let coreHexBytes = Array(data[data.index(data.startIndex, offsetBy: headerSize)..<data.index(data.startIndex, offsetBy: coreEnd)])
         guard coreHexBytes.count == Int(coreLength),
               coreHexBytes.allSatisfy(Self.isHexByte)
         else { return false }
@@ -230,8 +306,12 @@ struct Sibionics2GlucoseProcessor {
               ((flags & 2) == 0 ? replayBits == 0 : Self.isUsableDelta(replayDelta))
         else { return false }
 
-        let restored = CoreBox(sensitivity: sensitivity, stockFamily: stockFamily)
+        let restored = CoreBox(sensitivity: sensitivity, stockFamily: stockFamily, model: model)
         guard Self.restoreCoreSnapshot(hexBytes: coreHexBytes, into: restored.value) else { return false }
+        if let adaptive = restored.adaptive {
+            guard let adaptiveHexBytes,
+                  Self.restoreCoreSnapshot(hexBytes: adaptiveHexBytes, into: adaptive) else { return false }
+        }
         coreBox = restored
         self.lastIndex = restoredIndex
         self.liveDeltaMmol = (flags & 1) == 0 ? nil : liveDelta
@@ -239,7 +319,7 @@ struct Sibionics2GlucoseProcessor {
         return true
     }
 
-    private static func snapshotCoreHexBytes(from core: SibionicsStockCore) -> [UInt8]? {
+    private static func snapshotCoreHexBytes(from core: SibionicsSnapshotCore) -> [UInt8]? {
         let byteCount = Int(core.snapshotByteCount())
         guard byteCount > 0, byteCount <= maximumCoreHexLength / 2,
               byteCount <= Int(Int32.max) else { return nil }
@@ -261,7 +341,7 @@ struct Sibionics2GlucoseProcessor {
         return hexBytes
     }
 
-    private static func restoreCoreSnapshot(hexBytes: [UInt8], into core: SibionicsStockCore) -> Bool {
+    private static func restoreCoreSnapshot(hexBytes: [UInt8], into core: SibionicsSnapshotCore) -> Bool {
         guard !hexBytes.isEmpty, hexBytes.count <= maximumCoreHexLength,
               hexBytes.count.isMultiple(of: 2),
               hexBytes.allSatisfy(isHexByte),
@@ -292,11 +372,15 @@ struct Sibionics2GlucoseProcessor {
 
     private mutating func ensureUniqueCore() {
         guard !isKnownUniquelyReferenced(&coreBox) else { return }
-        let copy = CoreBox(sensitivity: sensitivity, stockFamily: stockFamily)
-        if let hexBytes = Self.snapshotCoreHexBytes(from: coreBox.value),
-           Self.restoreCoreSnapshot(hexBytes: hexBytes, into: copy.value) {
-            coreBox = copy
+        let copy = CoreBox(sensitivity: sensitivity, stockFamily: stockFamily, model: model)
+        guard let hexBytes = Self.snapshotCoreHexBytes(from: coreBox.value),
+              Self.restoreCoreSnapshot(hexBytes: hexBytes, into: copy.value) else { return }
+        // A copy whose estimator state cannot be carried over starts the estimator afresh.
+        if let adaptive = coreBox.adaptive, let adaptiveCopy = copy.adaptive,
+           let adaptiveHex = Self.snapshotCoreHexBytes(from: adaptive) {
+            _ = Self.restoreCoreSnapshot(hexBytes: adaptiveHex, into: adaptiveCopy)
         }
+        coreBox = copy
     }
 
     /// FNV-1a detects accidental snapshot corruption; it is not authentication.

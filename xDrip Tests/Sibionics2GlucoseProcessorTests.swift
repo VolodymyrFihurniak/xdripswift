@@ -207,6 +207,86 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         }
     }
 
+    // MARK: - Adaptive V2
+
+    func testAdaptiveV2EstimatesEveryMinuteAfterTheFirstStockCorrection() throws {
+        let rows = try startupRows()
+        var adaptive = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: .adaptiveV2)
+        var stock = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        var adaptiveResults: [Int: Double] = [:]
+        var stockResults: [Int: Double] = [:]
+        for row in rows {
+            adaptiveResults[row.index] = adaptive.process(row.reading(), mode: .replay)?.glucoseMgDl
+            stockResults[row.index] = stock.process(row.reading(), mode: .replay)?.glucoseMgDl
+        }
+        // Neither model has a value before the stock core's first correction at minute 5.
+        XCTAssertTrue((1...4).allSatisfy { adaptiveResults[$0] == nil && stockResults[$0] == nil })
+        XCTAssertEqual(adaptiveResults.count, rows.count - 4)
+        // Values verified against the Kotlin estimator: 7.27 and 3.53 mmol/L, shown to 0.1.
+        XCTAssertEqual(try XCTUnwrap(adaptiveResults[5]), 7.3 * 18, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(stockResults[5]), 10.4 * 18, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(adaptiveResults[130]), 3.5 * 18, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(stockResults[130]), 3.6 * 18, accuracy: 0.001)
+    }
+
+    func testAdaptiveV2SnapshotContinuesExactlyAndIsNotInterchangeableWithStock() throws {
+        let rows = try startupRows()
+        var source = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: .adaptiveV2)
+        for row in rows.prefix(70) {
+            _ = source.process(row.reading(), mode: .replay)
+        }
+        let snapshot = source.snapshot()
+        XCTAssertFalse(snapshot.isEmpty)
+        XCTAssertEqual(snapshot[5], 3)
+
+        var restored = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: .adaptiveV2)
+        XCTAssertTrue(restored.restore(from: snapshot))
+        XCTAssertEqual(restored.snapshot(), snapshot)
+        for row in rows.dropFirst(70) {
+            XCTAssertEqual(restored.process(row.reading(), mode: .live)?.glucoseMgDl,
+                           source.process(row.reading(), mode: .live)?.glucoseMgDl)
+        }
+
+        // The other model's state is refused, so a model change replays history.
+        var stock = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        XCTAssertFalse(stock.restore(from: snapshot))
+        var stockSource = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        for row in rows.prefix(70) {
+            _ = stockSource.process(row.reading(), mode: .replay)
+        }
+        var adaptive = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: .adaptiveV2)
+        XCTAssertFalse(adaptive.restore(from: stockSource.snapshot()))
+
+        var truncated = snapshot
+        truncated.removeLast()
+        XCTAssertFalse(adaptive.restore(from: truncated))
+    }
+
+    func testAdaptiveV2CopyKeepsItsOwnEstimatorState() throws {
+        let rows = try startupRows()
+        var original = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: .adaptiveV2)
+        for row in rows.prefix(60) {
+            _ = original.process(row.reading(), mode: .replay)
+        }
+        var copy = original
+        for row in rows.dropFirst(60) {
+            XCTAssertEqual(copy.process(row.reading(), mode: .replay)?.glucoseMgDl,
+                           original.process(row.reading(), mode: .replay)?.glucoseMgDl)
+        }
+    }
+
+    func testGlucoseModelSettingDefaultsToStockAndRoundTrips() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "Sibionics2GlucoseModelTests"))
+        defaults.removePersistentDomain(forName: "Sibionics2GlucoseModelTests")
+        let address = "AA:BB:CC:DD:EE:FF"
+        XCTAssertEqual(Sibionics2Configuration.glucoseModel(for: address, userDefaults: defaults), .stock)
+        Sibionics2Configuration.setGlucoseModel(.adaptiveV2, for: address, userDefaults: defaults)
+        XCTAssertEqual(Sibionics2Configuration.glucoseModel(for: address, userDefaults: defaults), .adaptiveV2)
+        Sibionics2Configuration.setGlucoseModel(.stock, for: address, userDefaults: defaults)
+        XCTAssertEqual(Sibionics2Configuration.glucoseModel(for: address, userDefaults: defaults), .stock)
+        XCTAssertEqual(Sibionics2GlucoseModel.adaptiveV2.rawValue, 8)
+    }
+
     func testSnapshotRejectsCorruptionVersionAndDifferentSensitivity() throws {
         let rows = try startupRows()
         var source = Sibionics2GlucoseProcessor(sensitivity: 1.44)

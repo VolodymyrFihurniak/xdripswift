@@ -253,3 +253,7 @@
 "sibionics.logCopy" = "Copy log";
 "sibionics.logCopied" = "Copied";
 "sibionics.logEmpty" = "No events yet";
+"sibionics.glucoseModelTitle" = "Glucose model";
+"sibionics.glucoseModelStock" = "Stock (default)";
+"sibionics.glucoseModelAdaptiveV2" = "Adaptive V2 (experimental)";
+"sibionics.glucoseModelFooter" = "Stock is the manufacturer's algorithm. Adaptive V2 is an experimental estimator from JugglucoNG: it works from the sensor's calibrated signal before the manufacturer's display filtering, follows changes sooner and is less smooth. A minute it cannot estimate shows the stock value. Changing the model recalculates the sensor's history. Compare with a meter before relying on it.";

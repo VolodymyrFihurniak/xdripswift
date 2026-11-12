@@ -1078,7 +1078,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             deviceIdentifier: address,
             stateStore: stateStore,
             processor: Sibionics2GlucoseProcessor(sensitivity: sensitivity,
-                stockFamily: variant == .sibionics1 && sibionics1Connection?.mode == .chinese ? .v115g : .v116a),
+                stockFamily: variant == .sibionics1 && sibionics1Connection?.mode == .chinese ? .v115g : .v116a,
+                model: Sibionics2Configuration.glucoseModel(for: address)),
             allowsHistoricalBootstrap: variant == .sibionics1 && sibionics1Connection?.mode == .chinese
         )
     }
