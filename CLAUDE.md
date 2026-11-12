@@ -31,6 +31,9 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
   `BLEPeripheral.sibionics2` (optional, cascade). When upstream adds a version, create a new fork
   version = upstream latest + those additions, set it current in `.xccurrentversion` and in the
   pbxproj `XCVersionGroup`. Never edit an existing shipped model version.
+- Upstream ships `uk.lproj` too since 7.2.1, so string tables conflict on merge: keep both sides,
+  then drop the fork's copy of any key upstream now defines (duplicate keys: the later one wins).
+  The build workflow syncs upstream first and fails on a conflict, so merge upstream by hand.
 - After merging, check every `switch` over `BluetoothPeripheralType`, `CGMTransmitterType` and
   troubleshooting sources lists both upstream's new cases and `Sibionics1Type`/`Sibionics2Type`/
   `.sibionics2`. The peripheral-loading loop in `BluetoothPeripheralManager` must

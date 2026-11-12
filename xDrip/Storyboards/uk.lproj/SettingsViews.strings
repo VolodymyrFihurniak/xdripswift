@@ -129,7 +129,7 @@
 "settingsviews_alerts_section_footer" = "Сигнали визначають, коли застосунок має повідомляти про рівні глюкози, пропущені показники та інші умови.";
 
 /// in Settings, row title to send settings
-"sendTraceFile" = "Надіслати звіт про проблему";
+"sendTraceFile" = "Надіслати поштою";
 "settingsviews_issueReportTitle" = "Звіт про проблему";
 
 /// M5 stack bluetooth  settings, pop up that asks user to enter the password
@@ -221,7 +221,7 @@
 "testUrlAndAPIKey" = "Перевірити з’єднання";
 
 /// in Settings, to enable debug level in trace file
-"debugLevel" = "Додати рівень налагодження";
+"debugLevel" = "Використовувати рівень налагодження";
 
 /// help settings, restart needed
 
@@ -1198,3 +1198,18 @@
 "experimental.snoozeEndsWhenResolved" = "Завершувати відкладення після повернення в діапазон";
 "experimental.trendOncePerEpisode" = "Сигнал швидкої зміни один раз на епізод";
 "experimental.alertsEpisodeFooter" = "Завершувати відкладення після повернення в діапазон: відкладений сигнал низької, дуже низької, високої чи дуже високої глюкози знову стає активним, щойно глюкоза щонайменше на 9 мг/дл (0,5 ммоль/л) повернулася на безпечний бік від його значення, тож новий епізод сигналізує одразу, а не чекає кінця старого відкладення. На «Відкласти всі» це не впливає. Сигнал швидкої зміни один раз на епізод: сигнали швидкого падіння та швидкого зростання спрацьовують один раз і мовчать, доки показник не перестане відповідати їхній умові.";
+
+/* Issue Report */
+"settingsviews_includeWatchLogs" = "Додати журнали Watch";
+"settingsviews_reportWatchFooter" = "Отримати журнали Direct to Watch із підключеного Watch.";
+"settingsviews_reportSendFooter" = "Підготувати лист розробникам xDrip4iOS.";
+"settingsviews_requestingWatchLogs" = "Запит...";
+"settingsviews_watchLogsNotReceived" = "Журнали Watch не отримано";
+"settingsviews_watchLogsTimeout" = "Журнали Watch не отримано протягом 8 секунд. Спробуйте ще раз або надішліть звіт без них.";
+"settingsviews_watchLogsFailure" = "Не вдалося отримати журнали Watch. Спробуйте ще раз або надішліть звіт без них.";
+"settingsviews_openWatchApp" = "Відкрийте застосунок Watch";
+"settingsviews_confirmWatchAppOpen" = "Відкрийте %@ на Watch і не закривайте застосунок до отримання журналів.\n\nВін зараз відкритий?";
+"settingsviews_reportShareFooter" = "Поділитися файлами журналів.";
+"settingsviews_shareReport" = "Поділитися звітом";
+"settingsviews_shareIssueReport" = "Поділитися звітом про проблему";
+"settingsviews_reportShareFailed" = "Не вдалося підготувати файли журналів. Спробуйте ще раз.";

@@ -168,9 +168,8 @@
 "settingsviews_displayTrendInContactImage" = "Trend";
 "settingsviews_contactImageCreatedByString" = "Contact automatically created by";
 "sectionTitleTrace" = "Issue Reporting";
-"sendTraceFile" = "Send Issue Report";
+"sendTraceFile" = "Send by Email";
 "settingsviews_issueReportTitle" = "Issue Report";
-"describeProblem" = "Explain why you need to send the trace file with as much detail as possible. If you have already reported your problem in the Facebook support group '%@', then mention your facebook name in the e-mail";
 "emailNotConfigured" = "You must configure an e-mail account on your iOS device.";
 "emailbodyText" = "Problem Description: ";
 "failedToSendEmail" = "Failed to Send Email";
@@ -178,7 +177,7 @@
 "volumeTestiOSSoundExplanation" = "An alarm sound is now being played with the same volume that will be used for an Alarm Type with 'Override Mute' = Off\n\n(Also used always for Missed Reading alarms which use the iOS volume.)\n\nPress one of the volume buttons to stop the sound, then change the volume with the volume buttons to the desired volume and test again.";
 "volumeTestSoundPlayer" = "When Silent Mode is enabled";
 "volumeTestiOSSound" = "When Silent Mode is disabled";
-"debugLevel" = "Include Debug Level";
+"debugLevel" = "Use Debug Level";
 "warningChangeFromMasterToFollower" = "Switching from Master to Follower will stop your current sensor. Do you want to continue?";
 "warningChangeFromMasterToFollowerDexcomShare" = "Switch from Master to Dexcom Share Follower will stop your current sensor and will also disable 'Upload to Dexcom Share'. Do you want to continue?";
 "warningChangeToFollowerDexcomShare" = "Switching to Dexcom Share Follower mode will disable 'Upload to Dexcom Share'.";
@@ -723,3 +722,18 @@
 "experimental.snoozeEndsWhenResolved" = "End snooze when back in range";
 "experimental.trendOncePerEpisode" = "Fast change alarms once per episode";
 "experimental.alertsEpisodeFooter" = "End snooze when back in range: a snoozed Low, Very Low, High or Very High alarm is unsnoozed once glucose is at least 9 mg/dL (0.5 mmol/L) back on the safe side of its value, so a new episode alarms at once instead of waiting out the old snooze. Snooze All is not affected. Fast change alarms once per episode: Fast Drop and Fast Rise alarm once and then stay quiet until a reading no longer meets their condition.";
+
+/* Issue Report */
+"settingsviews_includeWatchLogs" = "Include Watch Logs";
+"settingsviews_reportWatchFooter" = "Fetch Direct to Watch logs from your connected Watch.";
+"settingsviews_reportSendFooter" = "Prepare an email to send to the xDrip4iOS developers.";
+"settingsviews_requestingWatchLogs" = "Requesting...";
+"settingsviews_watchLogsNotReceived" = "Watch Logs Not Received";
+"settingsviews_watchLogsTimeout" = "Watch logs were not received within 8 seconds. Try again or send the report without them.";
+"settingsviews_watchLogsFailure" = "Watch logs could not be received. Try again or send the report without them.";
+"settingsviews_openWatchApp" = "Open the Watch App";
+"settingsviews_confirmWatchAppOpen" = "Open %@ on your Watch and keep it open until the logs arrive.\n\nIs it open now?";
+"settingsviews_reportShareFooter" = "Share the log files.";
+"settingsviews_shareReport" = "Share Report";
+"settingsviews_shareIssueReport" = "Share Issue Report";
+"settingsviews_reportShareFailed" = "Unable to prepare the log files. Please try again.";
