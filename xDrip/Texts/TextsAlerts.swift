@@ -26,6 +26,8 @@ class Texts_Alerts {
     }()
     
     static let predictedLowAlertTitle = NSLocalizedString("alerts_predictedLowAlertTitle", tableName: filename, bundle: .main, value: "Predicted Low", comment: "Experimental alert raised when the glucose forecast falls below the alert value")
+    static let signalRestoredTitle = NSLocalizedString("alerts_signalRestoredTitle", tableName: filename, bundle: .main, value: "Signal restored", comment: "Notification title: readings are arriving again after a loss")
+    static let signalRestoredBody = NSLocalizedString("alerts_signalRestoredBody", tableName: filename, bundle: .main, value: "Readings are back after %ld min.", comment: "Notification body: minutes without readings")
     static let predictedLowInMinutes = NSLocalizedString("alerts_predictedLowInMinutes", tableName: filename, bundle: .main, value: "in %ld min", comment: "Predicted low alert: when the forecast reaches the value, e.g. 'in 20 min'")
 
     static let lowAlertTitle: String = {

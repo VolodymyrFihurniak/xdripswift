@@ -173,3 +173,102 @@ for an imported note once uploaded, so Tresiba and the other basal insulins had 
 and no insulin on board. Basal injections now always count. With the insulin layers on, xDrip's
 own IOB curve is not drawn (it covered them in the same colour); COB stays.
 
+## Additions from JugglucoNG 1.2–1.3
+
+- **Predicted low: Consider IOB and recent glucose** (JugglucoNG `ForecastLowConfidencePolicy`,
+  off by default). The alert then needs a falling trend (at least 0.5 mg/dL a minute over the
+  last ten minutes) and carbs on board that do not cover the shortfall. It alerts at once within
+  15 mg/dL of the value, when the current rate reaches it within ten minutes, or when insulin
+  acting in the next 30 minutes explains half the distance (and 10 mg/dL). With no insulin on
+  board, a fall that only returns from a recent rise (quiet five-minute baseline, then at least
+  15 mg/dL up in 3–15 minutes) waits while glucose is above baseline − 3 mg/dL. Otherwise two
+  readings a minute apart must agree. Low and Very Low are untouched.
+- **Alarms** screen: *No High alarm while falling* (High stays quiet while glucose falls by
+  0.5 mg/dL a minute or more; Very High always alarms) and *Notify when signal is restored* (one
+  silent notification when readings return after a gap as long as the Missed Reading delay, or 30 min).
+- **eIOB** on the active insulin card: IOB weighted by how hard each dose is acting now.
+- **Nightscout**: the forecast devicestatus also carries `openaps.iob.iob` and `suggested.COB`
+  from the logged treatments.
+- **Grouped markers**: boluses (and carbs) closer together than a marker's width are drawn as one
+  marker with their total and count, e.g. `7.5 ×3`.
+- Sibionics battery level is read and shown for Sibionics 2 only, as JugglucoNG does.
+
+Sensor expiry already has two alarms upstream (Sensor Ending Soon, Expected Expiry), so
+JugglucoNG's multiple expiry warnings were not ported.
+
+## Alarm episodes
+
+Settings → Experimental features → Alarms, both off by default (adapted from JugglucoNG's alert
+episodes to xDrip's snooze-based alarms):
+
+- **End snooze when back in range** — a snoozed Low, Very Low, High or Very High alarm is unsnoozed
+  once glucose is at least 9 mg/dL (0.5 mmol/L) back on the safe side of its value. A second low
+  an hour after the first then alarms at once instead of waiting out the old snooze. The margin
+  keeps a value hovering on the limit from re-alarming; Snooze All is not affected.
+- **Fast change alarms once per episode** — Fast Drop and Fast Rise alarm once, then stay quiet
+  until a reading no longer meets their condition.
+
+## Dose hints
+
+Settings → Experimental features → Glucose prediction → **Dose hints** (off by default). A port of
+JugglucoNG's `StateDoseHintCalculator`: one line above the Home chart, read off the current state.
+**It is arithmetic, not medical advice.**
+
+- *Carbs*: glucose is falling (recency-weighted slope over 30 minutes at or below −0.3 mg/dL a
+  minute, no rise in the last five minutes), insulin is on board, and at this rate glucose is
+  below the dose target within 45 minutes. Amount = the gap between the 45-minute projection and
+  the target ÷ sensitivity × carb ratio, rounded up, at least 5 g.
+- *Correction*: glucose is above the range (or, with *Also correct inside the range*, more than
+  25 mg/dL above the target) and has not been coming down for 20 minutes. Amount = (current −
+  target) ÷ sensitivity − all IOB, rounded **down** to 0.5 U.
+- Nothing within 20 mg/dL of the target. Dose target 70–180 mg/dL, default 90.
+
+## Restricted mode
+
+Settings → Experimental features → **Restricted mode**: with a 4–8 digit PIN set, the Settings and
+Devices tabs open only after it is entered, and lock again when the app goes to the background.
+Readings, alarms, the chart and treatments stay available. The PIN is kept in the app's settings
+unencrypted; reinstalling the app removes it.
+
+## Food library
+
+In the treatment editor, a carbs entry has a **Food library** button (it needs no setting). Pick
+foods, set their amounts in grams (or tap a portion such as "+1 piece"), and **Use** fills in the
+meal's carbs — and its protein and fat when *Protein and fat* is on. The meal itself is not stored,
+only the totals; the amount last used for a food is remembered.
+
+- **Staples**: JugglucoNG's 232 common foods with values per 100 g, named in Ukrainian or English.
+- **Your own foods**: *New food*, from a nutrition label (per 100 g, optional portion weight).
+  Swipe to delete.
+- **Open Food Facts**: packaged products by name (*Search Open Food Facts*, on a button — the
+  project asks apps not to search on every keystroke) or by barcode (*Scan a barcode*, iOS 16
+  devices that support live scanning). A product you pick is kept with your own foods, so it works
+  offline next time. Products without a carbohydrate value are left out.
+
+Nothing is sent anywhere until you search or scan: a search sends the typed words, a scan sends the
+barcode, to `openfoodfacts.org`. Open Food Facts is filled in by volunteers — check the figures
+against the package.
+
+## Insulin pens (NFC)
+
+Settings → Experimental features → **Insulin pens (NFC)** reads the dose log of a **NovoPen 6** or
+**NovoPen Echo Plus** and adds the doses you confirm to the treatments.
+
+> This reader is a port of JugglucoNG's (itself from xDrip+'s OpenNov) and has **not yet been
+> confirmed on a real pen from an iPhone**. Its protocol code is tested against a simulated pen
+> only. Check the first imports against the pen's own display.
+
+1. **Scan a pen** and hold the top of the iPhone against the pen's dose display until the system
+   sheet says the pen was read. A long log takes several seconds; if the read is cut short, what
+   arrived is still offered (the pen sends its newest doses first) and the next scan gets the rest.
+2. A new pen is listed under **Pens** by its serial number. Choose its insulin: a pen with a basal
+   or premixed insulin logs basal injections, any other pen logs boluses named after the insulin,
+   so the insulin curves and insulin on board use the right profile.
+3. The review lists the doses newer than the last import, newest first. Ticked doses become
+   treatments. A dose of 2 U or less within a minute before another is taken for an air shot and
+   starts unticked; so does a dose that already has a treatment of the same size within five
+   minutes. Unticked doses are not offered again, unless **Read the whole log next time** is on.
+
+The pen has no clock, only a counter: dose times are that counter set against the phone's clock at
+the moment of the scan. Doses older than 100 days are ignored. Nothing is imported without the
+review, and iOS only reads a pen while this screen's scan is running.

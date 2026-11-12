@@ -150,8 +150,13 @@ struct RootHomeMainChartView: View {
                 // which colour is which insulin, for the layers in this window. Hidden under the cursor.
                 let legendLayers = experimentalPlots.insulinLayers(from: chartState.startDate, to: chartState.endDate)
                 let onBoardNow = experimentalPlots.onBoardNow
-                if showsTreatments && allowsTherapyCharts && cursor == nil && (!legendLayers.isEmpty || !onBoardNow.isEmpty) {
+                if showsTreatments && allowsTherapyCharts && cursor == nil
+                    && (!legendLayers.isEmpty || !onBoardNow.isEmpty || experimentalPlots.doseHint != nil) {
                     VStack(alignment: .leading, spacing: 4) {
+                        if let hint = experimentalPlots.doseHint {
+                            DoseHintChip(hint: hint)
+                                .allowsHitTesting(false)
+                        }
                         if !onBoardNow.isEmpty {
                             ActiveInsulinCard(onBoard: onBoardNow, isExpanded: $isActiveInsulinExpanded)
                         }
@@ -559,6 +564,7 @@ struct ActiveInsulinCard: View {
 
     private var iob: Double { onBoard.filter(\.countsTowardIOB).reduce(0) { $0 + $1.units } }
     private var basal: Double { onBoard.filter { !$0.countsTowardIOB }.reduce(0) { $0 + $1.units } }
+    private var effective: Double { onBoard.filter(\.countsTowardIOB).reduce(0) { $0 + $1.effectiveUnits } }
 
     var body: some View {
         Button {
@@ -569,6 +575,11 @@ struct ActiveInsulinCard: View {
                     if iob > ChartCursorCard.minimumUnits {
                         Text(String(format: ChartCursorCard.iobFormat, ChartCursorCard.units(iob)))
                             .fontWeight(.semibold)
+                    }
+                    if iob > ChartCursorCard.minimumUnits {
+                        // How much of it is working right now (JugglucoNG eIOB).
+                        Text(String(format: ChartCursorCard.eiobFormat, ChartCursorCard.units(effective)))
+                            .foregroundStyle(ConstantsAppColors.secondaryText)
                     }
                     if basal > ChartCursorCard.minimumUnits {
                         Text(String(format: ChartCursorCard.basalFormat, ChartCursorCard.units(basal)))
@@ -627,6 +638,7 @@ struct ChartCursorCard: View {
 
     static let minimumUnits = 0.005
     static var iobFormat: String { ExperimentalTexts.text("iobValue", "IOB %@") }
+    static var eiobFormat: String { ExperimentalTexts.text("eiobValue", "eIOB %@") }
     static var cobFormat: String { ExperimentalTexts.text("cobValue", "COB %@") }
     static var basalFormat: String { ExperimentalTexts.text("basalOnBoardValue", "Basal %@") }
     static var untilFormat: String { ExperimentalTexts.text("activeUntil", "until %@") }
@@ -728,5 +740,34 @@ struct ChartCursorCardLayout: Layout {
         let trailing = max(bounds.maxX - size.width - inset, leading)
         let x = min(max(bounds.minX + centerX - size.width / 2, leading), trailing)
         card.place(at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(size))
+    }
+}
+
+/// JugglucoNG's dose hint beside IOB: carbs for a fall under way, or a correction for a high that
+/// is not coming down. Arithmetic on the logged treatments, not advice.
+struct DoseHintChip: View {
+    let hint: GlucoseChartExperimentalPlots.DoseHint
+
+    private var text: String {
+        let isMgDl = UserDefaults.standard.bloodGlucoseUnitIsMgDl
+        let target = "\(hint.targetMgDl.mgDlToMmolAndToString(mgDl: isMgDl)) \(isMgDl ? Texts_Common.mgdl : Texts_Common.mmol)"
+        if hint.isCarbs {
+            return String(format: ExperimentalTexts.text("doseHintCarbs", "Hint: %@ carbs, below %@ in ~%ld min"),
+                          ChartCursorCard.grams(hint.amount), target, hint.minutesAhead ?? 0)
+        }
+        return String(format: ExperimentalTexts.text("doseHintInsulin", "Hint: %@ correction to %@"), ChartCursorCard.units(hint.amount), target)
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.caption)
+            .monospacedDigit()
+            .lineLimit(2)
+            .foregroundStyle(ConstantsAppColors.primaryText)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(ConstantsAppColors.homePanelBackground.opacity(0.85),
+                        in: RoundedRectangle(cornerRadius: ConstantsHomeView.standardCornerRadius, style: .continuous))
+            .accessibilityElement(children: .combine)
     }
 }

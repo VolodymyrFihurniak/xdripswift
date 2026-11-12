@@ -540,6 +540,7 @@ struct RootTabView: View {
                             sensorProvider: stateModel.sensorProvider,
                             sensorHealthDetailRequest: bluetoothDetailNavigationRequest
                         )
+                        .modifier(RestrictedModeGate())
                     }
                     .tag(Tab.bluetooth)
                     .tabItem {
@@ -558,6 +559,8 @@ struct RootTabView: View {
                             incomingBackupRequest: stateModel.incomingBackupRequest,
                             consumeIncomingBackup: stateModel.consumeIncomingBackup
                         )
+                        // Experimental restricted mode: Settings open only after the PIN.
+                        .modifier(RestrictedModeGate())
                     }
                     .tag(Tab.settings)
                     .tabItem {

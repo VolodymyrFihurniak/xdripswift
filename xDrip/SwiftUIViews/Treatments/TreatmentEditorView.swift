@@ -80,6 +80,7 @@ struct TreatmentEditorContainerView: View {
 /// Owns a separate draft for each entry form, so choosing another type starts fresh.
 private struct TreatmentEditorScreen: View {
     @StateObject private var viewModel: TreatmentEditorViewModel
+    @State private var showsFoodLibrary = false
 
     let onSave: () -> Void
     let onCancel: (() -> Void)?
@@ -192,6 +193,24 @@ struct TreatmentEditorView: View {
                                 .foregroundStyle(Color(.colorTertiary))
                         }
                         .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+
+                // Food library: adds up a meal and fills in its carbs (and protein and fat when those are logged).
+                if viewModel.selectedType == .Carbs {
+                    Button {
+                        showsFoodLibrary = true
+                    } label: {
+                        Label(ExperimentalTexts.text("food.library", "Food library"), systemImage: "fork.knife")
+                    }
+                    .sheet(isPresented: $showsFoodLibrary) {
+                        FoodPickerView { totals in
+                            viewModel.enteredValue = ExperimentalPredictionModel.compact(totals.carbs.rounded())
+                            if viewModel.showsExperimentalMacros {
+                                viewModel.enteredProtein = ExperimentalPredictionModel.compact(totals.protein.rounded())
+                                viewModel.enteredFat = ExperimentalPredictionModel.compact(totals.fat.rounded())
+                            }
+                        }
                     }
                 }
 

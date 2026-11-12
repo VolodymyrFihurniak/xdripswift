@@ -1388,10 +1388,16 @@ public class NightscoutSyncManager: NSObject, ObservableObject {
            now.timeIntervalSince(last) < 5 * 60 - 30 { return }
         let readings = bgReadingsAccessor.getLatestBgReadings(limit: nil, fromDate: now.addingTimeInterval(-2 * 60 * 60), forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
             .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
-        let forecast = ExperimentalPredictionModel(defaults: defaults).forecast(
-            readings: readings, treatments: PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext, now: now),
+        let model = ExperimentalPredictionModel(defaults: defaults)
+        let treatments = PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext, now: now)
+        let forecast = model.forecast(
+            readings: readings, treatments: treatments,
             isMmol: false, targetLowMgDl: defaults.lowMarkValue, targetHighMgDl: defaults.highMarkValue, now: now)
-        guard let payload = ExperimentalNightscoutPrediction.deviceStatus(forecast: forecast, now: now) else { return }
+        // IOB and COB from the same logged treatments, as JugglucoNG's devicestatus upload.
+        guard let payload = ExperimentalNightscoutPrediction.deviceStatus(
+            forecast: forecast, now: now,
+            iob: PredictedLowEvidence.insulin(treatments: treatments, model: model, at: now).classic,
+            cob: PredictedLowEvidence.carbsOnBoard(treatments: treatments, model: model, at: now)) else { return }
         defaults.set(now, forKey: "experimentalNightscoutPredictionLastUpload")
         uploadData(dataToUpload: payload, httpMethod: nil, path: nightscoutDeviceStatusPath, completionHandler: {
             trace("in uploadExperimentalPredictionIfDue, forecast uploaded to NS", log: self.oslog, category: ConstantsLog.categoryNightscoutSyncManager, type: .info)

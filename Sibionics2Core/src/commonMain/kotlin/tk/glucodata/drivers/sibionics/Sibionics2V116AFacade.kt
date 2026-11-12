@@ -23,6 +23,17 @@ class Sibionics2V116AFacade(sensitivity: Float) {
     fun process(rawMmol: Float, temperatureC: Float, index: Int): Float =
         core.process(rawMmol, temperatureC, index) ?: Float.NaN
 
+    /**
+     * Runs Adaptive V2 on the observation of the sample [process] has just
+     * handled. NaN when that sample has no usable observation or estimate.
+     */
+    fun processAdaptiveV2(
+        estimator: SibionicsAdaptiveV2Facade,
+        temperatureC: Float,
+        impedance: Float,
+        eventTimeMs: Long,
+    ): Float = estimator.process(core.latestSensorObservation, temperatureC, impedance, eventTimeMs)
+
     /** Hex snapshots cross the Swift boundary in bounded chunks. */
     fun snapshotByteCount(): Int = core.snapshot().size
 

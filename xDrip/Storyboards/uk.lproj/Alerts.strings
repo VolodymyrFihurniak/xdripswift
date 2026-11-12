@@ -82,3 +82,5 @@
 "changeAlertTriggerValue" = "Змінити поріг спрацювання";
 "alertTypeUrgent" = "Терміновий";
 "alertTypeWarning" = "Попередження";
+"alerts_signalRestoredTitle" = "Сигнал відновлено";
+"alerts_signalRestoredBody" = "Показники знову надходять після %ld хв.";

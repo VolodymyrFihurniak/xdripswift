@@ -76,7 +76,11 @@
 	<key>MainAppBundleIdentifier</key>
 	<string>$(MAIN_APP_BUNDLE_IDENTIFIER)</string>
 	<key>NFCReaderUsageDescription</key>
-	<string>xDrip4iO5 uses NFC to scan Libre sensors.</string>
+	<string>xDrip4iO5 uses NFC to scan Libre sensors and insulin pens.</string>
+	<key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
+	<array>
+		<string>D2760000850101</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
@@ -88,7 +92,7 @@
 	<key>NSCalendarsUsageDescription</key>
 	<string>To create events with BG reading values, so that they can be viewed on Apple Watch and CarPlay</string>
 	<key>NSCameraUsageDescription</key>
-	<string>xDrip4iOS uses the camera to scan Dexcom sensor labels.</string>
+	<string>xDrip4iOS uses the camera to scan sensor labels and food barcodes.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>To update the contact photo with an image showing the current BG values</string>
 	<key>NSHealthShareUsageDescription</key>

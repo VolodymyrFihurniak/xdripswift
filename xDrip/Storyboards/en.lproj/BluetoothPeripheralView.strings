@@ -236,7 +236,7 @@
 "sibionics.manualSensitivityOff" = "Off";
 "sibionics.manualSensitivityMessage" = "A value from 0.8 to 2.5 overrides the probe code, label and sensor name, and history is recalculated with it. Leave empty to use the codes again.";
 "sibionics.deviceInfoTitle" = "Sensor information";
-"sibionics.deviceInfoFooter" = "Reported by the sensor over Bluetooth. The battery level is read at each connection and every six hours; Sibionics 1 may not report it.";
+"sibionics.deviceInfoFooter" = "Reported by the sensor over Bluetooth. The battery level (Sibionics 2 only) is read at each connection and every six hours.";
 "sibionics.battery" = "Sensor battery";
 "sibionics.notReported" = "Not reported yet";
 "sibionics.model" = "Model";
@@ -248,3 +248,12 @@
 "sibionics.protocolV120" = "V120 (encrypted)";
 "sibionics.protocolChinese" = "AA55 (Chinese)";
 "sibionics.keyGroup" = "Key group";
+"sibionics.logTitle" = "Connection log";
+"sibionics.logFooter" = "The latest events on the sensor link, newest first; up to 200 are kept. Copy the log to send it with a problem report.";
+"sibionics.logCopy" = "Copy log";
+"sibionics.logCopied" = "Copied";
+"sibionics.logEmpty" = "No events yet";
+"sibionics.glucoseModelTitle" = "Glucose model";
+"sibionics.glucoseModelStock" = "Stock (default)";
+"sibionics.glucoseModelAdaptiveV2" = "Adaptive V2 (experimental)";
+"sibionics.glucoseModelFooter" = "Stock is the manufacturer's algorithm. Adaptive V2 is an experimental estimator from JugglucoNG: it works from the sensor's calibrated signal before the manufacturer's display filtering, follows changes sooner and is less smooth. A minute it cannot estimate shows the stock value. Changing the model recalculates the sensor's history. Compare with a meter before relying on it.";

@@ -947,6 +947,29 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                     }
                 ),
                 row(
+                    id: "sibionics-glucose-model",
+                    title: Texts_BluetoothPeripheralView.sibionicsGlucoseModelTitle,
+                    detail: Sibionics2Configuration.glucoseModel(for: address).title,
+                    showsDisclosure: true,
+                    action: { [weak self] in
+                        let models = Sibionics2GlucoseModel.allCases
+                        self?.presentSelectionListView(BluetoothPeripheralSelectionList(
+                            title: Texts_BluetoothPeripheralView.sibionicsGlucoseModelTitle,
+                            explanation: Texts_BluetoothPeripheralView.sibionicsGlucoseModelFooter,
+                            data: models.map(\.title),
+                            selectedRow: models.firstIndex(of: Sibionics2Configuration.glucoseModel(for: address))
+                        ) { [weak self] index in
+                            guard let self, models.indices.contains(index),
+                                  models[index] != Sibionics2Configuration.glucoseModel(for: address) else { return }
+                            Sibionics2Configuration.setGlucoseModel(models[index], for: address)
+                            trace("Sibionics glucose model set to %{public}@", log: self.log,
+                                  category: ConstantsLog.categoryBluetoothPeripheralViewController, type: .info, models[index].title)
+                            // The saved processor state belongs to the other model: replay history with this one.
+                            self.sensitivityInputDidChange(for: bluetoothPeripheral)
+                        })
+                    }
+                ),
+                row(
                     id: "sibionics2-calibration-mode",
                     title: Texts_BluetoothPeripheralView.sibionics2CalibrationTitle,
                     detail: Sibionics2Configuration.calibrationMode(for: address).title,
@@ -1007,7 +1030,9 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                 (row.id != "sibionics2-label-scan" || !isSibionics1)
             }
         )
-        return [connectionSection, sibionicsDeviceInfoSection(address: address, isSibionics1: isSibionics1), settingsSection]
+        let deviceInfoSection = sibionicsDeviceInfoSection(address: address, isSibionics1: isSibionics1)
+        return [connectionSection] + (deviceInfoSection.rows.isEmpty ? [] : [deviceInfoSection]) + [settingsSection,
+                                                                                                      sibionicsConnectionLogSection(address: address)]
     }
 
     private func makeGenericHeartbeatSettingsSections() -> [BluetoothPeripheralDetailSection] {
@@ -1035,18 +1060,46 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         refresh()
     }
 
+    /// The newest events of the sensor's connection log, and a row that copies all of it.
+    private func sibionicsConnectionLogSection(address: String) -> BluetoothPeripheralDetailSection {
+        let entries = Sibionics2ConnectionLog.entries(for: address)
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .medium
+        var rows = [row(
+            id: "sibionics-log-copy",
+            title: Texts_BluetoothPeripheralView.sibionicsLogCopy,
+            detail: entries.isEmpty ? Texts_BluetoothPeripheralView.sibionicsLogEmpty : "\(entries.count)",
+            isEnabled: !entries.isEmpty,
+            action: { [weak self] in
+                UIPasteboard.general.string = Sibionics2ConnectionLog.text(for: address)
+                self?.refresh()
+            }
+        )]
+        for (index, entry) in entries.suffix(12).reversed().enumerated() {
+            rows.append(row(id: "sibionics-log-\(index)", title: formatter.string(from: entry.date), detail: entry.text, detailLineLimit: 3))
+        }
+        return BluetoothPeripheralDetailSection(
+            id: "sibionics-connection-log",
+            title: Texts_BluetoothPeripheralView.sibionicsLogTitle,
+            footer: Texts_BluetoothPeripheralView.sibionicsLogFooter,
+            rows: rows
+        )
+    }
+
     /// What the sensor reported about itself: battery, Device Information, and the wire protocol
     /// and registration key group that produced readings.
     private func sibionicsDeviceInfoSection(address: String, isSibionics1: Bool) -> BluetoothPeripheralDetailSection {
         var rows = [BluetoothPeripheralDetailRow]()
         let battery = Sibionics2DeviceStatus.battery(for: address)
-        rows.append(row(
+        // Battery is a Sibionics 2 value, as in JugglucoNG.
+        if !isSibionics1 { rows.append(row(
             id: "sibionics-battery",
             title: Texts_BluetoothPeripheralView.sibionicsBattery,
             detail: battery.map { "\($0.percentage) % · \(RelativeDateTimeFormatter().localizedString(for: $0.readAt, relativeTo: Date()))" }
                 ?? Texts_BluetoothPeripheralView.sibionicsNotReported,
             detailIndicator: battery.map { SettingsIndicator(color: $0.percentage <= 10 ? Color.red : $0.percentage <= 25 ? Color.orange : Color.green) }
-        ))
+        )) }
         let fields: [(Sibionics2DeviceStatus.Field, String)] = [
             (.modelNumber, Texts_BluetoothPeripheralView.sibionicsModel),
             (.firmwareRevision, Texts_BluetoothPeripheralView.sibionicsFirmware),

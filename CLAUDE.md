@@ -12,6 +12,9 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
   only in GitHub Actions (`.github/workflows/build_xdrip.yml`, macOS). Say so when reporting work.
 - `Sibionics2Core` is a Kotlin Multiplatform XCFramework (vendored JugglucoNG V116A/V115G stock
   algorithms). CI builds it with `gradle -p Sibionics2Core assembleSibionics2CoreReleaseXCFramework`.
+- The Kotlin core's JVM target does build here: copy `Sibionics2Core` to the scratchpad, set
+  `jvmToolchain(21)` and an absolute fixtures path there, run `gradle cleanJvmTest jvmTest`
+  (Maven Central may answer 429 at first; retry). The iOS targets still need macOS.
 - Before adding numeric test expectations, verify them with a small Python port of the logic
   (done for calibration math, sensitivity decoding, label parsing). Never guess expected values.
 - Avoid new source files where possible: adding files requires hand-editing
@@ -64,6 +67,12 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
   product name is shown (active sensor description, Activity Log source, Loop, reports).
 - **Manual sensitivity** (`Sibionics2Configuration.manualSensitivity`, 0.8–2.5) wins over probe code,
   label and name; changing it replays history like a new label code.
+- **Glucose model** (`Sibionics2GlucoseModel`, per sensor, `Sibionics2Configuration.glucoseModel`):
+  stock (default) or JugglucoNG Adaptive V2. The estimator is vendored Kotlin in
+  `Sibionics2Core/.../adaptive2` behind `SibionicsAdaptiveV2Facade`; the stock facade feeds it its
+  `latestSensorObservation` (`processAdaptiveV2`). A usable estimate replaces the stock value, which
+  stays the fallback. Processor snapshot version 3 = version 2 + estimator state; the other
+  model's snapshot is refused, so changing the model replays history.
 - **Reset**: manual for all variants (S2 encrypted `0x10`, EU/Hematonix `24 E7 6F 34`,
   Chinese `AA 55 10 F1`); automatic only for Sibionics 2. The post-reset session probe is one-shot.
 - **Calibration** (`xDrip/Calibration/Sibionics2Calibrator.swift`): xDrip+ or JugglucoNG
@@ -108,6 +117,18 @@ Power saving (`ExperimentalPowerSaving`, mode Off/On/Automatic, never while char
 Home chart minute redraw and the adaptive refit — never readings or alarms. Basal injections
 (Nightscout event type Note) always count in `ExperimentalTreatment.fetch`.
 
+Food library (`xDrip/SwiftUIViews/Treatments/FoodLibrary.swift`, button in the carbs treatment
+editor, no setting): JugglucoNG staples embedded as a `key|carbs|protein|fat|portions|en|uk` table,
+custom foods and recents as UserDefaults JSON, Open Food Facts search/barcode (network only on
+request). It fills the editor's carbs/protein/fat; the meal itself is not stored.
+
+Insulin pens (`xDrip/Managers/Therapy/InsulinPenReader.swift`): Swift port of JugglucoNG
+`NovoPen/opennov` (NFC Type 4 `PenT4` → `PenPHD` record → IEEE 11073 `PenMessage`/`PenMachine`,
+run by `PenSession` over a `PenTransport`), `PenDoseParser`, `InsulinPenStore` (UserDefaults JSON,
+cursor = newest reviewed pen counter) and `InsulinPenImport`. CoreNFC needs the NDEF AID
+`D2760000850101` in Info.plist `...iso7816.select-identifiers`. Tested only against the
+`SimulatedPen` in the tests (verified with a Python port) — never against a real pen.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new
@@ -120,10 +141,9 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 
 ## Not ported (yet)
 
-JugglucoNG alternative glucose models (Balanced, Responsive, Adaptive V2), GS3 variant,
-Sibionics reset reminder and raw source-journal backup/recovery, NovoPen 6 / Echo Plus NFC import
-(JugglucoNG `NovoPen/opennov`, IEEE 11073 PHD over NFC Type 4 — needs CoreNFC ISO 7816
-entitlement and AIDs).
+JugglucoNG alternative glucose models Balanced, Responsive and Adaptive V1 (Adaptive V2 is ported), GS3 variant,
+Sibionics reset reminder and raw source-journal backup/recovery; of the NovoPen import, the
+unattended background read and the merge with hand-written entries.
 
 ## Git
 

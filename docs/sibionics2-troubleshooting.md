@@ -110,3 +110,23 @@ authentication, an unanswered read blocks the link until iOS drops it after 30 s
 A Chinese Sibionics 1 that is connected but returns neither an echo nor a data page for six
 requests (three minutes) is reconnected.
 
+## Connection log
+
+The device screen keeps a **Connection log** per sensor: connections, disconnects with the
+Bluetooth error, authentication attempts and key groups, stalled handshakes, missing readings,
+resets and reconnects, up to 200 events. The newest twelve are listed; **Copy log** puts the whole
+log on the clipboard for a problem report. It is cleared when the sensor is deleted.
+
+## Glucose model
+
+Sibionics 1 and 2 → **Glucose model**:
+
+- **Stock (default)** — the manufacturer's algorithm (V116A, or V115G for the Chinese Sibionics 1).
+- **Adaptive V2 (experimental)** — JugglucoNG's probabilistic estimator. It reads the sensor's
+  calibrated signal before the manufacturer's display filtering and deconvolution, so it follows
+  changes sooner and looks less smooth. It gives a value every minute once the stock algorithm has
+  produced its first correction; a minute it cannot estimate shows the stock value.
+
+Changing the model recalculates the sensor's history, like a new sensitivity. Calibration is applied
+on top of either model. Adaptive V2 is new and has had little use outside JugglucoNG: compare it
+with a meter for a few days before relying on it, and switch back to Stock if it disagrees.

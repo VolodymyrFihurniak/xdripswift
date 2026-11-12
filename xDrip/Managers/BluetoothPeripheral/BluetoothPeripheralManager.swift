@@ -1422,6 +1422,7 @@ extension BluetoothPeripheralManager: BluetoothPeripheralManaging {
             Sibionics2Configuration.setLabelShortCode(nil, for: bluetoothPeripheral.blePeripheral.address)
             Sibionics2Configuration.setManualSensitivity(nil, for: bluetoothPeripheral.blePeripheral.address)
             Sibionics2DeviceStatus.clear(for: bluetoothPeripheral.blePeripheral.address)
+            Sibionics2ConnectionLog.clear(for: bluetoothPeripheral.blePeripheral.address)
         }
 
         if let dexcomG7 = bluetoothPeripheral as? DexcomG7 {

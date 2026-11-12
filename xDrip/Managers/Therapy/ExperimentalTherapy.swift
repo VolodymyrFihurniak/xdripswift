@@ -115,6 +115,15 @@ extension UserDefaults {
         static let predictionMomentum = "experimentalPredictionTrendMomentum"
         static let predictionAdaptive = "experimentalPredictionAdaptive"
         static let powerSavingMode = "experimentalPowerSavingMode"
+        static let predictedLowEvidence = "experimentalPredictedLowEvidence"
+        static let doseHintsEnabled = "experimentalDoseHintsEnabled"
+        static let doseTarget = "experimentalDoseTargetMgDl"
+        static let doseHintInRange = "experimentalDoseHintCorrectInRange"
+        static let muteHighWhileFalling = "experimentalMuteHighWhileFalling"
+        static let signalRestored = "experimentalSignalRestoredNotification"
+        static let snoozeEndsWhenResolved = "experimentalSnoozeEndsWhenResolved"
+        static let trendAlertOncePerEpisode = "experimentalTrendAlertOncePerEpisode"
+        static let trendAlertEpisodes = "experimentalTrendAlertEpisodes"
         static let predictionCarbRatio = "experimentalPredictionCarbRatio"
         static let predictionSensitivity = "experimentalPredictionInsulinSensitivityMgDl"
         static let predictionAbsorption = "experimentalPredictionCarbAbsorption"
@@ -153,6 +162,62 @@ extension UserDefaults {
     var experimentalPredictionTrendMomentum: Bool {
         get { object(forKey: ExperimentalKey.predictionMomentum) == nil || bool(forKey: ExperimentalKey.predictionMomentum) }
         set { set(newValue, forKey: ExperimentalKey.predictionMomentum) }
+    }
+
+    /// JugglucoNG "Consider IOB and recent glucose" for the predicted low alert. Off by default.
+    var experimentalPredictedLowEvidence: Bool {
+        get { bool(forKey: ExperimentalKey.predictedLowEvidence) }
+        set { set(newValue, forKey: ExperimentalKey.predictedLowEvidence) }
+    }
+
+    /// JugglucoNG dose hints beside IOB. Off by default: they are arithmetic, not advice.
+    var experimentalDoseHintsEnabled: Bool {
+        get { bool(forKey: ExperimentalKey.doseHintsEnabled) }
+        set { set(newValue, forKey: ExperimentalKey.doseHintsEnabled) }
+    }
+
+    /// What a hinted correction aims at, mg/dL (JugglucoNG `DoseTarget`: 90, range 70...180).
+    var experimentalDoseTargetMgDl: Double {
+        get { Self.experimentalValue(object(forKey: ExperimentalKey.doseTarget), fallback: DoseHintCalculator.defaultTargetMgDl, range: DoseHintCalculator.targetRange) }
+        set { set(newValue, forKey: ExperimentalKey.doseTarget) }
+    }
+
+    /// Also hint a correction for a value inside the range but well above the dose target.
+    var experimentalDoseHintCorrectInRange: Bool {
+        get { bool(forKey: ExperimentalKey.doseHintInRange) }
+        set { set(newValue, forKey: ExperimentalKey.doseHintInRange) }
+    }
+
+    /// JugglucoNG: the high alarm stays quiet while glucose is already falling. Off by default.
+    var experimentalMuteHighWhileFalling: Bool {
+        get { bool(forKey: ExperimentalKey.muteHighWhileFalling) }
+        set { set(newValue, forKey: ExperimentalKey.muteHighWhileFalling) }
+    }
+
+    /// JugglucoNG "Signal restored": a notification when readings come back after a loss. Off by default.
+    var experimentalSignalRestoredNotification: Bool {
+        get { bool(forKey: ExperimentalKey.signalRestored) }
+        set { set(newValue, forKey: ExperimentalKey.signalRestored) }
+    }
+
+    /// After JugglucoNG's alert episodes: a snoozed Low/High alarm is unsnoozed once glucose has
+    /// clearly left the alarm zone, so the next episode alarms at once. Off by default.
+    var experimentalSnoozeEndsWhenResolved: Bool {
+        get { bool(forKey: ExperimentalKey.snoozeEndsWhenResolved) }
+        set { set(newValue, forKey: ExperimentalKey.snoozeEndsWhenResolved) }
+    }
+
+    /// After JugglucoNG's alert episodes: a Fast Drop / Fast Rise alarm fires once and then stays
+    /// quiet until the fast change has stopped. Off by default.
+    var experimentalTrendAlertOncePerEpisode: Bool {
+        get { bool(forKey: ExperimentalKey.trendAlertOncePerEpisode) }
+        set { set(newValue, forKey: ExperimentalKey.trendAlertOncePerEpisode) }
+    }
+
+    /// Raw values of the trend alarm kinds whose episode is running.
+    var experimentalTrendAlertEpisodes: Set<Int> {
+        get { Set((array(forKey: ExperimentalKey.trendAlertEpisodes) as? [Int]) ?? []) }
+        set { set(Array(newValue).sorted(), forKey: ExperimentalKey.trendAlertEpisodes) }
     }
 
     /// Power saving (Settings > Experimental > Power saving). Off by default.
@@ -870,6 +935,321 @@ enum PredictedLowAlert {
     }
 }
 
+// MARK: - Dose hints (JugglucoNG data/prediction/StateDoseHint.kt)
+
+/// JugglucoNG's `StateDoseHintCalculator`: a hint read off the current state, not off the far end
+/// of the forecast.
+///
+/// - Falling with insulin on board, and on the current rate below the dose target within the
+///   horizon: the carbs that raise the projection back to the target, rounded up.
+/// - High and not coming down (or, when enabled, in range but well above the target): the insulin
+///   the gap needs after subtracting ALL insulin on board, on the current value, rounded down to
+///   half a unit.
+///
+/// The two errors are not symmetric: too many carbs show within the hour, too much insulin only
+/// hours later. Within 20 mg/dL of the target nothing is hinted. It is arithmetic on the logged
+/// treatments and the model's sensitivity and carb ratio, never medical advice.
+enum DoseHintCalculator {
+    struct Hint: Equatable, Sendable {
+        let isCarbs: Bool
+        /// Grams for carbs, units for insulin.
+        let amount: Double
+        let targetMgDl: Double
+        /// When the state is still ahead (carbs); nil for insulin, which is about now.
+        let minutesAhead: Int?
+    }
+
+    static let defaultTargetMgDl = 90.0
+    static let targetRange = 70.0...180.0
+    static let horizonMinutes = 45.0
+    static let trendWindowMinutes = 30.0
+    static let trendMinimumSamples = 3
+    static let trendMinimumSpanMinutes = 10.0
+    static let fallFloor = 0.3
+    static let stagnantSlope = -0.2
+    static let riseMinimumSpanMinutes = 20.0
+    static let hysteresisMgDl = 20.0
+    static let inRangeMarginMgDl = 25.0
+    static let minimumCarbsGrams = 5.0
+    static let penStepUnits = 0.5
+    static let maximumReadingAge: TimeInterval = 15 * 60
+
+    /// `TrendEngine.recencyWeightedSlope`: least squares with weights decaying over five reading
+    /// intervals, mg/dL per minute. `readings` ascending.
+    static func recencyWeightedSlope(_ readings: [(date: Date, mgDl: Double)]) -> Double? {
+        guard readings.count >= 2, let newest = readings.last?.date else { return nil }
+        let gaps = zip(readings, readings.dropFirst()).map { $1.date.timeIntervalSince($0.date) / 60 }.filter { $0 > 0 }.sorted()
+        guard !gaps.isEmpty else { return nil }
+        let tau = 5 * gaps[gaps.count / 2]
+        guard tau.isFinite, tau > 0 else { return nil }
+        var sw = 0.0, sx = 0.0, sy = 0.0, sxy = 0.0, sxx = 0.0
+        for reading in readings {
+            let x = reading.date.timeIntervalSince(newest) / 60
+            let weight = exp(x / tau)
+            sw += weight; sx += weight * x; sy += weight * reading.mgDl
+            sxy += weight * x * reading.mgDl; sxx += weight * x * x
+        }
+        let denominator = sw * sxx - sx * sx
+        guard denominator > 1e-6 else { return nil }
+        let slope = (sw * sxy - sx * sy) / denominator
+        return slope.isFinite ? slope : nil
+    }
+
+    /// - Parameters:
+    ///   - readings: date and mg/dL, any order.
+    ///   - highMgDl: upper bound of the target range, which tells "high" from "in range".
+    ///   - iobUnits: all insulin on board, including doses that have not started acting.
+    static func hint(readings: [(date: Date, mgDl: Double)], highMgDl: Double, targetMgDl: Double, iobUnits: Double,
+                     insulinSensitivityMgDl: Double, carbRatio: Double, correctInRange: Bool, now: Date) -> Hint? {
+        let valid = readings.filter { $0.mgDl.isFinite && $0.mgDl > 0 && $0.date <= now }.sorted { $0.date < $1.date }
+        guard let latest = valid.last, now.timeIntervalSince(latest.date) <= maximumReadingAge,
+              targetMgDl.isFinite, targetMgDl > 0, insulinSensitivityMgDl.isFinite, insulinSensitivityMgDl > 0,
+              abs(latest.mgDl - targetMgDl) > hysteresisMgDl, iobUnits.isFinite, iobUnits >= 0 else { return nil }
+        let window = valid.filter { latest.date.timeIntervalSince($0.date) <= trendWindowMinutes * 60 }
+        guard window.count >= trendMinimumSamples, let first = window.first else { return nil }
+        let span = latest.date.timeIntervalSince(first.date) / 60
+        guard span >= trendMinimumSpanMinutes, let slope = recencyWeightedSlope(window) else { return nil }
+
+        if slope <= -fallFloor {
+            // A measured five-minute rise overrules the smoothed fall: no carbs against it.
+            if let previous = valid.last(where: { latest.date.timeIntervalSince($0.date) >= 4 * 60 }),
+               latest.date.timeIntervalSince(previous.date) <= 10 * 60, latest.mgDl > previous.mgDl { return nil }
+            // A fall with nothing on board is not being driven by insulin.
+            guard iobUnits > 0, carbRatio.isFinite, carbRatio > 0 else { return nil }
+            let minutesAhead = latest.mgDl <= targetMgDl ? 0 : (targetMgDl - latest.mgDl) / slope
+            guard minutesAhead.isFinite, minutesAhead >= 0, minutesAhead <= horizonMinutes else { return nil }
+            let riseNeeded = targetMgDl - (latest.mgDl + slope * horizonMinutes)
+            guard riseNeeded > 0 else { return nil }
+            let grams = (riseNeeded / insulinSensitivityMgDl * carbRatio).rounded(.up)
+            guard grams.isFinite, grams >= minimumCarbsGrams else { return nil }
+            return Hint(isCarbs: true, amount: grams, targetMgDl: targetMgDl, minutesAhead: Int(minutesAhead.rounded()))
+        }
+
+        guard highMgDl.isFinite, span >= riseMinimumSpanMinutes, slope >= stagnantSlope else { return nil }
+        if latest.mgDl <= highMgDl {
+            guard correctInRange, latest.mgDl > targetMgDl + inRangeMarginMgDl else { return nil }
+        }
+        let needed = (latest.mgDl - targetMgDl) / insulinSensitivityMgDl - iobUnits
+        guard needed.isFinite, needed > 0 else { return nil }
+        // Down to the step, never up: rounding up hands out insulin the arithmetic did not ask for.
+        let units = (needed / penStepUnits + 1e-4).rounded(.down) * penStepUnits
+        guard units >= penStepUnits else { return nil }
+        return Hint(isCarbs: false, amount: units, targetMgDl: targetMgDl, minutesAhead: nil)
+    }
+}
+
+// MARK: - Predicted low evidence (JugglucoNG alerts/ForecastLow*.kt)
+
+/// JugglucoNG's optional confirmation for the forecast-low alert ("Consider IOB and recent
+/// glucose"): evidence rules, not probabilities, that decide whether a predicted low may alert
+/// now. They never change the forecast, and the measured low alarms do not use them.
+///
+/// A candidate (glucose at or above the threshold, forecast below it, falling arrow, carbs on
+/// board not covering the shortfall) alerts at once when glucose is within 15 mg/dL of the
+/// threshold, when the current rate reaches it within ten minutes, or when the insulin acting in
+/// the next 30 minutes explains at least half the distance (and 10 mg/dL). With no insulin on
+/// board at all, a fall that only retraces a recent rise waits while glucose stays at its earlier
+/// baseline. Anything else needs two readings at least a minute apart.
+struct PredictedLowEvidence {
+    enum Decision: Equatable {
+        case noCandidate, coveredByCarbs, confirming, returningToBaseline
+        case nearThreshold, imminent, insulinSupported, belowBaseline, confirmed
+
+        var allowsAlert: Bool {
+            switch self {
+            case .nearThreshold, .imminent, .insulinSupported, .belowBaseline, .confirmed: return true
+            case .noCandidate, .coveredByCarbs, .confirming, .returningToBaseline: return false
+            }
+        }
+    }
+
+    static let minimumConfirmation: TimeInterval = 60
+    /// Accepts five-minute sensors; a longer gap starts a new run.
+    static let maximumReadingGap: TimeInterval = 6 * 60
+    static let nearThresholdMgDl = 15.0
+    static let urgentMinutes = 10.0
+    static let minimumInsulinEffectMgDl = 10.0
+    /// JugglucoNG `TrendArrowAngle.FLAT_BELOW_RATE`: under 0.5 mg/dL per minute the arrow is flat.
+    static let flatBelowRate = 0.5
+
+    private var lastReadingDate: Date?
+    private var previousValue: Double?
+    private var firstCandidateDate: Date?
+    private var candidates = 0
+    private var thresholdMgDl: Double?
+
+    mutating func reset() {
+        previousValue = nil
+        firstCandidateDate = nil
+        candidates = 0
+    }
+
+    /// - Parameters:
+    ///   - rate: mg/dL per minute, negative when falling.
+    ///   - iobNext30: units of insulin that act in the next 30 minutes; nil when unknown.
+    ///   - classicIOB: units still to act; nil when unknown.
+    ///   - cobGrams: carbs still absorbing.
+    ///   - recentRiseBaseline: `PredictedLowEvidence.recentRiseBaseline`.
+    mutating func evaluate(currentMgDl: Double, thresholdMgDl threshold: Double, projectedMgDl: Double, rate: Double,
+                           readingDate: Date, now: Date, iobNext30: Double?, classicIOB: Double?, cobGrams: Double,
+                           carbRatio: Double, insulinSensitivityMgDl: Double, recentRiseBaseline: Double?) -> Decision {
+        if thresholdMgDl != threshold {
+            reset()
+            thresholdMgDl = threshold
+        }
+        guard currentMgDl.isFinite, threshold.isFinite, threshold > 0, projectedMgDl.isFinite,
+              currentMgDl >= threshold, projectedMgDl < threshold, rate < -Self.flatBelowRate,
+              now >= readingDate, now.timeIntervalSince(readingDate) <= Self.maximumReadingGap else {
+            reset()
+            return .noCandidate
+        }
+        if Self.cobCoversLow(projectedMgDl: projectedMgDl, thresholdMgDl: threshold, cobGrams: cobGrams,
+                             carbRatio: carbRatio, insulinSensitivityMgDl: insulinSensitivityMgDl) {
+            reset()
+            return .coveredByCarbs
+        }
+        if let last = lastReadingDate, readingDate < last {
+            reset()
+            return .noCandidate
+        }
+        if lastReadingDate.map({ readingDate > $0 }) ?? true {
+            if let last = lastReadingDate, readingDate.timeIntervalSince(last) > Self.maximumReadingGap { reset() }
+            if let previous = previousValue, currentMgDl > previous { reset() }
+            lastReadingDate = readingDate
+            previousValue = currentMgDl
+            if candidates == 0 { firstCandidateDate = readingDate }
+            candidates += 1
+        }
+
+        let distance = currentMgDl - threshold
+        if distance <= Self.nearThresholdMgDl { return .nearThreshold }
+        if distance / -rate <= Self.urgentMinutes { return .imminent }
+        // Insulin only speeds eligibility up; missing values never switch the glucose-only path off.
+        if let iobNext30, iobNext30 > 0, insulinSensitivityMgDl > 0,
+           iobNext30 * insulinSensitivityMgDl >= max(Self.minimumInsulinEffectMgDl, distance * 0.5) {
+            return .insulinSupported
+        }
+        // Only insulin that is explicitly absent supports reading a fall as the return from a rise.
+        let noInsulin = (classicIOB.map { (0...0.0001).contains($0) } ?? false) && (iobNext30.map { (0...0.0001).contains($0) } ?? false)
+        if noInsulin, let baseline = recentRiseBaseline, baseline.isFinite, baseline > threshold + Self.nearThresholdMgDl {
+            return currentMgDl >= baseline - 3 ? .returningToBaseline : .belowBaseline
+        }
+        if candidates >= 2, let first = firstCandidateDate, readingDate.timeIntervalSince(first) >= Self.minimumConfirmation {
+            return .confirmed
+        }
+        return .confirming
+    }
+
+    /// Remaining carbs can fill the forecast's shortfall (`ForecastLowSuppression.cobCoversLow`),
+    /// with the prediction's carb ratio and sensitivity. Total remaining effect, not a promise that
+    /// it is absorbed in time.
+    static func cobCoversLow(projectedMgDl: Double, thresholdMgDl: Double, cobGrams: Double, carbRatio: Double,
+                             insulinSensitivityMgDl: Double) -> Bool {
+        guard cobGrams.isFinite, cobGrams > 0, carbRatio.isFinite, carbRatio > 0, insulinSensitivityMgDl.isFinite,
+              insulinSensitivityMgDl > 0, projectedMgDl.isFinite, thresholdMgDl.isFinite, thresholdMgDl > 0 else { return false }
+        return cobGrams / carbRatio * insulinSensitivityMgDl >= max(thresholdMgDl - projectedMgDl, 0)
+    }
+
+    /// `ForecastLowReturnToBaselineState.recentRiseBaselineMgdl`, over the last 45 minutes of
+    /// readings (ascending): a quiet five-minute baseline (within 6 mg/dL) followed by a rise of at
+    /// least 15 mg/dL over 3 to 15 minutes whose peak is at most 15 minutes old. Returns the baseline.
+    static func recentRiseBaseline(readings: [(date: Date, mgDl: Double)], now: Date) -> Double? {
+        // The trailing run without a gap longer than six minutes, at most 45 minutes long.
+        var points: [(date: Date, mgDl: Double)] = []
+        for reading in readings.sorted(by: { $0.date < $1.date }) where reading.mgDl.isFinite && reading.mgDl > 0 && reading.date <= now {
+            if let last = points.last, reading.date.timeIntervalSince(last.date) > maximumReadingGap { points.removeAll() }
+            points.append(reading)
+        }
+        guard let latest = points.last else { return nil }
+        points = points.filter { latest.date.timeIntervalSince($0.date) <= 45 * 60 }
+        guard points.count >= 5 else { return nil }
+        let minute: TimeInterval = 60
+        for endIndex in stride(from: points.count - 2, through: 0, by: -1) {
+            let end = points[endIndex]
+            let baseline = points[0...endIndex].filter { end.date.timeIntervalSince($0.date) <= 6 * minute }
+            guard baseline.count >= 2, let first = baseline.first, end.date.timeIntervalSince(first.date) >= 5 * minute - 30,
+                  let low = baseline.map { $0.mgDl }.min(), let high = baseline.map { $0.mgDl }.max(), high - low <= 6 else { continue }
+            let level = baseline.map { $0.mgDl }.sorted()[baseline.count / 2]
+            // The earliest highest value after the baseline, so a falling edge cannot move the peak.
+            var peakIndex = endIndex + 1
+            for index in (endIndex + 1)..<points.count where points[index].mgDl > points[peakIndex].mgDl { peakIndex = index }
+            let peak = points[peakIndex]
+            let rise = peak.date.timeIntervalSince(end.date)
+            guard rise >= 3 * minute, rise <= 15 * minute, peakIndex != points.count - 1,
+                  now.timeIntervalSince(peak.date) <= 15 * minute, latest.mgDl <= peak.mgDl - 3,
+                  peak.mgDl - level >= 15 else { continue }
+            // A decline already under way with a later bounce is not a return from a rise.
+            if points[endIndex..<peakIndex].contains(where: { $0.mgDl < level - 3 }) { continue }
+            return level
+        }
+        return nil
+    }
+
+    /// mg/dL per minute over the last ten minutes of readings (least squares), nil with fewer than two.
+    static func rate(readings: [(date: Date, mgDl: Double)], now: Date) -> Double? {
+        let recent = readings.filter { $0.mgDl > 0 && $0.date <= now && now.timeIntervalSince($0.date) <= 10.5 * 60 }
+        guard recent.count >= 2, let origin = recent.map { $0.date }.min() else { return nil }
+        let xs = recent.map { $0.date.timeIntervalSince(origin) / 60 }
+        let ys = recent.map { $0.mgDl }
+        let meanX = xs.reduce(0, +) / Double(xs.count), meanY = ys.reduce(0, +) / Double(ys.count)
+        let denominator = xs.reduce(0) { $0 + ($1 - meanX) * ($1 - meanX) }
+        guard denominator > 0 else { return nil }
+        return zip(xs, ys).reduce(0) { $0 + ($1.0 - meanX) * ($1.1 - meanY) } / denominator
+    }
+
+    /// Insulin of the forecast's insulins at `date`: units still to act, and units acting in the
+    /// next 30 minutes.
+    static func insulin(treatments: [ExperimentalTreatment], model: ExperimentalPredictionModel, at date: Date) -> (classic: Double, next30: Double) {
+        var classic = 0.0, next30 = 0.0
+        for treatment in treatments where (treatment.kind == .bolus || treatment.kind == .basalInjection) && treatment.date <= date {
+            guard treatment.amount.isFinite, treatment.amount > 0,
+                  let profile = treatment.insulin(bolusDefault: model.bolusInsulin, basalDefault: model.basalInsulin),
+                  profile.countsTowardPrediction else { continue }
+            let points = InsulinCurveCatalogue.curve(for: profile, units: treatment.amount, bodyWeightKg: model.bodyWeightKg)
+            let elapsed = date.timeIntervalSince(treatment.date) / 60
+            let done = InsulinCurveMath.cumulativeFraction(points, elapsedMinutes: elapsed)
+            classic += treatment.amount * (1 - done)
+            next30 += treatment.amount * (InsulinCurveMath.cumulativeFraction(points, elapsedMinutes: elapsed + 30) - done)
+        }
+        return (classic, next30)
+    }
+
+    /// Carbs still absorbing at `date` (JugglucoNG `JournalIobMath.activeCarbsGrams`): linear over
+    /// grams ÷ absorption rate, clamped to 30...360 minutes.
+    static func carbsOnBoard(treatments: [ExperimentalTreatment], model: ExperimentalPredictionModel, at date: Date) -> Double {
+        treatments.reduce(0) { total, treatment in
+            guard treatment.kind == .carbs, treatment.amount.isFinite, treatment.amount > 0, treatment.date <= date else { return total }
+            let rate = max(model.parameters(at: treatment.date).carbAbsorption, 1)
+            let duration = min(max(treatment.amount / rate * 60, 30), 360)
+            let progress = InsulinCurveMath.linearProgress(elapsedMinutes: date.timeIntervalSince(treatment.date) / 60, durationMinutes: duration)
+            return total + max(treatment.amount * (1 - progress), 0)
+        }
+    }
+
+    private static let lock = NSLock()
+    private static var shared = PredictedLowEvidence()
+
+    /// The decision for the alert check, with the shared confirmation state.
+    static func decide(forecast: [GlucosePredictionPoint], readings: [(date: Date, mgDl: Double)], treatments: [ExperimentalTreatment],
+                       thresholdMgDl: Double, leadMinutes: Int, model: ExperimentalPredictionModel, now: Date = Date()) -> Decision {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let latest = readings.max(by: { $0.date < $1.date }), let fallRate = Self.rate(readings: readings, now: now),
+              let crossing = PredictedLowAlert.crossing(forecast: forecast, currentMgDl: latest.mgDl, thresholdMgDl: thresholdMgDl,
+                                                        leadMinutes: leadMinutes) else {
+            shared.reset()
+            return .noCandidate
+        }
+        let onBoard = Self.insulin(treatments: treatments, model: model, at: now)
+        let parameters = model.parameters(at: now)
+        return shared.evaluate(currentMgDl: latest.mgDl, thresholdMgDl: thresholdMgDl, projectedMgDl: crossing.mgDl, rate: fallRate,
+                               readingDate: latest.date, now: now, iobNext30: onBoard.next30, classicIOB: onBoard.classic,
+                               cobGrams: Self.carbsOnBoard(treatments: treatments, model: model, at: now), carbRatio: parameters.carbRatio,
+                               insulinSensitivityMgDl: parameters.insulinSensitivityMgDl,
+                               recentRiseBaseline: Self.recentRiseBaseline(readings: readings, now: now))
+    }
+}
+
 /// JugglucoNG `JournalIntensity`; nil (not logged) uses the 0.5 factor.
 enum ExperimentalExerciseIntensity: String, CaseIterable, Sendable {
     case light, moderate, intense
@@ -1341,21 +1721,26 @@ enum PredictionAccuracyRecorder {
 enum ExperimentalNightscoutPrediction {
     static let device = "xDrip4iOS"
 
-    static func deviceStatus(forecast: [GlucosePredictionPoint], now: Date) -> [String: Any]? {
+    /// - Parameters:
+    ///   - iob: units still to act of the forecast's insulins, as JugglucoNG uploads; nil to leave out.
+    ///   - cob: grams still absorbing; nil to leave out.
+    static func deviceStatus(forecast: [GlucosePredictionPoint], now: Date, iob: Double? = nil, cob: Double? = nil) -> [String: Any]? {
         guard let first = forecast.first, forecast.count > 1 else { return nil }
-        return [
-            "device": device,
-            "created_at": now.ISOStringFromDate(),
-            "openaps": [
-                "suggested": [
-                    "timestamp": first.date.ISOStringFromDate(),
-                    "bg": Int(first.value.rounded()),
-                    // Five-minute steps from the newest reading, as OpenAPS predBGs.
-                    "predBGs": ["IOB": forecast.map { Int($0.value.rounded()) }],
-                    "reason": "xDrip4iOS experimental forecast, not a dosing recommendation"
-                ] as [String: Any]
-            ] as [String: Any]
+        var suggested: [String: Any] = [
+            "timestamp": first.date.ISOStringFromDate(),
+            "bg": Int(first.value.rounded()),
+            // Five-minute steps from the newest reading, as OpenAPS predBGs.
+            "predBGs": ["IOB": forecast.map { Int($0.value.rounded()) }],
+            "reason": "xDrip4iOS experimental forecast, not a dosing recommendation"
         ]
+        var openaps: [String: Any] = [:]
+        if let cob, cob.isFinite { suggested["COB"] = (cob * 10).rounded() / 10 }
+        if let iob, iob.isFinite {
+            suggested["IOB"] = (iob * 100).rounded() / 100
+            openaps["iob"] = ["iob": (iob * 100).rounded() / 100, "time": now.ISOStringFromDate()] as [String: Any]
+        }
+        openaps["suggested"] = suggested
+        return ["device": device, "created_at": now.ISOStringFromDate(), "openaps": openaps]
     }
 }
 
@@ -1383,6 +1768,9 @@ enum InsulinActivityStack {
     struct OnBoard: Sendable, Hashable {
         let insulin: InsulinProfile
         let units: Double
+        /// JugglucoNG eIOB: the remaining units weighted by how hard each dose is acting now
+        /// (0 before onset, equal to `units` at the peak, never more).
+        var effectiveUnits: Double = 0
         /// When the last of its doses stops acting.
         let activeUntil: Date
     }
@@ -1431,11 +1819,18 @@ enum InsulinActivityStack {
         return units * (1 - InsulinCurveMath.cumulativeFraction(shape, elapsedMinutes: minutes))
     }
 
+    /// JugglucoNG `JournalIobMath.activityFractionAt`: the dose's activity now as a share of its peak.
+    static func activity(shape: [InsulinCurvePoint], minutes: Double) -> Double {
+        guard minutes >= 0, let peak = shape.map(\.activity).max(), peak > 0 else { return 0 }
+        return min(max(InsulinCurveCatalogue.interpolate(shape, minute: minutes) / peak, 0), 1)
+    }
+
     /// What each insulin still has on board at `date`, largest first. Uses the same per-dose
     /// shapes as the chart band, so the units left are the area still to come under its curve.
     static func onBoard(treatments: [ExperimentalTreatment], at date: Date, bolusDefault: InsulinProfile,
                         basalDefault: InsulinProfile, bodyWeightKg: Double? = nil) -> [OnBoard] {
         var units: [InsulinProfile: Double] = [:]
+        var effective: [InsulinProfile: Double] = [:]
         var until: [InsulinProfile: Date] = [:]
         for treatment in treatments where (treatment.kind == .bolus || treatment.kind == .basalInjection) && treatment.date <= date {
             guard treatment.amount.isFinite, treatment.amount > 0,
@@ -1444,9 +1839,10 @@ enum InsulinActivityStack {
             let left = remaining(units: treatment.amount, shape: doseShape, minutes: date.timeIntervalSince(treatment.date) / 60)
             guard left > 0.0005, let end = doseShape.last?.minute else { continue }
             units[insulin, default: 0] += left
+            effective[insulin, default: 0] += left * activity(shape: doseShape, minutes: date.timeIntervalSince(treatment.date) / 60)
             until[insulin] = max(until[insulin] ?? .distantPast, treatment.date.addingTimeInterval(TimeInterval(end * 60)))
         }
-        return units.map { OnBoard(insulin: $0.key, units: $0.value, activeUntil: until[$0.key] ?? date) }
+        return units.map { OnBoard(insulin: $0.key, units: $0.value, effectiveUnits: effective[$0.key] ?? 0, activeUntil: until[$0.key] ?? date) }
             .sorted { $0.units > $1.units }
     }
 
@@ -1519,7 +1915,8 @@ enum ExperimentalChartInputs {
                 model.bolusInsulin.rawValue, model.basalInsulin.rawValue, defaults.bloodGlucoseUnitIsMgDl.description,
                 model.bodyWeightKg?.description ?? "-", ExperimentalPredictionPeriod.encode(model.periods), model.macrosEnabled.description,
                 defaults.lowMarkValue.description, defaults.highMarkValue.description,
-                defaults.experimentalPredictionAdaptive.description].joined(separator: "|")
+                defaults.experimentalPredictionAdaptive.description, defaults.experimentalDoseHintsEnabled.description,
+                defaults.experimentalDoseTargetMgDl.description, defaults.experimentalDoseHintCorrectInRange.description].joined(separator: "|")
     }
 
     /// How far back insulin can still be acting: two days, or eight for a once-weekly basal.
@@ -1560,7 +1957,7 @@ enum ExperimentalChartInputs {
     static func onBoard(_ entry: InsulinActivityStack.OnBoard) -> GlucoseChartExperimentalPlots.OnBoard {
         GlucoseChartExperimentalPlots.OnBoard(id: entry.insulin.rawValue, name: entry.insulin.shortName, color: color(entry.insulin),
                                               countsTowardIOB: entry.insulin.countsTowardPrediction, units: entry.units,
-                                              activeUntil: entry.activeUntil)
+                                              activeUntil: entry.activeUntil, effectiveUnits: entry.effectiveUnits)
     }
 
     static func color(_ insulin: InsulinProfile) -> Color {
@@ -1577,7 +1974,8 @@ enum ExperimentalChartInputs {
         let atPresent = chartState.endDate.timeIntervalSince(now) > -ConstantsGlucoseChartSwiftUI.experimentalPredictionPresentTolerance
         let wantsPrediction = defaults.experimentalPredictionEnabled && atPresent
         let wantsInsulin = defaults.experimentalInsulinsEnabled && showsInsulin
-        guard wantsPrediction || wantsInsulin else { return plots }
+        let wantsHint = defaults.experimentalDoseHintsEnabled && showsInsulin && atPresent
+        guard wantsPrediction || wantsInsulin || wantsHint else { return plots }
 
         let futureEnd = now.addingTimeInterval(TimeInterval(model.horizonMinutes * 60))
         let lookBack = max(ExperimentalPredictionModel.lookBack, wantsInsulin ? insulinLookBack(basal: model.basalInsulin) : 0)
@@ -1605,6 +2003,22 @@ enum ExperimentalChartInputs {
                 plots.predictionIsAdaptive = shown.isAdaptive
             }
             plots.prediction = forecast.map { GlucoseChartExperimentalPlots.PredictionPoint(date: $0.date, mgDl: $0.value) }
+        }
+
+        if wantsHint {
+            let parameters = model.parameters(at: now)
+            let recent = zip(chartState.bgReadingDates, chartState.bgReadingValues)
+                .filter { $0.0 >= now.addingTimeInterval(-40 * 60) && $0.0 <= now }.map { (date: $0.0, mgDl: $0.1) }
+            // All insulin of the forecast's insulins still to act, doses before onset included (IOB, not eIOB).
+            let onBoard = InsulinActivityStack.onBoard(treatments: treatments, at: now, bolusDefault: model.bolusInsulin,
+                                                       basalDefault: model.basalInsulin, bodyWeightKg: model.bodyWeightKg)
+                .filter { $0.insulin.countsTowardPrediction }.reduce(0) { $0 + $1.units }
+            if let hint = DoseHintCalculator.hint(readings: recent, highMgDl: defaults.highMarkValue, targetMgDl: defaults.experimentalDoseTargetMgDl,
+                                                  iobUnits: onBoard, insulinSensitivityMgDl: parameters.insulinSensitivityMgDl,
+                                                  carbRatio: parameters.carbRatio, correctInRange: defaults.experimentalDoseHintCorrectInRange, now: now) {
+                plots.doseHint = GlucoseChartExperimentalPlots.DoseHint(isCarbs: hint.isCarbs, amount: hint.amount, targetMgDl: hint.targetMgDl,
+                                                                        minutesAhead: hint.minutesAhead)
+            }
         }
 
         if wantsInsulin {
