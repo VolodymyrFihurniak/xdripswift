@@ -122,6 +122,13 @@ editor, no setting): JugglucoNG staples embedded as a `key|carbs|protein|fat|por
 custom foods and recents as UserDefaults JSON, Open Food Facts search/barcode (network only on
 request). It fills the editor's carbs/protein/fat; the meal itself is not stored.
 
+Insulin pens (`xDrip/Managers/Therapy/InsulinPenReader.swift`): Swift port of JugglucoNG
+`NovoPen/opennov` (NFC Type 4 `PenT4` → `PenPHD` record → IEEE 11073 `PenMessage`/`PenMachine`,
+run by `PenSession` over a `PenTransport`), `PenDoseParser`, `InsulinPenStore` (UserDefaults JSON,
+cursor = newest reviewed pen counter) and `InsulinPenImport`. CoreNFC needs the NDEF AID
+`D2760000850101` in Info.plist `...iso7816.select-identifiers`. Tested only against the
+`SimulatedPen` in the tests (verified with a Python port) — never against a real pen.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new
@@ -135,9 +142,8 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 ## Not ported (yet)
 
 JugglucoNG alternative glucose models Balanced, Responsive and Adaptive V1 (Adaptive V2 is ported), GS3 variant,
-Sibionics reset reminder and raw source-journal backup/recovery, NovoPen 6 / Echo Plus NFC import
-(JugglucoNG `NovoPen/opennov`, IEEE 11073 PHD over NFC Type 4 — needs CoreNFC ISO 7816
-entitlement and AIDs).
+Sibionics reset reminder and raw source-journal backup/recovery; of the NovoPen import, the
+unattended background read and the merge with hand-written entries.
 
 ## Git
 

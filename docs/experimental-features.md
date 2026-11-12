@@ -236,3 +236,27 @@ only the totals; the amount last used for a food is remembered.
 Nothing is sent anywhere until you search or scan: a search sends the typed words, a scan sends the
 barcode, to `openfoodfacts.org`. Open Food Facts is filled in by volunteers — check the figures
 against the package.
+
+## Insulin pens (NFC)
+
+Settings → Experimental features → **Insulin pens (NFC)** reads the dose log of a **NovoPen 6** or
+**NovoPen Echo Plus** and adds the doses you confirm to the treatments.
+
+> This reader is a port of JugglucoNG's (itself from xDrip+'s OpenNov) and has **not yet been
+> confirmed on a real pen from an iPhone**. Its protocol code is tested against a simulated pen
+> only. Check the first imports against the pen's own display.
+
+1. **Scan a pen** and hold the top of the iPhone against the pen's dose display until the system
+   sheet says the pen was read. A long log takes several seconds; if the read is cut short, what
+   arrived is still offered (the pen sends its newest doses first) and the next scan gets the rest.
+2. A new pen is listed under **Pens** by its serial number. Choose its insulin: a pen with a basal
+   or premixed insulin logs basal injections, any other pen logs boluses named after the insulin,
+   so the insulin curves and insulin on board use the right profile.
+3. The review lists the doses newer than the last import, newest first. Ticked doses become
+   treatments. A dose of 2 U or less within a minute before another is taken for an air shot and
+   starts unticked; so does a dose that already has a treatment of the same size within five
+   minutes. Unticked doses are not offered again, unless **Read the whole log next time** is on.
+
+The pen has no clock, only a counter: dose times are that counter set against the phone's clock at
+the moment of the scan. Doses older than 100 days are ignored. Nothing is imported without the
+review, and iOS only reads a pen while this screen's scan is running.

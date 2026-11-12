@@ -1166,3 +1166,30 @@
 "experimental.food.portion.glass" = "склянка";
 "experimental.food.portion.slice" = "скибка";
 "experimental.food.portion.serving" = "порція";
+
+/* Insulin pens */
+"experimental.pens" = "Інсулінові ручки (NFC)";
+"experimental.pensIntroduction" = "Експериментально й ще не підтверджено на справжній ручці. Зчитує журнал доз NovoPen 6 або NovoPen Echo Plus через NFC і додає підтверджені вами дози до записів лікування.";
+"experimental.pensOpen" = "Ручки та сканування";
+"experimental.pensScan" = "Сканувати ручку";
+"experimental.pensFullRead" = "Наступного разу зчитати весь журнал";
+"experimental.pensScanFooter" = "Тримайте верхню частину iPhone біля дисплея дози ручки, доки зчитування не завершиться; довгий журнал читається кілька секунд. Пропонуються лише дози, новіші за останній імпорт, якщо не запитано весь журнал. Ручка не має годинника: час доз обчислюється з її лічильника та годинника цього телефона в момент сканування.";
+"experimental.pensKnown" = "Ручки";
+"experimental.pensKnownFooter" = "Виберіть інсулін у кожній ручці. Ручка з базальним або змішаним інсуліном записує базальні ін’єкції, будь-яка інша — болюси. Видалення ручки стирає відомості про імпорт із неї, але не записи лікування.";
+"experimental.pensImported" = "Імпортовано доз: %d";
+"experimental.pensImportedNow" = "Додано доз до записів лікування: %d.";
+"experimental.pensNothingNew" = "На цій ручці немає нових доз.";
+"experimental.pensUnavailable" = "NFC недоступний на цьому пристрої.";
+"experimental.pensSaveFailed" = "Не вдалося зберегти дози.";
+"experimental.pensReview" = "Дози на ручці";
+"experimental.pensImport" = "Додати";
+"experimental.pensReviewFooter" = "Позначені дози додаються як записи лікування. Непозначені більше не пропонуються, доки не зчитано весь журнал. Мала доза за хвилину до іншої вважається випусканням повітря й спочатку не позначена, як і доза, що вже є в записах лікування.";
+"experimental.pensNoInsulin" = "Для цієї ручки не вибрано інсулін, тому дози додаються як болюси без назви інсуліну.";
+"experimental.pensPartial" = "Зчитування обірвалося: старіших доз може бракувати. Скануйте ще раз, щоб отримати їх.";
+"experimental.pensPriming" = "випускання повітря?";
+"experimental.pensAlreadyLogged" = "уже записано";
+"experimental.pensFlagged" = "позначено ручкою";
+"experimental.pen.hold" = "Прикладіть верхню частину iPhone до дисплея дози ручки й тримайте, доки зчитування не завершиться.";
+"experimental.pen.notAPen" = "Це не підтримувана інсулінова ручка.";
+"experimental.pen.readFailed" = "Не вдалося зчитати ручку. Спробуйте ще раз і тримайте телефон нерухомо.";
+"experimental.pen.done" = "Ручку зчитано.";

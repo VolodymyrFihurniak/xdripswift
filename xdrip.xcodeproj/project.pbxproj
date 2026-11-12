@@ -441,6 +441,7 @@
 		91A95449E176B7608EA94683 /* ExperimentalSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57DC5CC6AB8F0B8B84EB06E1 /* ExperimentalSettingsView.swift */; };
 		2C229BAE87FD2F6384A8D7DD /* ExperimentalTherapy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 488707C346AA445BFFCEF57A /* ExperimentalTherapy.swift */; };
 		F0A870E01F7A5873CA43B0A8 /* AdaptiveGlucoseForecast.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A8F6242D143E2DC4F185FF /* AdaptiveGlucoseForecast.swift */; };
+		F0A870E21F7A5873CA43B0AA /* InsulinPenReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A8F6262D143E2DC4F18601 /* InsulinPenReader.swift */; };
 		C2385D0CA6579919114B060A /* AlertTypesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 102D337E1C2160C7B03D5184 /* AlertTypesSettingsView.swift */; };
 		C606CA18273EF9F800BA199E /* DexcomG6InitialCalibrationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C606CA17273EF9F800BA199E /* DexcomG6InitialCalibrationPolicy.swift */; };
 		C859C6C1B4CE6B335D4C86E6 /* Libre3NFCActivationCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34D9952479A5C8B9A161631A /* Libre3NFCActivationCommandTests.swift */; };
@@ -1348,6 +1349,7 @@
 		57DC5CC6AB8F0B8B84EB06E1 /* ExperimentalSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExperimentalSettingsView.swift; sourceTree = "<group>"; };
 		488707C346AA445BFFCEF57A /* ExperimentalTherapy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExperimentalTherapy.swift; sourceTree = "<group>"; };
 		F0A8F6242D143E2DC4F185FF /* AdaptiveGlucoseForecast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveGlucoseForecast.swift; sourceTree = "<group>"; };
+		F0A8F6262D143E2DC4F18601 /* InsulinPenReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsulinPenReader.swift; sourceTree = "<group>"; };
 		4D7B00013014000200000001 /* CGMG5SensorSessionDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMG5SensorSessionDetectionTests.swift; sourceTree = "<group>"; };
 		4D7C00013015000100000001 /* CalibrationReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationReadinessTests.swift; sourceTree = "<group>"; };
 		4D7D00013016000200000001 /* BluetoothPeripheralDisplayStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothPeripheralDisplayStatusTests.swift; sourceTree = "<group>"; };
@@ -2998,6 +3000,7 @@
 				5F219EC5BAAF4D5E924415FA /* TherapyMetricsManager.swift */,
 				488707C346AA445BFFCEF57A /* ExperimentalTherapy.swift */,
 				F0A8F6242D143E2DC4F185FF /* AdaptiveGlucoseForecast.swift */,
+				F0A8F6262D143E2DC4F18601 /* InsulinPenReader.swift */,
 			);
 			path = Therapy;
 			sourceTree = "<group>";
@@ -5379,6 +5382,7 @@
 				91A95449E176B7608EA94683 /* ExperimentalSettingsView.swift in Sources */,
 				2C229BAE87FD2F6384A8D7DD /* ExperimentalTherapy.swift in Sources */,
 				F0A870E01F7A5873CA43B0A8 /* AdaptiveGlucoseForecast.swift in Sources */,
+				F0A870E21F7A5873CA43B0AA /* InsulinPenReader.swift in Sources */,
 				B3DBAE6F4DF8465BBF554DE4 /* TherapyMetricsManager.swift in Sources */,
 				4D20C0042FF1000100000001 /* RootHomeView.swift in Sources */,
 				4D21B0022FF8000100000001 /* RootHomeChartRange.swift in Sources */,

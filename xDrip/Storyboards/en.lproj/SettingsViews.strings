@@ -691,3 +691,30 @@
 "experimental.food.portion.glass" = "glass";
 "experimental.food.portion.slice" = "slice";
 "experimental.food.portion.serving" = "serving";
+
+/* Insulin pens */
+"experimental.pens" = "Insulin pens (NFC)";
+"experimental.pensIntroduction" = "Experimental and not yet confirmed on a real pen. Reads the dose log of a NovoPen 6 or NovoPen Echo Plus over NFC and adds the doses you confirm to the treatments.";
+"experimental.pensOpen" = "Pens and scanning";
+"experimental.pensScan" = "Scan a pen";
+"experimental.pensFullRead" = "Read the whole log next time";
+"experimental.pensScanFooter" = "Hold the top of the iPhone against the pen's dose display until the read finishes; a long log takes several seconds. Only doses newer than the last import are offered, unless the whole log is asked for. The pen has no clock: dose times are worked out from its counter and this phone's clock at the moment of the scan.";
+"experimental.pensKnown" = "Pens";
+"experimental.pensKnownFooter" = "Choose the insulin in each pen. A pen with a basal or premixed insulin logs basal injections, any other pen boluses. Removing a pen forgets what was imported from it, not the treatments.";
+"experimental.pensImported" = "%d doses imported";
+"experimental.pensImportedNow" = "%d doses added to the treatments.";
+"experimental.pensNothingNew" = "No new doses on this pen.";
+"experimental.pensUnavailable" = "NFC is not available on this device.";
+"experimental.pensSaveFailed" = "The doses could not be saved.";
+"experimental.pensReview" = "Doses on the pen";
+"experimental.pensImport" = "Add";
+"experimental.pensReviewFooter" = "Ticked doses are added as treatments. Unticked doses are not offered again unless the whole log is read. A small dose within a minute before another is taken for an air shot and starts unticked, as does a dose that is already in the treatments.";
+"experimental.pensNoInsulin" = "No insulin is chosen for this pen, so the doses are added as boluses without a named insulin.";
+"experimental.pensPartial" = "The read was cut short: older doses may be missing. Scan again to get them.";
+"experimental.pensPriming" = "air shot?";
+"experimental.pensAlreadyLogged" = "already logged";
+"experimental.pensFlagged" = "flagged by the pen";
+"experimental.pen.hold" = "Hold the top of the iPhone to the pen's dose display and keep it there until the read finishes.";
+"experimental.pen.notAPen" = "This is not a supported insulin pen.";
+"experimental.pen.readFailed" = "The pen could not be read. Try again and hold the phone still.";
+"experimental.pen.done" = "Pen read.";

@@ -740,7 +740,7 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertLessThan(index, aboutIndex)
         XCTAssertEqual(sections[index].section().rows.map(\.id),
                        ["experimental.chartStyle", "experimental.chartCursor", "experimental.prediction", "experimental.insulins",
-                        "experimental.alerts", "experimental.restricted", "experimental.powerSaving"])
+                        "experimental.pens", "experimental.alerts", "experimental.restricted", "experimental.powerSaving"])
     }
 }
 
@@ -1021,5 +1021,370 @@ final class FoodLibraryTests: XCTestCase {
         XCTAssertTrue(FoodEditorView.isValid(carbs: 60, protein: 10, fat: 30))
         XCTAssertFalse(FoodEditorView.isValid(carbs: 60, protein: 30, fat: 30))
         XCTAssertFalse(FoodEditorView.isValid(carbs: nil, protein: 1, fat: 1))
+    }
+}
+
+// MARK: - Insulin pens (NFC)
+
+/// A simulated NovoPen: a Type 4 tag whose NDEF file carries the pen's side of the 11073
+/// conversation. Verified against a Python port of the reader before these tests were written.
+private final class SimulatedPen: PenTransport {
+    private let doses: [[UInt8]]
+    private let uptime: Int64
+    private let serial: String
+    private let maximumRead: Int
+    private let maximumWrite: Int
+    private let blockSize = 8
+    private var selected = 0
+    private var sequence = 0
+    private var sent = 0
+    private var transferPending = false
+    private var file: [UInt8] = []
+    /// Stops answering after this many commands, as a pen pulled away does.
+    var commandsBeforeLoss = Int.max
+    private(set) var received: [[UInt8]] = []
+
+    struct Lost: Error {}
+
+    init(doses: [[UInt8]], uptime: Int64, serial: String = "ABC123XY", maximumRead: Int = 255, maximumWrite: Int = 255) {
+        self.doses = doses
+        self.uptime = uptime
+        self.serial = serial
+        self.maximumRead = maximumRead
+        self.maximumWrite = maximumWrite
+        setMessage(associationRequest())
+    }
+
+    static func record(relative: Int64, tenths: Int, flags: UInt8 = 0) -> [UInt8] {
+        var bytes: [UInt8] = []
+        bytes.appendU32(relative)
+        bytes.append(contentsOf: [0xFF, 0x00])
+        bytes.appendU16(tenths)
+        bytes.append(contentsOf: [0x08, 0x00, 0x00, flags])
+        return bytes
+    }
+
+    private func setMessage(_ inner: [UInt8]) {
+        let record = PenPHD(sequence: sequence, inner: inner).encode()
+        file = []
+        file.appendU16(record.count)
+        file.append(contentsOf: record)
+    }
+
+    private func apdu(_ type: Int, _ payload: [UInt8]) -> [UInt8] {
+        var bytes: [UInt8] = []
+        bytes.appendU16(type)
+        bytes.appendIndexed(payload)
+        return bytes
+    }
+
+    private func data(_ invokeID: Int, _ choice: Int, _ payload: [UInt8]) -> [UInt8] {
+        var bytes: [UInt8] = []
+        bytes.appendU16(payload.count + 6)
+        bytes.appendU16(invokeID)
+        bytes.appendU16(choice)
+        bytes.appendIndexed(payload)
+        return apdu(0xE700, bytes)
+    }
+
+    private func attribute(_ type: Int, _ value: [UInt8]) -> [UInt8] {
+        var bytes: [UInt8] = []
+        bytes.appendU16(type)
+        bytes.appendIndexed(value)
+        return bytes
+    }
+
+    private func u16(_ value: Int) -> [UInt8] { var bytes: [UInt8] = []; bytes.appendU16(value); return bytes }
+    private func u32(_ value: Int64) -> [UInt8] { var bytes: [UInt8] = []; bytes.appendU32(value); return bytes }
+
+    private func associationRequest() -> [UInt8] {
+        var element = u32(0x8000_0000) + u16(0xA000) + u32(0x8000_0000) + u32(0) + u32(0x0080_0000)
+        element.appendIndexed([1, 2, 3, 4, 5, 6, 7, 8])
+        element += u16(0x4000) + u32(0) + u16(0) + u16(0)
+        var body = u32(0x8000_0000) + u16(1) + u16(element.count + 4) + u16(20601)
+        body.appendIndexed(element)
+        return apdu(0xE200, body)
+    }
+
+    private func configuration() -> [UInt8] {
+        let attributes = attribute(2385, u16(1)) + attribute(2372, u32(Int64(doses.count))) + attribute(2454, u16(5472)) + attribute(2369, u32(800))
+        let object = u16(61) + u16(256) + u16(4) + u16(attributes.count) + attributes
+        let config = u16(0x4000) + u16(1) + u16(object.count) + object
+        return data(1, 0x0101, u16(0) + u32(uptime) + u16(3356) + u16(config.count) + config)
+    }
+
+    private func specification(_ invokeID: Int) -> [UInt8] {
+        var items = u16(1) + u16(0)
+        items.appendIndexed(Array(serial.utf8) + [0])
+        items += u16(2) + u16(0)
+        items.appendIndexed(Array("PART".utf8))
+        let spec = u16(2) + u16(items.count) + items
+        let attributes = attribute(2349, spec) + attribute(2447, u32(uptime))
+        return data(invokeID, 0x0203, u16(0) + u16(2) + u16(attributes.count) + attributes)
+    }
+
+    private func segmentInfo(_ invokeID: Int) -> [UInt8] {
+        func entry(_ object: Int, _ value: Int) -> [UInt8] { u16(6) + u16(130) + u16(object) + u16(1) + u16(1) + u16(4) + u16(value) + u16(4) }
+        let map = u16(0x8000) + u16(3) + u16(0) + entry(13313, 2646) + entry(13314, 2662) + entry(61440, 2662)
+        let attributes = attribute(2638, map) + attribute(2427, u32(Int64(doses.count)))
+        let segment = u16(16) + u16(2) + u16(attributes.count) + attributes
+        let body = u16(1) + u16(segment.count) + segment
+        return data(invokeID, 0x0207, u16(256) + u16(3085) + u16(body.count) + body)
+    }
+
+    private func nextBlock() -> [UInt8] {
+        let chunk = Array(doses[sent..<min(sent + blockSize, doses.count)])
+        let raw = chunk.flatMap { $0 }
+        let body = u16(16) + u32(Int64(sent)) + u32(Int64(chunk.count)) + u16(0) + u16(raw.count) + raw
+        let message = data(7 + sent, 0x0101, u16(256) + u32(uptime) + u16(3361) + u16(body.count) + body)
+        sent += chunk.count
+        return message
+    }
+
+    private func answer(_ inner: [UInt8]) -> [UInt8] {
+        received.append(inner)
+        guard inner.count >= 4 else {
+            if transferPending { transferPending = false; return nextBlock() }
+            return []
+        }
+        var reader = PenByteReader(inner)
+        guard let type = try? reader.u16(), (try? reader.u16()) != nil else { return [] }
+        if type == 0xE300 { return configuration() }
+        if type == 0xE400 { return [0xE5, 0, 0, 2, 0, 0] }
+        guard type == 0xE700, (try? reader.u16()) != nil, let invokeID = try? reader.u16(),
+              let choice = try? reader.u16(), (try? reader.u16()) != nil else { return [0xE6, 0, 0, 2, 0, 0] }
+        switch choice {
+        case 0x0201:
+            _ = try? reader.u16()
+            _ = try? reader.u32()
+            return (try? reader.u16()) == 3356 ? [] : nextBlock()
+        case 0x0103:
+            return specification(invokeID)
+        case 0x0107:
+            _ = try? reader.u16()
+            let action = try? reader.u16()
+            _ = try? reader.u16()
+            if action == 3085 { return segmentInfo(invokeID) }
+            transferPending = true
+            let segment = (try? reader.u16()) ?? 0
+            return data(invokeID, 0x0207, u16(256) + u16(3100) + u16(4) + u16(segment) + u16(0))
+        default:
+            return [0xE6, 0, 0, 2, 0, 0]
+        }
+    }
+
+    func transceive(_ command: [UInt8]) async throws -> [UInt8] {
+        commandsBeforeLoss -= 1
+        if commandsBeforeLoss < 0 { throw Lost() }
+        switch command[1] {
+        case 0xA4:
+            if command[2] == 4 { return Array(command[5..<12]) == [0xD2, 0x76, 0, 0, 0x85, 1, 1] ? [0x90, 0] : [0x6A, 0x82] }
+            selected = Int(command[5]) << 8 | Int(command[6])
+            return [0x90, 0]
+        case 0xB0:
+            let offset = Int(command[2]) << 8 | Int(command[3])
+            let length = Int(command[4])
+            let source = selected == 0xE103
+                ? u16(15) + [0x20] + u16(maximumRead) + u16(maximumWrite) + [4, 6] + u16(0xE104) + u16(1024) + [0, 0]
+                : file
+            guard selected == 0xE103 || length <= maximumRead else { return [0x67, 0] }
+            return Array(source[min(offset, source.count)..<min(offset + length, source.count)]) + [0x90, 0]
+        case 0xD6:
+            let offset = Int(command[2]) << 8 | Int(command[3])
+            let length = Int(command[4])
+            guard length <= maximumWrite else { return [0x67, 0] }
+            if file.count < offset + length { file += [UInt8](repeating: 0, count: offset + length - file.count) }
+            file.replaceSubrange(offset..<(offset + length), with: command[5..<(5 + length)])
+            let contentLength = Int(file[0]) << 8 | Int(file[1])
+            if contentLength > 0, offset == 0 {
+                let content = Array(file[2..<(2 + contentLength)])
+                if content == PenPHD.emptyNDEF { return [0x90, 0] }
+                guard let record = PenPHD.parse(content), record.sequence == (sequence + 1) & 15 else { return [0x6F, 0] }
+                sequence = (sequence + 2) & 15
+                setMessage(answer(record.inner))
+            }
+            return [0x90, 0]
+        default:
+            return [0x6D, 0]
+        }
+    }
+}
+
+final class InsulinPenReaderTests: XCTestCase {
+    private let now: Int64 = 1_800_000_000
+    private let uptime: Int64 = 5_000_000
+
+    private func hex(_ bytes: [UInt8]) -> String { bytes.map { String(format: "%02x", $0) }.joined() }
+
+    /// Newest first, as the pen sends them: 4.5 U ten minutes ago, a 2 U air shot 30 s before it,
+    /// then one dose every six hours.
+    private func doses() -> [[UInt8]] {
+        [SimulatedPen.record(relative: uptime - 600, tenths: 45), SimulatedPen.record(relative: uptime - 630, tenths: 20)]
+            + (1...18).map { SimulatedPen.record(relative: uptime - 600 - Int64($0) * 21600, tenths: 30 + $0) }
+    }
+
+    private func machine() -> PenMachine {
+        var machine = PenMachine()
+        let now = now
+        machine.now = { Date(timeIntervalSince1970: TimeInterval(now)) }
+        return machine
+    }
+
+    func testType4CommandsMatchTheReference() {
+        XCTAssertEqual(PenT4.reads(offset: 2, length: 300, mtu: 255).map(hex), ["00b00002ff", "00b001012d"])
+        XCTAssertEqual(PenT4.updates(for: [1, 2, 3], mtu: 255).map(hex), ["00d60000050003010203"])
+        XCTAssertEqual(PenT4.updates(for: Array(1...10), mtu: 12).map(hex),
+                       ["00d600000700000102030405", "00d6000705060708090a", "00d6000002000a"])
+        XCTAssertEqual(PenT4.updates(for: [], mtu: 255).map(hex), ["00d60000020000"])
+        XCTAssertEqual(PenT4.data(of: [1, 2, 0x90, 0x00]), [1, 2])
+        XCTAssertNil(PenT4.data(of: [1, 2, 0x6A, 0x82]))
+    }
+
+    func testPHDRecordRoundTrips() {
+        let record = PenPHD(sequence: 3, inner: [0xAA, 0xBB])
+        XCTAssertEqual(hex(record.encode()), "d1030350484483aabb")
+        XCTAssertEqual(PenPHD.parse(record.encode()), record)
+        XCTAssertNil(PenPHD.parse([0xD1, 0x03, 0x03, 0x41, 0x42, 0x43, 0x83, 0xAA, 0xBB]))
+        XCTAssertNil(PenPHD.parse(PenPHD.emptyNDEF))
+    }
+
+    func testMessagesMatchTheReference() {
+        var context = PenContext()
+        let request: [UInt8] = [0xe2, 0x00, 0x00, 0x32, 0x80, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x2a, 0x50, 0x79, 0x00, 0x26, 0x80, 0x00, 0x00, 0x00,
+                                0xa0, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x08, 0x01, 0x02, 0x03, 0x04,
+                                0x05, 0x06, 0x07, 0x08, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+        XCTAssertNotNil(PenMessage.parse(request, into: &context))
+        let association = try? XCTUnwrap(context.association)
+        XCTAssertEqual(association?.systemID, [1, 2, 3, 4, 5, 6, 7, 8])
+        XCTAssertEqual(association.map { hex(PenMessage.associationResponse(to: $0)) },
+                       "e300002c00035079002680000000a0008000000000000000800000000008010203040506070800000000000000000000")
+
+        context.invokeID = 1
+        context.configuration = PenContext.Configuration(id: 0x4000, handle: 256, numberOfSegments: 1, totalStoredEntries: 20, unitCode: 5472)
+        context.eventReport = PenContext.EventReport(handle: 0)
+        XCTAssertEqual(PenMessage.acceptConfiguration(context).map(hex), "e7000016001400010201000e0000000000000d1c000440000000")
+        XCTAssertEqual(PenMessage.askInformation(context).map(hex), "e700000e000c000101030006000000000000")
+        XCTAssertEqual(PenMessage.askSegments(context).map(hex), "e7000014001200010107000c01000c0d0006000100020000")
+        XCTAssertEqual(PenMessage.startTransfer(context, segment: 16).map(hex), "e7000010000e00010107000801000c1c00020010")
+        XCTAssertEqual(PenMessage.confirmTransfer(context, invokeID: 9, instance: 16, index: 8, count: 8).map(hex),
+                       "e700001e001c0009020100160100ffffffff0d21000c001000000008000000080080")
+        XCTAssertNil(PenMessage.parse([0x12, 0x34, 0x00, 0x00], into: &context))
+    }
+
+    func testWholeLogIsReadFromASimulatedPen() async {
+        for (maximumRead, maximumWrite) in [(255, 255), (40, 32)] {
+            let pen = SimulatedPen(doses: doses(), uptime: uptime, maximumRead: maximumRead, maximumWrite: maximumWrite)
+            var machine = machine()
+            var session = PenSession(transport: pen)
+            await session.run(machine: &machine)
+
+            XCTAssertTrue(session.spokeProtocol)
+            XCTAssertTrue(machine.finishedNormally)
+            XCTAssertEqual(machine.context.serial, "ABC123XY")
+            XCTAssertEqual(machine.context.doseBlocks.map { $0.raw.count / 12 }, [8, 8, 4, 0])
+            XCTAssertEqual(machine.context.doseBlocks.first?.referenceTime, now - uptime)
+            XCTAssertEqual(pen.received.count, 10)
+
+            let parsed = PenDoseParser.merge(machine.context.doseBlocks, nowSeconds: now)
+            XCTAssertEqual(parsed.count, 20)
+            XCTAssertEqual(parsed.last?.tenths, 45)
+            XCTAssertEqual(parsed.last?.timestampSeconds, now - 600)
+            XCTAssertEqual(parsed.filter(\.priming).map(\.tenths), [20])
+        }
+    }
+
+    func testReadStopsOnceABlockIsAlreadyImported() async {
+        let pen = SimulatedPen(doses: doses(), uptime: uptime)
+        var machine = machine()
+        let cursor = uptime - 600 - 7 * 21600
+        machine.isFullyImported = { _, block in InsulinPenImport.isFullyImported(block, cursor: cursor) }
+        var session = PenSession(transport: pen)
+        await session.run(machine: &machine)
+        // The second block is entirely at or below the cursor, so the third is never asked for.
+        XCTAssertEqual(machine.context.doseBlocks.map { $0.raw.count / 12 }, [8, 8])
+        XCTAssertTrue(machine.finishedNormally)
+    }
+
+    func testALostPenKeepsWhatArrivedAndAForeignTagIsNotAPen() async {
+        let pen = SimulatedPen(doses: doses(), uptime: uptime)
+        pen.commandsBeforeLoss = 37
+        var machine = machine()
+        var session = PenSession(transport: pen)
+        await session.run(machine: &machine)
+        XCTAssertTrue(session.spokeProtocol)
+        XCTAssertFalse(machine.finishedNormally)
+        XCTAssertEqual(machine.context.serial, "ABC123XY")
+        XCTAssertFalse(machine.context.doseBlocks.isEmpty)
+
+        struct BankCard: PenTransport {
+            func transceive(_ command: [UInt8]) async throws -> [UInt8] { [0x6A, 0x82] }
+        }
+        var foreignMachine = PenMachine()
+        var foreign = PenSession(transport: BankCard())
+        await foreign.run(machine: &foreignMachine)
+        XCTAssertFalse(foreign.spokeProtocol)
+        XCTAssertNil(foreignMachine.context.serial)
+    }
+
+    func testDoseRecordsAreValidatedNotGuessed() {
+        var raw = SimulatedPen.record(relative: 1000, tenths: 120, flags: 4)
+        raw += SimulatedPen.record(relative: 2000, tenths: 0)            // no amount
+        raw += SimulatedPen.record(relative: 3000, tenths: 601)          // more than a pen delivers
+        var badMarker = SimulatedPen.record(relative: 4000, tenths: 50)
+        badMarker[4] = 0x00
+        raw += badMarker
+        raw += SimulatedPen.record(relative: 9_000_000, tenths: 50)      // after now
+        raw += [1, 2, 3]                                                 // a torn record
+        let block = PenContext.DoseBlock(referenceTime: now - 5000, raw: raw)
+        let parsed = PenDoseParser.parse(block, nowSeconds: now)
+        XCTAssertEqual(parsed, [PenDose(relativeSeconds: 1000, timestampSeconds: now - 4000, tenths: 120, flags: 4)])
+        XCTAssertEqual(parsed.first?.units, 12)
+
+        let old = PenContext.DoseBlock(referenceTime: now - PenDoseParser.maximumAgeSeconds - 5000,
+                                       raw: SimulatedPen.record(relative: 1000, tenths: 50))
+        XCTAssertTrue(PenDoseParser.parse(old, nowSeconds: now).isEmpty)
+    }
+
+    func testReviewOffersOnlyDosesPastTheCursorAndMarksWhatIsLogged() {
+        let dose = { (relative: Int64, tenths: Int, priming: Bool) in
+            PenDose(relativeSeconds: relative, timestampSeconds: self.now - 5000 + relative, tenths: tenths, flags: 0, priming: priming)
+        }
+        let all = [dose(100, 40, false), dose(200, 20, true), dose(230, 60, false), dose(900, 80, false)]
+        let logged = [(date: Date(timeIntervalSince1970: TimeInterval(now - 5000 + 900 + 120)), units: 8.0),
+                      (date: Date(timeIntervalSince1970: TimeInterval(now - 5000 + 230 + 120)), units: 5.0)]
+
+        let candidates = InsulinPenImport.candidates(doses: all, cursor: 100, fullRead: false, logged: logged)
+        XCTAssertEqual(candidates.map(\.dose.relativeSeconds), [900, 230, 200])
+        XCTAssertEqual(candidates.map(\.alreadyLogged), [true, false, false])
+        XCTAssertEqual(candidates.map(\.preselected), [false, true, false])
+        XCTAssertEqual(InsulinPenImport.candidates(doses: all, cursor: 100, fullRead: true, logged: []).count, 4)
+
+        let block = PenContext.DoseBlock(referenceTime: 0, raw: SimulatedPen.record(relative: 100, tenths: 40) + SimulatedPen.record(relative: 200, tenths: 20))
+        XCTAssertTrue(InsulinPenImport.isFullyImported(block, cursor: 200))
+        XCTAssertFalse(InsulinPenImport.isFullyImported(block, cursor: 199))
+        XCTAssertFalse(InsulinPenImport.isFullyImported(block, cursor: 0))
+    }
+
+    func testPensPersistAndABasalPenLogsBasalInjections() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "InsulinPenReaderTests"))
+        defaults.removePersistentDomain(forName: "InsulinPenReaderTests")
+        var pen = InsulinPen(serial: "ABC123XY", insulin: nil, addedAt: Date(timeIntervalSince1970: 10))
+        XCTAssertFalse(pen.isBasal)
+        XCTAssertNil(InsulinPenImport.notes(for: pen))
+        InsulinPenStore.save(pen, defaults: defaults)
+        pen.insulin = InsulinProfile.degludec.rawValue
+        pen.cursor = 4242
+        InsulinPenStore.save(pen, defaults: defaults)
+        InsulinPenStore.save(InsulinPen(serial: "ZZZ", insulin: InsulinProfile.fiasp.rawValue, addedAt: Date(timeIntervalSince1970: 20)), defaults: defaults)
+
+        let stored = InsulinPenStore.pens(defaults: defaults)
+        XCTAssertEqual(stored.map(\.serial), ["ABC123XY", "ZZZ"])
+        XCTAssertEqual(stored.first?.cursor, 4242)
+        XCTAssertEqual(stored.map(\.isBasal), [true, false])
+        XCTAssertEqual(stored.first.flatMap(InsulinPenImport.notes(for:)), "Tresiba")
+        // The name written to the notes is one the insulin lookup recognises again.
+        XCTAssertEqual(InsulinProfile.matching(notes: "Tresiba"), .degludec)
+        InsulinPenStore.remove(serial: "ABC123XY", defaults: defaults)
+        XCTAssertEqual(InsulinPenStore.pens(defaults: defaults).map(\.serial), ["ZZZ"])
     }
 }

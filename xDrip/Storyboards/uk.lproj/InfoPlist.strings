@@ -1,5 +1,5 @@
 /* Permission prompts of Info.plist */
-"NFCReaderUsageDescription" = "xDrip4iOS використовує NFC для сканування сенсорів Libre.";
+"NFCReaderUsageDescription" = "xDrip4iOS використовує NFC для сканування сенсорів Libre та інсулінових ручок.";
 "NSBluetoothAlwaysUsageDescription" = "Підключення до трансмітера CGM і M5Stack";
 "NSBluetoothPeripheralUsageDescription" = "Підключення до трансмітера CGM і M5Stack";
 "NSCalendarsFullAccessUsageDescription" = "Щоб створювати події зі значеннями глюкози, які видно на Apple Watch і в CarPlay";

@@ -27,6 +27,12 @@ extension SettingsViewGroupedSettingsViewModel {
                     settingsScreen: { ExperimentalSettingsViewModel.insulinScreen }
                 ),
                 SettingsGroupedRow(
+                    id: "experimental.pens",
+                    title: ExperimentalTexts.text("pens", "Insulin pens (NFC)"),
+                    detail: { String(InsulinPenStore.pens().count) },
+                    settingsScreen: { ExperimentalSettingsViewModel.pensScreen }
+                ),
+                SettingsGroupedRow(
                     id: "experimental.alerts",
                     title: ExperimentalTexts.text("alerts", "Alarms"),
                     settingsScreen: { ExperimentalSettingsViewModel.alertsScreen }
@@ -50,7 +56,7 @@ extension SettingsViewGroupedSettingsViewModel {
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving, alerts, doseHints, restricted }
+    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving, alerts, doseHints, restricted, pens }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
@@ -67,6 +73,12 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         SettingsScreen(title: ExperimentalTexts.text("insulins", "Insulins"),
                        introduction: { ExperimentalTexts.text("insulinsIntroduction", "Experimental. Each insulin has its own action curve, from JugglucoNG's catalogue. A bolus or basal injection uses the insulin named in its notes; the treatment editor offers a choice. Otherwise the defaults below apply.") },
                        providers: { [ExperimentalSettingsViewModel(group: .insulins)] })
+    }
+
+    static var pensScreen: SettingsScreen {
+        SettingsScreen(title: ExperimentalTexts.text("pens", "Insulin pens (NFC)"),
+                       introduction: { ExperimentalTexts.text("pensIntroduction", "Experimental and not yet confirmed on a real pen. Reads the dose log of a NovoPen 6 or NovoPen Echo Plus over NFC and adds the doses you confirm to the treatments.") },
+                       providers: { [ExperimentalSettingsViewModel(group: .pens)] })
     }
 
     static var alertsScreen: SettingsScreen {
@@ -252,6 +264,13 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                 AnyView(NavigationLink(ExperimentalTexts.text("accuracyShow", "Prediction accuracy")) { ExperimentalPredictionAccuracyView() })
                             }))
             ]
+        case .pens:
+            return [
+                SettingsRow(id: "experimental.pens.open", title: ExperimentalTexts.text("pensOpen", "Pens and scanning"),
+                            control: .custom(content: {
+                                AnyView(NavigationLink(ExperimentalTexts.text("pensOpen", "Pens and scanning")) { InsulinPenSettingsView() })
+                            }))
+            ]
         case .restricted:
             return [
                 SettingsRow(id: "experimental.restricted.pin", title: ExperimentalTexts.text("restrictedPINRow", "PIN"),
@@ -421,7 +440,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
 
     func sectionTitle() -> String? {
         switch group {
-        case .predictionMain, .insulins, .powerSaving, .alerts, .restricted: return nil
+        case .predictionMain, .insulins, .powerSaving, .alerts, .restricted, .pens: return nil
         case .doseHints: return ExperimentalTexts.text("doseHintsTitle", "Dose hints")
         case .predictionAdaptive: return ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction")
         case .predictionModel: return ExperimentalTexts.text("predictionModel", "Model")
@@ -446,7 +465,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("predictionNightscoutFooter", "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.")
         case .predictionAccuracy:
             return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
-        case .restricted: return nil
+        case .restricted, .pens: return nil
         case .doseHints:
             return ExperimentalTexts.text("doseHintsFooter", "NOT MEDICAL ADVICE. A line on the Home chart with arithmetic from your logged treatments and the model above: carbs when glucose is falling with insulin on board and would pass below the dose target within 45 minutes (rounded up, at least 5 g), or a correction when glucose is above the range and not coming down (the gap to the target divided by sensitivity, minus all insulin on board, rounded down to 0.5 U). Nothing is hinted within 20 mg/dL (1.1 mmol/L) of the target. It knows nothing about unlogged food, illness or exercise, and a wrong sensitivity or carb ratio makes it wrong. Decide doses with your own rules and your care team's.")
         case .alerts:
