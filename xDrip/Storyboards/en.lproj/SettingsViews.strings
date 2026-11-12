@@ -646,7 +646,7 @@
 "experimental.alertsIntroduction" = "Experimental additions to the alarms, from JugglucoNG. Both are off by default.";
 "experimental.muteHighFalling" = "No High alarm while falling";
 "experimental.signalRestored" = "Notify when signal is restored";
-"experimental.alertsFooter" = "No High alarm while falling: the High alarm stays quiet while glucose is already falling by at least 0.5 mg/dL (0.03 mmol/L) a minute; Very High always alarms. Notify when signal is restored: one notification when readings come back after a gap at least as long as the Missed Reading alarm's delay (30 minutes when that alarm is off).";
+"experimental.alertsFooter" = "No High alarm while falling: the High alarm stays quiet while glucose is already falling by at least 0.5 mg/dL (0.03 mmol/L) a minute; Very High always alarms. Notify when signal is restored: one silent notification when readings come back after a gap at least as long as the Missed Reading alarm's delay (30 minutes when that alarm is off).";
 "experimental.eiobValue" = "eIOB %@";
 "experimental.doseHintCarbs" = "Hint: %@ carbs, below %@ in ~%ld min";
 "experimental.doseHintInsulin" = "Hint: %@ correction to %@";

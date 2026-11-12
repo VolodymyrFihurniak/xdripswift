@@ -185,7 +185,7 @@ own IOB curve is not drawn (it covered them in the same colour); COB stays.
   readings a minute apart must agree. Low and Very Low are untouched.
 - **Alarms** screen: *No High alarm while falling* (High stays quiet while glucose falls by
   0.5 mg/dL a minute or more; Very High always alarms) and *Notify when signal is restored* (one
-  notification when readings return after a gap as long as the Missed Reading delay, or 30 min).
+  silent notification when readings return after a gap as long as the Missed Reading delay, or 30 min).
 - **eIOB** on the active insulin card: IOB weighted by how hard each dose is acting now.
 - **Nightscout**: the forecast devicestatus also carries `openaps.iob.iob` and `suggested.COB`
   from the logged treatments.

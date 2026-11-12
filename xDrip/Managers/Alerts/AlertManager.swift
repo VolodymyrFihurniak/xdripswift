@@ -878,7 +878,7 @@ public class AlertManager: NSObject {
         if let previous {
             content.body = String(format: Texts_Alerts.signalRestoredBody, Int((newest.timeIntervalSince(previous) / 60).rounded()))
         }
-        content.sound = .default
+        // No sound: this is good news, and it may well arrive at night.
         uNUserNotificationCenter.add(UNNotificationRequest(identifier: "experimentalSignalRestored", content: content, trigger: nil))
     }
 
