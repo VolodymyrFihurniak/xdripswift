@@ -81,7 +81,6 @@ struct TreatmentEditorContainerView: View {
 /// Owns a separate draft for each entry form, so choosing another type starts fresh.
 private struct TreatmentEditorScreen: View {
     @StateObject private var viewModel: TreatmentEditorViewModel
-    @State private var showsFoodLibrary = false
 
     let onSave: () -> Void
     let onCancel: (() -> Void)?
@@ -141,6 +140,8 @@ struct TreatmentEditorView: View {
     @ObservedObject var viewModel: TreatmentEditorViewModel
 
     let onDelete: (() -> Void)?
+
+    @State private var showsFoodLibrary = false
 
     // MARK: - SwiftUI views
 
