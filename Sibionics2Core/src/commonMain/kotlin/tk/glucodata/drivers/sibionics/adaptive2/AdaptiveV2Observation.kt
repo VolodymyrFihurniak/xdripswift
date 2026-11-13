@@ -1,8 +1,9 @@
 // Derived from ctqvva/JugglucoNG commit 426f453d89be7f418f4268aae836fbcfb29c2c26,
 // Common/src/main/java/tk/glucodata/drivers/sibionics/adaptive2/AdaptiveV2Observation.kt.
-// GPL-3.0. Modified only to replace java.io data streams with portable equivalents.
+// GPL-3.0. Modified only to replace java.io data streams and java.lang.Math.PI with portable equivalents.
 package tk.glucodata.drivers.sibionics.adaptive2
 
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
@@ -230,7 +231,7 @@ internal class AdaptiveV2NoiseModel {
         // log Γ((ν+1)/2) − log Γ(ν/2) − ½log(νπ) for ν = 4.
         private val LOG_T_NORMALISER = run {
             val nu = DEGREES_OF_FREEDOM
-            lnGamma((nu + 1.0) / 2.0) - lnGamma(nu / 2.0) - 0.5 * ln(nu * Math.PI)
+            lnGamma((nu + 1.0) / 2.0) - lnGamma(nu / 2.0) - 0.5 * ln(nu * PI)
         }
 
         /** Lanczos approximation; evaluated once for the fixed ν above. */
