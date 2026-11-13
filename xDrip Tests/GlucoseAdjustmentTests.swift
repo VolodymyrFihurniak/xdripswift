@@ -78,7 +78,8 @@ final class GlucoseAdjustmentTests: XCTestCase {
     @MainActor
     func testRepeatedApplyDoesNotAccumulateOffsets() throws {
         try withManager { manager, core, start in
-            let reading = BgReading(timeStamp: start, sensor: SensorsAccessor(coreDataManager: core).fetchActiveSensor(), calibration: nil, rawData: 112, deviceName: nil, nsManagedObjectContext: core.mainManagedObjectContext)
+            // Processing takes readings strictly after its start date, so the reading sits just inside it.
+            let reading = BgReading(timeStamp: start.addingTimeInterval(1), sensor: SensorsAccessor(coreDataManager: core).fetchActiveSensor(), calibration: nil, rawData: 112, deviceName: nil, nsManagedObjectContext: core.mainManagedObjectContext)
             reading.calculatedValue = 112
             XCTAssertTrue(core.saveChangesSynchronously())
             for _ in 0..<2 {
