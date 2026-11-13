@@ -132,6 +132,14 @@ cursor = newest reviewed pen counter) and `InsulinPenImport`. CoreNFC needs the 
 `D2760000850101` in Info.plist `...iso7816.select-identifiers`. Tested only against the
 `SimulatedPen` in the tests (verified with a Python port) — never against a real pen.
 
+Libre sensor activation (`docs/libre-activation.md`): `LibreSensorActivation` (plan) and
+`LibreSensorActivator` (CoreNFC) at the end of `Libre/Utilities/LibreNFC.swift`, row on the Libre 2,
+MiaoMiao and Bubble device screens (also while adding). DiaBLE commands: Libre 1 `A0 C2AD7521`,
+Libre 2 / 2 Plus EU `A1 1B`+`PreLibre2.usefulFunction(uid, 0x1B, 0x1B6A)`. Sent only when the decrypted
+FRAM header crc is valid and the state is not-yet-started; success = state re-read as starting/ready.
+Gen2 (patch info byte 2 low nibble ≥ 9), US 14-day and Pro are refused (JugglucoNG uses Abbott's library
+for them); Libre 3 has its own upstream setup. Never tried on a real sensor.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new

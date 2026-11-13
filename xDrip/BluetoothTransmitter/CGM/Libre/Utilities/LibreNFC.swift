@@ -665,4 +665,244 @@ class LibreNFC: NSObject, NFCTagReaderSessionDelegate {
     }
 }
 
+
+// MARK: - Sensor activation
+
+/// One NFC session that starts a new Libre 1 or Libre 2 sensor, as DiaBLE's `activate` task does
+/// (JugglucoNG activates in `ScanNfcV` before enabling streaming, but through Abbott's own library,
+/// which iOS cannot load). Nothing is sent unless the sensor reads as not yet started, and the
+/// result is confirmed by reading the state again.
+final class LibreSensorActivator: NSObject, NFCTagReaderSessionDelegate {
+    enum Outcome: Equatable {
+        case activated(serialNumber: String?, sensorType: String)
+        case alreadyStarted(LibreSensorState)
+        case unsupported(LibreSensorActivation.Unsupported)
+        case failed
+        case cancelled
+        case unavailable
+    }
+
+    private let log = OSLog(subsystem: ConstantsLog.subSystem, category: ConstantsLog.categoryLibreNFC)
+    private var session: NFCTagReaderSession?
+    private var completion: ((Outcome) -> Void)?
+    private var outcome: Outcome?
+
+    static var isAvailable: Bool { NFCTagReaderSession.readingAvailable }
+
+    /// Shows the system NFC sheet; `completion` runs once, on the main queue.
+    func start(completion: @escaping (Outcome) -> Void) {
+        guard NFCTagReaderSession.readingAvailable,
+              let session = NFCTagReaderSession(pollingOption: [.iso15693], delegate: self, queue: .main) else {
+            completion(.unavailable)
+            return
+        }
+        self.completion = completion
+        outcome = nil
+        session.alertMessage = TextsLibreNFC.activationHoldNearSensor
+        self.session = session
+        xdrip.trace("NFC activation: session started", log: log, category: ConstantsLog.categoryLibreNFC, type: .info)
+        session.begin()
+    }
+
+    private func finish(_ outcome: Outcome) {
+        guard let completion else { return }
+        self.completion = nil
+        session = nil
+        DispatchQueue.main.async { completion(outcome) }
+    }
+
+    /// Records the outcome, then closes the sheet; the invalidation callback reports it.
+    private func end(_ session: NFCTagReaderSession, _ outcome: Outcome, errorMessage: String? = nil, message: String? = nil) {
+        self.outcome = outcome
+        if let errorMessage {
+            AudioServicesPlaySystemSound(1107)
+            session.invalidate(errorMessage: errorMessage)
+        } else {
+            if let message { session.alertMessage = message }
+            session.invalidate()
+        }
+    }
+
+    func tagReaderSessionDidBecomeActive(_ session: NFCTagReaderSession) {}
+
+    func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
+        if let outcome {
+            finish(outcome)
+            return
+        }
+        let code = (error as? NFCReaderError)?.code
+        xdrip.trace("NFC activation: session ended without a result: %{public}@", log: log, category: ConstantsLog.categoryLibreNFC, type: .info, error.localizedDescription)
+        finish(code == .readerSessionInvalidationErrorUserCanceled ? .cancelled : .failed)
+    }
+
+    func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
+        guard let firstTag = tags.first, case .iso15693(let tag) = firstTag else {
+            end(session, .unsupported(.unknownType), errorMessage: TextsLibreNFC.activationUnsupportedType)
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                try await session.connect(to: firstTag)
+            } catch {
+                xdrip.trace("NFC activation: connect failed: %{public}@", log: self.log, category: ConstantsLog.categoryLibreNFC, type: .info, error.localizedDescription)
+                self.end(session, .failed, errorMessage: TextsLibreNFC.activationReadFailed)
+                return
+            }
+
+            var patchInfo = Data()
+            for _ in 0 ..< 3 where patchInfo.isEmpty {
+                patchInfo = (try? await customCommandAsync(tag: tag, code: 0xA1, params: Data())) ?? Data()
+            }
+            let sensorUID = Data(tag.identifier.reversed())
+            xdrip.trace("NFC activation: patch info 0x%{public}@", log: self.log, category: ConstantsLog.categoryLibreNFC, type: .info, patchInfo.hexEncodedString())
+
+            if LibreSensorActivation.isLibre3(patchInfo: patchInfo) {
+                self.end(session, .unsupported(.libre3), errorMessage: TextsLibreNFC.activationUseLibre3)
+                return
+            }
+            guard patchInfo.count >= 6, let fram = await self.readFRAM(tag: tag) else {
+                self.end(session, .failed, errorMessage: TextsLibreNFC.activationReadFailed)
+                return
+            }
+
+            switch LibreSensorActivation.plan(patchInfo: patchInfo, fram: fram, sensorUID: sensorUID) {
+            case .alreadyStarted(let state):
+                xdrip.trace("NFC activation: sensor already started (%{public}@), nothing sent", log: self.log, category: ConstantsLog.categoryLibreNFC, type: .info, state.description)
+                self.end(session, .alreadyStarted(state), message: TextsLibreNFC.activationAlreadyStartedShort)
+
+            case .unsupported(let reason):
+                xdrip.trace("NFC activation: not supported (%{public}@), nothing sent", log: self.log, category: ConstantsLog.categoryLibreNFC, type: .info, String(describing: reason))
+                self.end(session, .unsupported(reason), errorMessage: reason == .unreadable ? TextsLibreNFC.activationReadFailed : TextsLibreNFC.activationUnsupportedType)
+
+            case .activate(let code, let parameters):
+                xdrip.trace("NFC activation: sending 0x%{public}@ %{public}@", log: self.log, category: ConstantsLog.categoryLibreNFC, type: .info, String(format: "%02X", code), parameters.hexEncodedString())
+                do {
+                    let response = try await customCommandAsync(tag: tag, code: Int(code), params: parameters)
+                    xdrip.trace("NFC activation: response 0x%{public}@", log: self.log, category: ConstantsLog.categoryLibreNFC, type: .info, response.hexEncodedString())
+                } catch {
+                    // The state read below decides: a sensor can start even when the answer is lost.
+                    xdrip.trace("NFC activation: command error: %{public}@", log: self.log, category: ConstantsLog.categoryLibreNFC, type: .info, error.localizedDescription)
+                }
+
+                guard let after = await self.readFRAM(tag: tag),
+                      let state = LibreSensorActivation.state(patchInfo: patchInfo, fram: after, sensorUID: sensorUID),
+                      LibreSensorActivation.isStarted(state) else {
+                    self.end(session, .failed, errorMessage: TextsLibreNFC.activationFailed)
+                    return
+                }
+                let type = LibreSensorType.type(patchInfo: patchInfo.hexEncodedString().uppercased())
+                let serialNumber = type.flatMap { LibreSensorSerialNumber(withUID: sensorUID, with: $0)?.serialNumber }
+                xdrip.trace("NFC activation: sensor %{public}@ started, state %{public}@", log: self.log, category: ConstantsLog.categoryLibreNFC, type: .info, serialNumber ?? "-", state.description)
+                AudioServicesPlaySystemSound(1520)
+                self.end(session, .activated(serialNumber: serialNumber, sensorType: type?.description ?? "Libre"),
+                         message: TextsLibreNFC.activationSucceededShort)
+            }
+        }
+    }
+
+    /// The 43 FRAM blocks (344 bytes), three blocks a request, each request tried twice.
+    @MainActor
+    private func readFRAM(tag: NFCISO15693Tag) async -> Data? {
+        var fram = Data()
+        var block = 0
+        while block < 43 {
+            let last = min(block + 2, 42)
+            var chunk: [Data]?
+            for _ in 0 ..< 2 where chunk == nil {
+                chunk = try? await readMultipleBlocksAsync(tag: tag, blockRange: NSRange(block ... last))
+            }
+            guard let chunk, chunk.count == last - block + 1, chunk.allSatisfy({ $0.count == 8 }) else {
+                xdrip.trace("NFC activation: could not read FRAM blocks %{public}@-%{public}@", log: log, category: ConstantsLog.categoryLibreNFC, type: .info, block.description, last.description)
+                return nil
+            }
+            chunk.forEach { fram.append($0) }
+            block = last + 1
+        }
+        return fram
+    }
+}
+
 #endif
+
+// MARK: - Activation plan (no CoreNFC, so it can be tested)
+
+/// Decides whether and how a Libre sensor can be started over NFC.
+///
+/// - Libre 1 (patch info DF/A2): custom command 0xA0 with the Libre 1 key `C2 AD 75 21` (DiaBLE).
+/// - Libre 2 and Libre 2 Plus EU (9D, C5, C6, 7F, security generation 1): custom command 0xA1 with
+///   subcommand 0x1B and `usefulFunction(uid, 0x1B, 0x1B6A)`, the same derivation xDrip already uses to
+///   enable streaming (DiaBLE `nfcCommand(.activate)`).
+/// - Libre 2 Gen2 (US, RU, LA), Libre US 14-day and Libre Pro need Abbott's own code and are refused;
+///   Libre 3 is started from its own setup screen.
+enum LibreSensorActivation {
+    enum Unsupported: Equatable {
+        case libre3
+        case libre2Gen2
+        case libreUS14Day
+        case librePro
+        case unknownType
+        /// The FRAM header did not read back with a valid crc, so the state is not known.
+        case unreadable
+    }
+
+    enum Plan: Equatable {
+        case activate(code: UInt8, parameters: Data)
+        case alreadyStarted(LibreSensorState)
+        case unsupported(Unsupported)
+    }
+
+    static let libre1Key: [UInt8] = [0xC2, 0xAD, 0x75, 0x21]
+    static let libre2ActivateSubcommand: UInt8 = 0x1B
+    static let libre2Secret: UInt16 = 0x1B6A
+
+    /// Libre 3 answers 0xA1 with 24 or more bytes; Libre 1 and 2 with 6.
+    static func isLibre3(patchInfo: Data) -> Bool { patchInfo.count >= 24 }
+
+    static func sensorType(patchInfo: Data) -> LibreSensorType? {
+        guard patchInfo.count >= 6, !isLibre3(patchInfo: patchInfo) else { return nil }
+        return LibreSensorType.type(patchInfo: patchInfo.hexEncodedString().uppercased())
+    }
+
+    /// The sensor state from raw FRAM, decrypted when the type needs it; nil when the header crc fails.
+    static func state(patchInfo: Data, fram: Data, sensorUID: Data) -> LibreSensorState? {
+        guard let type = sensorType(patchInfo: patchInfo), fram.count >= 344, sensorUID.count >= 6 else { return nil }
+        var data = Data(fram.prefix(344))
+        if type.requiresLibre2Decryption {
+            guard type.decryptIfPossibleAndNeeded(rxBuffer: &data, headerLength: 0, log: nil,
+                                                  patchInfo: patchInfo.hexEncodedString().uppercased(), uid: Array(sensorUID)) else { return nil }
+        }
+        guard Crc.libreHeaderCrcIsValid(data) else { return nil }
+        return LibreSensorState(stateByte: data[4])
+    }
+
+    /// A started sensor is warming up or ready.
+    static func isStarted(_ state: LibreSensorState) -> Bool { state == .starting || state == .ready }
+
+    static func plan(patchInfo: Data, fram: Data, sensorUID: Data) -> Plan {
+        if isLibre3(patchInfo: patchInfo) { return .unsupported(.libre3) }
+        guard let type = sensorType(patchInfo: patchInfo) else { return .unsupported(.unknownType) }
+
+        // Refuse what cannot be activated before looking at the state, so the answer does not
+        // depend on whether the FRAM happened to read cleanly.
+        switch type {
+        case .libreUS, .libreUSE6: return .unsupported(.libreUS14Day)
+        case .libreProH: return .unsupported(.librePro)
+        case .libre2, .libre2C5, .libre2C6, .libre27F, .libre27FNonPlus:
+            if patchInfo[patchInfo.startIndex + 2] & 0x0F >= 9 { return .unsupported(.libre2Gen2) }
+        case .libre1, .libre1A2:
+            break
+        }
+
+        guard let state = state(patchInfo: patchInfo, fram: fram, sensorUID: sensorUID) else { return .unsupported(.unreadable) }
+        guard state == .notYetStarted else { return .alreadyStarted(state) }
+
+        switch type {
+        case .libre1, .libre1A2:
+            return .activate(code: 0xA0, parameters: Data(libre1Key))
+        default:
+            let key = PreLibre2.usefulFunction(sensorUID: sensorUID, x: UInt16(libre2ActivateSubcommand), y: libre2Secret)
+            return .activate(code: 0xA1, parameters: Data([libre2ActivateSubcommand] + key))
+        }
+    }
+}
