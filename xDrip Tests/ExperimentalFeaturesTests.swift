@@ -1132,49 +1132,52 @@ private final class SimulatedPen: PenTransport {
         return bytes
     }
 
+    /// Concatenation as one call: long `+` chains of arrays are too slow to type-check.
+    private func join(_ parts: [UInt8]...) -> [UInt8] { parts.flatMap { $0 } }
+
     private func u16(_ value: Int) -> [UInt8] { var bytes: [UInt8] = []; bytes.appendU16(value); return bytes }
     private func u32(_ value: Int64) -> [UInt8] { var bytes: [UInt8] = []; bytes.appendU32(value); return bytes }
 
     private func associationRequest() -> [UInt8] {
-        var element = u32(0x8000_0000) + u16(0xA000) + u32(0x8000_0000) + u32(0) + u32(0x0080_0000)
+        var element = join(u32(0x8000_0000), u16(0xA000), u32(0x8000_0000), u32(0), u32(0x0080_0000))
         element.appendIndexed([1, 2, 3, 4, 5, 6, 7, 8])
-        element += u16(0x4000) + u32(0) + u16(0) + u16(0)
-        var body = u32(0x8000_0000) + u16(1) + u16(element.count + 4) + u16(20601)
+        element += join(u16(0x4000), u32(0), u16(0), u16(0))
+        var body = join(u32(0x8000_0000), u16(1), u16(element.count + 4), u16(20601))
         body.appendIndexed(element)
         return apdu(0xE200, body)
     }
 
     private func configuration() -> [UInt8] {
-        let attributes = attribute(2385, u16(1)) + attribute(2372, u32(Int64(doses.count))) + attribute(2454, u16(5472)) + attribute(2369, u32(800))
-        let object = u16(61) + u16(256) + u16(4) + u16(attributes.count) + attributes
-        let config = u16(0x4000) + u16(1) + u16(object.count) + object
-        return data(1, 0x0101, u16(0) + u32(uptime) + u16(3356) + u16(config.count) + config)
+        let attributes = join(attribute(2385, u16(1)), attribute(2372, u32(Int64(doses.count))), attribute(2454, u16(5472)), attribute(2369, u32(800)))
+        let object = join(u16(61), u16(256), u16(4), u16(attributes.count), attributes)
+        let config = join(u16(0x4000), u16(1), u16(object.count), object)
+        return data(1, 0x0101, join(u16(0), u32(uptime), u16(3356), u16(config.count), config))
     }
 
     private func specification(_ invokeID: Int) -> [UInt8] {
-        var items = u16(1) + u16(0)
+        var items = join(u16(1), u16(0))
         items.appendIndexed(Array(serial.utf8) + [0])
-        items += u16(2) + u16(0)
+        items += join(u16(2), u16(0))
         items.appendIndexed(Array("PART".utf8))
-        let spec = u16(2) + u16(items.count) + items
-        let attributes = attribute(2349, spec) + attribute(2447, u32(uptime))
-        return data(invokeID, 0x0203, u16(0) + u16(2) + u16(attributes.count) + attributes)
+        let spec = join(u16(2), u16(items.count), items)
+        let attributes = join(attribute(2349, spec), attribute(2447, u32(uptime)))
+        return data(invokeID, 0x0203, join(u16(0), u16(2), u16(attributes.count), attributes))
     }
 
     private func segmentInfo(_ invokeID: Int) -> [UInt8] {
-        func entry(_ object: Int, _ value: Int) -> [UInt8] { u16(6) + u16(130) + u16(object) + u16(1) + u16(1) + u16(4) + u16(value) + u16(4) }
-        let map = u16(0x8000) + u16(3) + u16(0) + entry(13313, 2646) + entry(13314, 2662) + entry(61440, 2662)
-        let attributes = attribute(2638, map) + attribute(2427, u32(Int64(doses.count)))
-        let segment = u16(16) + u16(2) + u16(attributes.count) + attributes
-        let body = u16(1) + u16(segment.count) + segment
-        return data(invokeID, 0x0207, u16(256) + u16(3085) + u16(body.count) + body)
+        func entry(_ object: Int, _ value: Int) -> [UInt8] { join(u16(6), u16(130), u16(object), u16(1), u16(1), u16(4), u16(value), u16(4)) }
+        let map = join(u16(0x8000), u16(3), u16(0), entry(13313, 2646), entry(13314, 2662), entry(61440, 2662))
+        let attributes = join(attribute(2638, map), attribute(2427, u32(Int64(doses.count))))
+        let segment = join(u16(16), u16(2), u16(attributes.count), attributes)
+        let body = join(u16(1), u16(segment.count), segment)
+        return data(invokeID, 0x0207, join(u16(256), u16(3085), u16(body.count), body))
     }
 
     private func nextBlock() -> [UInt8] {
         let chunk = Array(doses[sent..<min(sent + blockSize, doses.count)])
         let raw = chunk.flatMap { $0 }
-        let body = u16(16) + u32(Int64(sent)) + u32(Int64(chunk.count)) + u16(0) + u16(raw.count) + raw
-        let message = data(7 + sent, 0x0101, u16(256) + u32(uptime) + u16(3361) + u16(body.count) + body)
+        let body = join(u16(16), u32(Int64(sent)), u32(Int64(chunk.count)), u16(0), u16(raw.count), raw)
+        let message = data(7 + sent, 0x0101, join(u16(256), u32(uptime), u16(3361), u16(body.count), body))
         sent += chunk.count
         return message
     }
@@ -1205,7 +1208,7 @@ private final class SimulatedPen: PenTransport {
             if action == 3085 { return segmentInfo(invokeID) }
             transferPending = true
             let segment = (try? reader.u16()) ?? 0
-            return data(invokeID, 0x0207, u16(256) + u16(3100) + u16(4) + u16(segment) + u16(0))
+            return data(invokeID, 0x0207, join(u16(256), u16(3100), u16(4), u16(segment), u16(0)))
         default:
             return [0xE6, 0, 0, 2, 0, 0]
         }
@@ -1223,10 +1226,11 @@ private final class SimulatedPen: PenTransport {
             let offset = Int(command[2]) << 8 | Int(command[3])
             let length = Int(command[4])
             let source = selected == 0xE103
-                ? u16(15) + [0x20] + u16(maximumRead) + u16(maximumWrite) + [4, 6] + u16(0xE104) + u16(1024) + [0, 0]
+                ? join(u16(15), [0x20], u16(maximumRead), u16(maximumWrite), [4, 6], u16(0xE104), u16(1024), [0, 0])
                 : file
             guard selected == 0xE103 || length <= maximumRead else { return [0x67, 0] }
-            return Array(source[min(offset, source.count)..<min(offset + length, source.count)]) + [0x90, 0]
+            let slice = source[min(offset, source.count)..<min(offset + length, source.count)]
+            return join(Array(slice), [0x90, 0])
         case 0xD6:
             let offset = Int(command[2]) << 8 | Int(command[3])
             let length = Int(command[4])
@@ -1257,8 +1261,11 @@ final class InsulinPenReaderTests: XCTestCase {
     /// Newest first, as the pen sends them: 4.5 U ten minutes ago, a 2 U air shot 30 s before it,
     /// then one dose every six hours.
     private func doses() -> [[UInt8]] {
-        [SimulatedPen.record(relative: uptime - 600, tenths: 45), SimulatedPen.record(relative: uptime - 630, tenths: 20)]
-            + (1...18).map { SimulatedPen.record(relative: uptime - 600 - Int64($0) * 21600, tenths: 30 + $0) }
+        var doses = [SimulatedPen.record(relative: uptime - 600, tenths: 45), SimulatedPen.record(relative: uptime - 630, tenths: 20)]
+        for index in 1...18 {
+            doses.append(SimulatedPen.record(relative: uptime - 600 - Int64(index) * 21600, tenths: 30 + index))
+        }
+        return doses
     }
 
     private func machine() -> PenMachine {
