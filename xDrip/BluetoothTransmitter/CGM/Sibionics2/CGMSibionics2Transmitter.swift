@@ -487,18 +487,28 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 // An echo shows the link is alive, so it is not a silent session.
                 chineseDataRetryCount = 0
                 chineseEchoReceived = true
-                if let address = deviceAddress, let accepted = Sibionics1ChineseProtocolCodec.echoAcceptsAddress(value) {
+                guard let address = deviceAddress else { return }
+                // Any echo, accepting the address or refusing it, proves the Chinese protocol.
+                // Confirm it first: otherwise the probe timeout of a first connection could take a
+                // sensor that refused an address for V120 and end the address search.
+                let firstEcho = sibionics1Connection?.confirmed == false
+                if firstEcho {
+                    sibionics1Connection?.receiveEcho()
+                    sibionics1Connection?.confirm(.chinese)
+                    Sibionics2Configuration.setProtocolMode(.chinese, for: address)
+                }
+                var askedAgain = false
+                if let accepted = Sibionics1ChineseProtocolCodec.echoAcceptsAddress(value) {
                     if accepted {
                         confirmAuthenticationAddress(for: address, evidence: "the sensor accepting it")
-                    } else if askAgainWithNextAuthenticationAddress(for: address) {
-                        return
+                    } else {
+                        askedAgain = askAgainWithNextAuthenticationAddress(for: address)
                     }
                 }
-                guard sibionics1Connection?.confirmed == false, let address = deviceAddress else { return }
-                sibionics1Connection?.receiveEcho()
-                sibionics1Connection?.confirm(.chinese)
-                Sibionics2Configuration.setProtocolMode(.chinese, for: address)
-                scheduleChineseDataRetry(for: address)
+                // Until the first page, keep re-asking (this also cancels a pending probe timeout).
+                if firstEcho || (askedAgain && !streamingReady) {
+                    scheduleChineseDataRetry(for: address)
+                }
             case .v120AuthRequired:
                 switchToV120()
             case .malformed:
