@@ -37,7 +37,7 @@ iOS does not expose a peripheral's BLE MAC address, and the private CoreBluetoot
 
 Authentication waits up to 3 seconds for Device Information so the published address is used in the first session.
 
-The sensor accepts any address at authentication, so these values are unverified candidates. Each connection tries one: the detected address first, then the candidates, then the zero address. A connection that ends without glucose readings moves to the next candidate; the first one that produces readings is saved as the detected address and shown as such on the device screen. A manual **Bluetooth address** always takes priority and is never rotated.
+The sensor accepts any address at authentication, so these values are unverified candidates. Each connection tries one: the detected address first, then the candidates, then the zero address. A connection that ends without glucose readings moves to the next candidate, unless it is too short to tell (see below); an address that already produced readings is only left after three such connections in a row. The first one that produces readings is saved as the detected address and shown as such on the device screen. A Chinese Sibionics 1 answers each request with whether it accepts the address, so there a refused address is replaced at once. A manual **Bluetooth address** always takes priority and is never rotated.
 
 If detection still fails, export a trace and look for `advertisement manufacturer data`, `device information 2A23`/`2A25` and `authentication address source`. Those lines show what the sensor publishes, which is needed to add another source.
 
