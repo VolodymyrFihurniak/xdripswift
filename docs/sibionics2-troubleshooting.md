@@ -37,7 +37,7 @@ iOS does not expose a peripheral's BLE MAC address, and the private CoreBluetoot
 
 Authentication waits up to 3 seconds for Device Information so the published address is used in the first session.
 
-The sensor accepts any address at authentication, so these values are unverified candidates. Each connection tries one: the detected address first, then the candidates, then the zero address. A connection that ends without glucose readings moves to the next candidate; the first one that produces readings is saved as the detected address and shown as such on the device screen. A manual **Bluetooth address** always takes priority and is never rotated.
+The sensor accepts any address at authentication, so these values are unverified candidates. Each connection tries one: the detected address first, then the candidates, then the zero address. A connection that ends without glucose readings moves to the next candidate, unless it is too short to tell (see below); an address that already produced readings is only left after three such connections in a row. The first one that produces readings is saved as the detected address and shown as such on the device screen. A Chinese Sibionics 1 answers each request with whether it accepts the address, so there a refused address is replaced at once. A manual **Bluetooth address** always takes priority and is never rotated.
 
 If detection still fails, export a trace and look for `advertisement manufacturer data`, `device information 2A23`/`2A25` and `authentication address source`. Those lines show what the sensor publishes, which is needed to add another source.
 
@@ -130,3 +130,20 @@ Sibionics 1 and 2 → **Glucose model**:
 Changing the model recalculates the sensor's history, like a new sensitivity. Calibration is applied
 on top of either model. Adaptive V2 is new and has had little use outside JugglucoNG: compare it
 with a meter for a few days before relying on it, and switch back to Stock if it disagrees.
+
+## Sibionics 1 (Chinese): frequent reconnects and long gaps
+
+The Chinese Sibionics 1 tells whether it accepts the Bluetooth address that xDrip4iOS sends with each
+data request: its echo is `AA 55 07 01 01` when it does and `AA 55 07 00 00` when it does not. xDrip4iOS
+now uses that answer: an accepted address is kept, a refused one is replaced in the same connection.
+
+Before this, every connection that ended without readings — very often a link lost a second or two after
+connecting, logged as "The connection has timed out unexpectedly" — made the next connection try another
+address. A working address was then left for six wrong ones, and with a refused address the sensor sends
+nothing more, so an app in the background was not woken to try again: gaps of 20 minutes to over an hour
+followed. In a trace, `keeping the authentication address` now marks a lost link that no longer changes
+the address, and `refused the authentication address; asking again with the next one` a real refusal.
+
+Frequent "connection has timed out" disconnects themselves are radio: distance, the body between phone
+and sensor, or a phone case. Keeping the phone on the same side as the sensor helps. Readings missed while
+disconnected are filled in from the sensor's history on the next connection.

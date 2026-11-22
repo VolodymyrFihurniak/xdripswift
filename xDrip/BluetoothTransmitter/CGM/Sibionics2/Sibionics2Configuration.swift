@@ -296,6 +296,31 @@ enum Sibionics2ConnectionPolicy {
     /// JugglucoNG restarts authentication when a later handshake step is not answered.
     static let handshakeStepTimeout: TimeInterval = 15
     static let maximumHandshakeRestartsPerConnection = 2
+    /// Sessions in a row without readings before an address that already produced readings
+    /// for this sensor is given up. One lost link proves nothing about the address.
+    static let sessionsWithoutReadingsBeforeLeavingConfirmedAddress = 3
+    /// A Chinese sensor echoes a request within a second; a session that ends sooner after it
+    /// never gave the sensor the chance to answer.
+    static let chineseEchoWait: TimeInterval = 10
+
+    /// Whether the session that just ended is a reason to try the next authentication address.
+    /// - Chinese Sibionics 1 says itself whether it accepts the address (`echoAcceptsAddress`), so
+    ///   only a session that lasted long enough and drew no echo at all counts.
+    /// - V120 accepts any address at authentication, so a session without readings counts.
+    /// - An address confirmed by readings is only left after several such sessions in a row.
+    static func shouldTryNextAuthenticationAddress(
+        chinese: Bool,
+        echoReceived: Bool,
+        secondsSinceRequest: TimeInterval?,
+        addressIsConfirmed: Bool,
+        sessionsWithoutReadings: Int
+    ) -> Bool {
+        if chinese {
+            guard !echoReceived, let secondsSinceRequest, secondsSinceRequest >= chineseEchoWait else { return false }
+        }
+        return !addressIsConfirmed || sessionsWithoutReadings >= sessionsWithoutReadingsBeforeLeavingConfirmedAddress
+    }
+
     /// Upper bound on waiting for the Device Information address before authenticating.
     static let deviceInformationTimeout: TimeInterval = 3
 

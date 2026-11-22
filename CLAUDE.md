@@ -56,6 +56,11 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
   serial `2A25` as six raw bytes, least significant first (`32 5B D1 B0 71 C7` = `C7:71:B0:D1:5B:32`).
   Candidates (detected, unverified, zero) rotate one per connection; the one that yields readings
   is saved. A manual override always wins. Auth waits up to 3 s for Device Information.
+  Rotation (`Sibionics2ConnectionPolicy.shouldTryNextAuthenticationAddress`): a lost link proves
+  nothing, so a confirmed address is only left after 3 sessions in a row without readings. Chinese S1
+  says itself whether it accepts the address in the request echo (`AA55 07 01 01` yes, `00 00` no,
+  `echoAcceptsAddress`): yes confirms it, no tries the next candidate at once in the same connection
+  (after a refusal the sensor sends nothing, so a background app is never woken to try again).
 - **Algorithm**: V116A for Sibionics 2 and EU/Hematonix, V115G for Chinese S1. Unusable minutes
   advance the cursor (do not filter by temperature/impedance — that stalled history).
 - **Sensitivity**: S2 = probe code (14 chars) → label short code → BLE name → `0316015A`.
