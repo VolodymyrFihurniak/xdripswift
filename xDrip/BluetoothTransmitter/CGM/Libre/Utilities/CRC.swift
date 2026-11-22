@@ -41,6 +41,13 @@ final class Crc {
         Crc.hasValidCrc16InFirstTwoBytes([UInt8](data.subdata(in: footerRange)))
     }
     
+    /// Whether the 24-byte FRAM header (which holds the sensor state at byte 4) has a valid crc.
+    /// Used before activation: a misread header must never make a running sensor look new.
+    static func libreHeaderCrcIsValid(_ fram: Data) -> Bool {
+        guard fram.count >= 24 else { return false }
+        return hasValidCrc16InFirstTwoBytes([UInt8](fram.prefix(24)))
+    }
+
     /// Calculates crc16. Taken from https://github.com/krzyzanowskim/CryptoSwift with modifications (reversing and byte swapping) to adjust for crc as used by Freestyle Libre
     ///
     /// - parameter message: Array of bytes for which the crc is to be calculated

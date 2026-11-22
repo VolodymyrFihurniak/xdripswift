@@ -165,6 +165,9 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
     private var didAddObservers = false
     private var libre3Observer: NSObjectProtocol?
     private var receiverIDCopiedAt: Date?
+    /// The NFC session that activates a new Libre sensor, kept alive while the sheet is up.
+    private var libreSensorActivator: AnyObject?
+    private var libreActivationInProgress = false
     private var didStart = false
     private let startLibre3AfterNFC: Bool
 
@@ -462,6 +465,11 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             sections.append(makeSibionics2DiscoverySection())
         }
 
+        // Shown while adding the device too: a new sensor is started before it is connected.
+        if let libreActivationSection = makeLibreActivationSection() {
+            sections.append(libreActivationSection)
+        }
+
         guard bluetoothPeripheral != nil else {
             if let dexcomG6BluetoothSlotSection = makeDexcomG6BluetoothSlotSection() {
                 sections.append(dexcomG6BluetoothSlotSection)
@@ -485,6 +493,122 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
         sections.append(contentsOf: makePeripheralSpecificSections())
 
         return sections
+    }
+
+    // MARK: - Libre sensor activation
+
+    /// Device types that read FreeStyle Libre 1 / Libre 2 sensors. Libre 3 starts sensors in its own setup.
+    static func supportsLibreSensorActivation(_ type: BluetoothPeripheralType) -> Bool {
+        switch type {
+        case .Libre2Type, .MiaoMiaoType, .BubbleType: return true
+        default: return false
+        }
+    }
+
+    private func makeLibreActivationSection() -> BluetoothPeripheralDetailSection? {
+        #if canImport(CoreNFC)
+        guard Self.supportsLibreSensorActivation(expectedBluetoothPeripheralType), LibreSensorActivator.isAvailable else { return nil }
+        return BluetoothPeripheralDetailSection(
+            id: "libre-activation",
+            title: TextsLibreNFC.activationSectionTitle,
+            footer: TextsLibreNFC.activationFooter,
+            rows: [row(
+                id: "libre-activation-start",
+                title: TextsLibreNFC.activationRow,
+                detail: libreActivationInProgress ? TextsLibreNFC.activationInProgress : nil,
+                showsDisclosure: true,
+                isEnabled: !libreActivationInProgress,
+                action: { [weak self] in
+                    self?.confirmLibreSensorActivation()
+                }
+            )]
+        )
+        #else
+        return nil
+        #endif
+    }
+
+    private func confirmLibreSensorActivation() {
+        pendingAlert = BluetoothPeripheralDetailAlert(
+            title: TextsLibreNFC.activationConfirmTitle,
+            message: TextsLibreNFC.activationConfirmMessage,
+            primaryButtonTitle: TextsLibreNFC.activationConfirmButton,
+            primaryAction: { [weak self] in
+                self?.startLibreSensorActivation()
+            },
+            secondaryButtonTitle: Texts_Common.Cancel
+        )
+    }
+
+    private func startLibreSensorActivation() {
+        #if canImport(CoreNFC)
+        guard !libreActivationInProgress else { return }
+        let activator = LibreSensorActivator()
+        libreSensorActivator = activator
+        libreActivationInProgress = true
+        trace("user started Libre sensor activation", log: log, category: ConstantsLog.categoryBluetoothPeripheralViewController, type: .info)
+        refresh()
+        // Let the confirmation alert close before the system NFC sheet appears.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            activator.start { outcome in
+                self?.libreSensorActivationFinished(outcome)
+            }
+        }
+        #endif
+    }
+
+    #if canImport(CoreNFC)
+    private func libreSensorActivationFinished(_ outcome: LibreSensorActivator.Outcome) {
+        libreSensorActivator = nil
+        libreActivationInProgress = false
+        refresh()
+
+        switch outcome {
+        case .activated(let serialNumber, let sensorType):
+            var message = String(format: TextsLibreNFC.activationSucceededMessage, sensorType, serialNumber ?? "")
+            // A Libre 2 being added still needs its streaming scan; a bridge reads the sensor itself.
+            let offersConnect = expectedBluetoothPeripheralType == .Libre2Type && bluetoothPeripheral == nil
+            message += "\n\n" + (expectedBluetoothPeripheralType == .Libre2Type
+                ? TextsLibreNFC.activationSucceededConnectHint
+                : TextsLibreNFC.activationSucceededBridgeHint)
+            pendingAlert = BluetoothPeripheralDetailAlert(
+                title: TextsLibreNFC.activationSucceededTitle,
+                message: message,
+                primaryButtonTitle: offersConnect ? TextsLibreNFC.activationConnectButton : Texts_Common.Ok,
+                primaryAction: offersConnect ? { [weak self] in
+                    // The NFC sheet needs a moment to close before the streaming scan opens a new one.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.connectButtonTapped() }
+                } : nil,
+                secondaryButtonTitle: offersConnect ? Texts_Common.Cancel : nil
+            )
+        case .alreadyStarted(let state):
+            pendingAlert = BluetoothPeripheralDetailAlert(
+                title: TextsLibreNFC.activationAlreadyStartedTitle,
+                message: String(format: TextsLibreNFC.activationAlreadyStartedMessage, state.translatedDescription)
+            )
+        case .unsupported(let reason):
+            pendingAlert = BluetoothPeripheralDetailAlert(title: TextsLibreNFC.activationNotPossibleTitle,
+                                                          message: Self.libreActivationMessage(for: reason))
+        case .failed:
+            pendingAlert = BluetoothPeripheralDetailAlert(title: TextsLibreNFC.activationNotPossibleTitle,
+                                                          message: TextsLibreNFC.activationFailedMessage)
+        case .unavailable:
+            pendingAlert = BluetoothPeripheralDetailAlert(title: Texts_Common.warning, message: TextsLibreNFC.deviceMustSupportNFC)
+        case .cancelled:
+            break
+        }
+    }
+    #endif
+
+    static func libreActivationMessage(for reason: LibreSensorActivation.Unsupported) -> String {
+        switch reason {
+        case .libre3: return TextsLibreNFC.activationUnsupportedLibre3Message
+        case .libre2Gen2: return TextsLibreNFC.activationUnsupportedGen2Message
+        case .libreUS14Day: return TextsLibreNFC.activationUnsupportedUSMessage
+        case .librePro: return TextsLibreNFC.activationUnsupportedProMessage
+        case .unknownType: return TextsLibreNFC.activationUnsupportedUnknownMessage
+        case .unreadable: return TextsLibreNFC.activationUnreadableMessage
+        }
     }
 
     private func makeSibionics2DiscoverySection() -> BluetoothPeripheralDetailSection {

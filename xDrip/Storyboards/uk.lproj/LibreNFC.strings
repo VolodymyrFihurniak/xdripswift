@@ -35,3 +35,34 @@
 "nfcScanSuccessfulMessage" = "Натисніть OK і просто зачекайте, поки сенсор Libre завершить підключення через Bluetooth.\n\nНезабаром стан має змінитися на «Підключено».";
 "nfcErrorMessageScanErrorRetrying" = "Помилка сканування сенсора\n\nПовторна спроба... № ";
 "nfcErrorMessageScanFailed" = "Не вдалося відсканувати сенсор";
+
+/* Libre sensor activation */
+"activationHoldNearSensor" = "Тримайте верхню частину iPhone біля нового сенсора, доки він не перестане вібрувати.";
+"activationUnsupportedType" = "Цей сенсор не можна активувати тут.";
+"activationReadFailed" = "Не вдалося прочитати сенсор. Нічого не змінено. Спробуйте ще раз.";
+"activationUseLibre3" = "Це сенсор Libre 3: запускайте його через «Додати CGM» > Libre 3.";
+"activationAlreadyStartedShort" = "Цей сенсор уже запущено.";
+"activationFailed" = "Сенсор не запустився. Спробуйте ще раз.";
+"activationSucceededShort" = "Сенсор активовано.";
+"activationSectionTitle" = "Активація сенсора";
+"activationRow" = "Активувати новий сенсор";
+"activationInProgress" = "Сканування…";
+"activationFooter" = "Запускає новий сенсор FreeStyle Libre 1, Libre 2 або Libre 2 Plus (EU) через NFC без застосунку Libre. Сенсори Libre 2 зі США та деяких інших регіонів (Gen2) тут не активуються; Libre 3 запускається з власного налаштування. Сенсор, який уже працює, не змінюється.";
+"activationConfirmTitle" = "Активувати сенсор?";
+"activationConfirmMessage" = "Спершу встановіть сенсор. Активація запускає строк його роботи та 60-хвилинне прогрівання, і її не можна скасувати. Застосунок Libre не знатиме про цей сенсор.";
+"activationConfirmButton" = "Активувати";
+"activationSucceededTitle" = "Сенсор активовано";
+"activationSucceededMessage" = "%@ %@ запущено, він прогрівається 60 хвилин.";
+"activationSucceededConnectHint" = "Тепер підключіть його: натисніть «Підключити» й відскануйте сенсор ще раз.";
+"activationSucceededBridgeHint" = "Показники надходитимуть через трансмітер після прогрівання.";
+"activationConnectButton" = "Підключити";
+"activationAlreadyStartedTitle" = "Уже запущено";
+"activationAlreadyStartedMessage" = "Цей сенсор не новий (стан: %@). Йому нічого не надсилалося.";
+"activationNotPossibleTitle" = "Не вдається активувати";
+"activationUnsupportedLibre3Message" = "Це сенсор Libre 3. Запустіть його через «Додати CGM» > Libre 3 > «Запустити новий сенсор».";
+"activationUnsupportedGen2Message" = "Цей сенсор Libre 2 використовує захист Abbott другого покоління (продається у США та деяких інших регіонах). Його можна активувати лише програмами Abbott.";
+"activationUnsupportedUSMessage" = "Сенсори Libre 14-day зі США тут не активуються.";
+"activationUnsupportedProMessage" = "Сенсори Libre Pro тут не активуються.";
+"activationUnsupportedUnknownMessage" = "xDrip4iOS не вміє активувати сенсори цього типу.";
+"activationUnreadableMessage" = "Не вдалося надійно прочитати стан сенсора, тому нічого не надсилалося. Тримайте телефон нерухомо й спробуйте ще раз.";
+"activationFailedMessage" = "Сенсор не повідомив про запуск. Відскануйте ще раз: запущений сенсор не зміниться, новий буде активовано.";
