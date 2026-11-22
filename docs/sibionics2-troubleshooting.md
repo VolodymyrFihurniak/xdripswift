@@ -130,3 +130,20 @@ Sibionics 1 and 2 → **Glucose model**:
 Changing the model recalculates the sensor's history, like a new sensitivity. Calibration is applied
 on top of either model. Adaptive V2 is new and has had little use outside JugglucoNG: compare it
 with a meter for a few days before relying on it, and switch back to Stock if it disagrees.
+
+## Sibionics 1 (Chinese): frequent reconnects and long gaps
+
+The Chinese Sibionics 1 tells whether it accepts the Bluetooth address that xDrip4iOS sends with each
+data request: its echo is `AA 55 07 01 01` when it does and `AA 55 07 00 00` when it does not. xDrip4iOS
+now uses that answer: an accepted address is kept, a refused one is replaced in the same connection.
+
+Before this, every connection that ended without readings — very often a link lost a second or two after
+connecting, logged as "The connection has timed out unexpectedly" — made the next connection try another
+address. A working address was then left for six wrong ones, and with a refused address the sensor sends
+nothing more, so an app in the background was not woken to try again: gaps of 20 minutes to over an hour
+followed. In a trace, `keeping the authentication address` now marks a lost link that no longer changes
+the address, and `refused the authentication address; asking again with the next one` a real refusal.
+
+Frequent "connection has timed out" disconnects themselves are radio: distance, the body between phone
+and sensor, or a phone case. Keeping the phone on the same side as the sensor helps. Readings missed while
+disconnected are filled in from the sensor's history on the next connection.

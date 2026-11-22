@@ -33,6 +33,14 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var authenticationAddressInUse: String?
     private var authenticationAddressAwaitingReadings = false
     private var authenticationAddressSelected = false
+    /// When the address in use was first sent in this connection.
+    private var authenticationAddressSentAt: Date?
+    /// Chinese firmware echoed a request in this connection (accepting or refusing the address).
+    private var chineseEchoReceived = false
+    /// Addresses the Chinese sensor refused in this connection; bounds the in-connection search.
+    private var chineseAddressRefusals = 0
+    /// Sessions in a row that ended without readings (kept across connections).
+    private var sessionsWithoutReadings = 0
     /// Authentication waits for Device Information, which carries the BLE address.
     private var pendingDeviceInformationReads = 0
     private var sessionStartDeferred = false
@@ -228,6 +236,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     override func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        let sessionWasChinese = usesChineseProtocol
         logEvent("disconnected" + (error.map { ": " + $0.localizedDescription } ?? "")
                  + (streamingReady ? "" : " (before streaming)"))
         probeGeneration += 1
@@ -256,14 +265,32 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         historyRecoveryToken += 1
         historyRetryScheduled = false
         if authenticationAddressAwaitingReadings {
-            // The sensor accepts any address at authentication, so a session that
-            // never streamed is the only sign the address was wrong.
             authenticationAddressAwaitingReadings = false
-            addressCandidateIndex += 1
-            logEvent("session ended without readings; next connection tries another authentication address")
-            trace("Sibionics 2 session ended without readings; next connection tries another authentication address",
-                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+            sessionsWithoutReadings += 1
+            let addressIsConfirmed = deviceAddress.map {
+                Sibionics2AuthenticationAddress.override(for: $0) != nil
+                    || (authenticationAddressInUse != nil && Sibionics2AuthenticationAddress.detected(for: $0) == authenticationAddressInUse)
+            } ?? false
+            let secondsSinceRequest = authenticationAddressSentAt.map { Date().timeIntervalSince($0) }
+            if Sibionics2ConnectionPolicy.shouldTryNextAuthenticationAddress(
+                chinese: sessionWasChinese, echoReceived: chineseEchoReceived, secondsSinceRequest: secondsSinceRequest,
+                addressIsConfirmed: addressIsConfirmed, sessionsWithoutReadings: sessionsWithoutReadings) {
+                addressCandidateIndex += 1
+                sessionsWithoutReadings = 0
+                logEvent("session ended without readings; next connection tries another authentication address")
+                trace("Sibionics 2 session ended without readings; next connection tries another authentication address",
+                      log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+            } else {
+                // A link lost before the sensor could answer says nothing about the address. Leaving a
+                // working address here sent the next connections through every wrong one first.
+                trace("Sibionics 2 session ended without readings after %{public}@ s (%{public}@ in a row); keeping the authentication address",
+                      log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info,
+                      secondsSinceRequest.map { String(Int($0)) } ?? "-", sessionsWithoutReadings.description)
+            }
         }
+        authenticationAddressSentAt = nil
+        chineseEchoReceived = false
+        chineseAddressRefusals = 0
         authenticationAddressSelected = false
         super.centralManager(central, didDisconnectPeripheral: peripheral, error: error)
     }
@@ -392,17 +419,19 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
 
-    /// The address used in this connection produced readings, so keep it for later sessions.
-    private func confirmAuthenticationAddress(for address: String) {
+    /// The address used in this connection produced readings (or a Chinese sensor accepted
+    /// it), so keep it for later sessions.
+    private func confirmAuthenticationAddress(for address: String, evidence: String = "glucose readings") {
         guard authenticationAddressAwaitingReadings else { return }
         authenticationAddressAwaitingReadings = false
+        sessionsWithoutReadings = 0
         addressCandidateIndex = 0
         guard let confirmed = authenticationAddressInUse,
               Sibionics2AuthenticationAddress.override(for: address) == nil,
               Sibionics2AuthenticationAddress.detected(for: address) != confirmed else { return }
         Sibionics2AuthenticationAddress.setDetected(confirmed, for: address)
-        trace("Sibionics 2 authentication address confirmed by glucose readings",
-              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+        trace("Sibionics 2 authentication address confirmed by %{public}@",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info, evidence)
     }
 
     /// The address chosen for this connection; retries within it reuse the same one.
@@ -419,6 +448,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         authenticationAddressInUse = candidate
         authenticationAddressSelected = true
         authenticationAddressAwaitingReadings = true
+        if authenticationAddressSentAt == nil { authenticationAddressSentAt = Date() }
         let source: String
         if Sibionics2AuthenticationAddress.override(for: address) != nil {
             source = "manual override"
@@ -446,13 +476,24 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                     if !streamingReady { markStreamingReady(for: address) }
                 }
                 receivedNonEmptyReadingsPacket = !readings.isEmpty || receivedNonEmptyReadingsPacket
-                if !readings.isEmpty, let address = deviceAddress { confirmAuthenticationAddress(for: address) }
+                if !readings.isEmpty, let address = deviceAddress {
+                    sessionsWithoutReadings = 0
+                    confirmAuthenticationAddress(for: address)
+                }
                 receiveReadings(readings, at: date)
             case .requestEcho:
                 // JugglucoNG treats the AA55 echo as proof of the Chinese protocol and
                 // keeps re-requesting data; falling back to V120 here broke these sensors.
                 // An echo shows the link is alive, so it is not a silent session.
                 chineseDataRetryCount = 0
+                chineseEchoReceived = true
+                if let address = deviceAddress, let accepted = Sibionics1ChineseProtocolCodec.echoAcceptsAddress(value) {
+                    if accepted {
+                        confirmAuthenticationAddress(for: address, evidence: "the sensor accepting it")
+                    } else if askAgainWithNextAuthenticationAddress(for: address) {
+                        return
+                    }
+                }
                 guard sibionics1Connection?.confirmed == false, let address = deviceAddress else { return }
                 sibionics1Connection?.receiveEcho()
                 sibionics1Connection?.confirm(.chinese)
@@ -860,6 +901,28 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             _ = self.sendChineseDataRequest(for: address)
             self.scheduleChineseDataRetry(for: address)
         }
+    }
+
+    /// A Chinese sensor refused the address: try the next one at once, in this connection.
+    /// Waiting for the next connection left the app asleep in the background with nothing
+    /// to wake it (the sensor sends nothing after a refusal), once for 66 minutes.
+    private func askAgainWithNextAuthenticationAddress(for address: String) -> Bool {
+        let candidates = Sibionics2AuthenticationAddress.authenticationCandidates(for: address)
+        chineseAddressRefusals += 1
+        guard Sibionics2AuthenticationAddress.override(for: address) == nil,
+              chineseAddressRefusals < candidates.count else {
+            logEvent("sensor refused the authentication address")
+            trace("Sibionics 1 refused the authentication address (%{public}@ refusals); no other address to try now",
+                  log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
+                  chineseAddressRefusals.description)
+            return false
+        }
+        addressCandidateIndex += 1
+        authenticationAddressSelected = false
+        logEvent("sensor refused the authentication address; trying the next one")
+        trace("Sibionics 1 refused the authentication address; asking again with the next one",
+              log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
+        return sendChineseDataRequest(for: address)
     }
 
     @discardableResult

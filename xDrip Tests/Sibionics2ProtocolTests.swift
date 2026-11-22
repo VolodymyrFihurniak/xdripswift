@@ -150,6 +150,51 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertTrue(readings.isEmpty)
     }
 
+    func testChineseEchoSaysWhetherTheSensorAcceptsTheAddress() {
+        // Echoes from a user's trace: the working address drew 01 01 in all 824 echoes, every
+        // wrong one 00 00.
+        let accepted = Data([0xAA, 0x55, 0x07, 0x01, 0x01] + [UInt8](repeating: 0, count: 14) + [0xF8])
+        let refused = Data([0xAA, 0x55, 0x07, 0x00, 0x00] + [UInt8](repeating: 0, count: 14) + [0xFA])
+        XCTAssertEqual(Sibionics1ChineseProtocolCodec.echoAcceptsAddress(accepted), true)
+        XCTAssertEqual(Sibionics1ChineseProtocolCodec.echoAcceptsAddress(refused), false)
+        // Both are still request echoes for the protocol logic.
+        let chinese = Sibionics1ChineseProtocolCodec()
+        for frame in [accepted, refused] {
+            guard case .requestEcho = chinese.parse(frame, at: Date()) else { return XCTFail("Echo not recognized") }
+        }
+        // Anything else says nothing about the address.
+        XCTAssertNil(Sibionics1ChineseProtocolCodec.echoAcceptsAddress(Data([0xAA, 0x55, 0x07])))
+        XCTAssertNil(Sibionics1ChineseProtocolCodec.echoAcceptsAddress(Data([0xAA, 0x55, 0x07, 0x01, 0x00])))
+        XCTAssertNil(Sibionics1ChineseProtocolCodec.echoAcceptsAddress(Data([0xAA, 0x55, 0x09, 0x01, 0x01])))
+        XCTAssertNil(Sibionics1ChineseProtocolCodec.echoAcceptsAddress(Data([0x23, 0xF7, 0x6F, 0xD9, 0xF4])))
+    }
+
+    func testALostLinkDoesNotMoveAwayFromAWorkingAddress() {
+        let policy = Sibionics2ConnectionPolicy.self
+        // Chinese: an echo answers the question; a link lost within seconds of the request says nothing.
+        XCTAssertFalse(policy.shouldTryNextAuthenticationAddress(chinese: true, echoReceived: true, secondsSinceRequest: 600,
+                                                                 addressIsConfirmed: false, sessionsWithoutReadings: 5))
+        XCTAssertFalse(policy.shouldTryNextAuthenticationAddress(chinese: true, echoReceived: false, secondsSinceRequest: 2,
+                                                                 addressIsConfirmed: false, sessionsWithoutReadings: 1))
+        XCTAssertFalse(policy.shouldTryNextAuthenticationAddress(chinese: true, echoReceived: false, secondsSinceRequest: nil,
+                                                                 addressIsConfirmed: false, sessionsWithoutReadings: 1))
+        // A silent sensor that had time to answer: an unconfirmed address is left at once,
+        // a confirmed one only after three such sessions in a row.
+        XCTAssertTrue(policy.shouldTryNextAuthenticationAddress(chinese: true, echoReceived: false, secondsSinceRequest: 30,
+                                                                addressIsConfirmed: false, sessionsWithoutReadings: 1))
+        XCTAssertFalse(policy.shouldTryNextAuthenticationAddress(chinese: true, echoReceived: false, secondsSinceRequest: 30,
+                                                                 addressIsConfirmed: true, sessionsWithoutReadings: 2))
+        XCTAssertTrue(policy.shouldTryNextAuthenticationAddress(chinese: true, echoReceived: false, secondsSinceRequest: 30,
+                                                                addressIsConfirmed: true, sessionsWithoutReadings: 3))
+        // V120 accepts any address, so a session without readings counts, still sparing a confirmed one.
+        XCTAssertTrue(policy.shouldTryNextAuthenticationAddress(chinese: false, echoReceived: false, secondsSinceRequest: 2,
+                                                                addressIsConfirmed: false, sessionsWithoutReadings: 1))
+        XCTAssertFalse(policy.shouldTryNextAuthenticationAddress(chinese: false, echoReceived: false, secondsSinceRequest: 2,
+                                                                 addressIsConfirmed: true, sessionsWithoutReadings: 2))
+        XCTAssertTrue(policy.shouldTryNextAuthenticationAddress(chinese: false, echoReceived: false, secondsSinceRequest: 2,
+                                                                addressIsConfirmed: true, sessionsWithoutReadings: 3))
+    }
+
     func testChineseParserRejectsCorruptAndTruncatedPayloadsLikeJuggluco() {
         let chinese = Sibionics1ChineseProtocolCodec()
         let now = Date(timeIntervalSince1970: 1_800_000_000)

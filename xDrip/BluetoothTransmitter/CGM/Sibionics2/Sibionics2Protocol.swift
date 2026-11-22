@@ -131,6 +131,20 @@ struct Sibionics1ChineseProtocolCodec {
         Data([0xAA, 0x55, 0x10, 0xF1])
     }
 
+    /// What the AA55 07 echo says about the address in the request: Chinese firmware answers
+    /// `AA 55 07 01 01` when it accepts it and `AA 55 07 00 00` when it does not (every one of
+    /// 855 echoes in a user's trace agreed). nil for anything else. JugglucoNG knows the real
+    /// Bluetooth address on Android and never needs this; iOS has to find it.
+    static func echoAcceptsAddress(_ data: Data) -> Bool? {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 5, bytes[0] == 0xAA, bytes[1] == 0x55, bytes[2] == 0x07 else { return nil }
+        switch (bytes[3], bytes[4]) {
+        case (0x01, 0x01): return true
+        case (0x00, 0x00): return false
+        default: return nil
+        }
+    }
+
     /// Mirrors JugglucoNG's parseChinese: any AA55 07 frame is the request echo, and a
     /// data frame needs its checksum and at least the declared entries.
     func parse(_ data: Data, at now: Date) -> Sibionics1ChineseParseResult {
