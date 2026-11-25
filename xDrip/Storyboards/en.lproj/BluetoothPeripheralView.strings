@@ -211,6 +211,9 @@
 "sibionics2.calibrationWeightingStable" = "Stable";
 "sibionics2.autoResetTitle" = "Automatic sensor reset";
 "sibionics2.resetTitle" = "Reset sensor";
+"sibionics2.resetReminderTitle" = "Sibionics 2 reset coming up";
+"sibionics2.resetReminderText" = "The sensor reaches its reset point in about %d hours. Reset it in time to keep it running.";
+"sibionics2.resetReminderPostpone" = "Postpone 2 hours";
 "sibionics2.resetConfirmTitle" = "Reset sensor?";
 "sibionics2.resetConfirmMessage" = "This sends a reset command to the sensor. Continue only if you intend to start a new sensor session.";
 

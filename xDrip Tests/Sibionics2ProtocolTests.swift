@@ -733,6 +733,43 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertTrue(forcedWhenDisabled.forced)
     }
 
+    func testResetReminderFollowsJugglucoResetPolicy() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func hours(_ value: Double) -> Date { start.addingTimeInterval(value * 3600) }
+        // Reset point 22 days (528 h), reminder 4 h before it, forced reset 4 h before 23 days (548 h).
+        XCTAssertEqual(Sibionics2ResetReminder.reminderAt(sensorStartDate: start), hours(524))
+        XCTAssertEqual(Sibionics2ResetReminder.hardDeadline(sensorStartDate: start), hours(548))
+        XCTAssertEqual(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: start, postponedUntil: nil, lastScheduledFor: nil), hours(524))
+        XCTAssertEqual(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: hours(525), postponedUntil: hours(530),
+                                                                lastScheduledFor: hours(525)), hours(530))
+        // Shown at 524 h: repeats at 526 h; still pending: stays.
+        XCTAssertEqual(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: hours(525), postponedUntil: nil,
+                                                                lastScheduledFor: hours(524)), hours(526))
+        XCTAssertEqual(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: hours(523), postponedUntil: nil,
+                                                                lastScheduledFor: hours(524)), hours(524))
+        // A reminder of the previous sensor does not count; none once the forced reset is due.
+        XCTAssertEqual(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: hours(1), postponedUntil: nil,
+                                                                lastScheduledFor: hours(-10)), hours(524))
+        XCTAssertNil(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: hours(547.5), postponedUntil: nil,
+                                                              lastScheduledFor: hours(547)))
+
+        XCTAssertEqual(Sibionics2ResetReminder.hoursLeft(sensorStartDate: start, at: hours(524)), 4)
+        XCTAssertEqual(Sibionics2ResetReminder.hoursLeft(sensorStartDate: start, at: hours(524.5)), 4)
+        XCTAssertEqual(Sibionics2ResetReminder.hoursLeft(sensorStartDate: start, at: hours(529)), 19)
+        XCTAssertEqual(Sibionics2ResetReminder.postponedUntil(sensorStartDate: start, now: hours(530)), hours(532))
+        XCTAssertEqual(Sibionics2ResetReminder.postponedUntil(sensorStartDate: start, now: hours(547)), hours(548))
+
+        // Postponing holds the comfortable reset, never the forced one.
+        let latest = Sibionics2AutoResetReading(glucoseMgDl: 120, timeStamp: hours(530))
+        let previous = Sibionics2AutoResetReading(glucoseMgDl: 119, timeStamp: hours(530).addingTimeInterval(-60))
+        XCTAssertTrue(Sibionics2AutoResetPolicy.evaluate(now: hours(530), sensorStartDate: start, enabled: true,
+                                                         previous: previous, latest: latest).resetNow)
+        XCTAssertFalse(Sibionics2AutoResetPolicy.evaluate(now: hours(530), sensorStartDate: start, enabled: true,
+                                                          previous: previous, latest: latest, postponedUntil: hours(531)).resetNow)
+        XCTAssertTrue(Sibionics2AutoResetPolicy.evaluate(now: hours(548), sensorStartDate: start, enabled: true,
+                                                         previous: nil, latest: nil, postponedUntil: hours(549)).forced)
+    }
+
     func testSibionics1LifetimeIsJugglucoExtendedSessionAndVariantNamesTheSensor() {
         // JugglucoNG EXTENDED_CHINESE_LIFETIME_MS = 572 h - 19 min.
         XCTAssertEqual(Sibionics1SensorProfile.extendedLife, 2_058_060, accuracy: 0.001)

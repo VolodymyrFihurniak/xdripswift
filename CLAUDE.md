@@ -88,6 +88,9 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
   device screen. Home says "no signal" after 3 min for 1-minute sensors (`RootHomeSensorReach`).
 - **Reset**: manual for all variants (S2 encrypted `0x10`, EU/Hematonix `24 E7 6F 34`,
   Chinese `AA 55 10 F1`); automatic only for Sibionics 2. The post-reset session probe is one-shot.
+  `Sibionics2ResetReminder` (JugglucoNG `SibionicsResetReminder`, S2 only): scheduled UNNotification 4 h
+  before day 22, repeats every 2 h, actions reset / postpone 2 h (`resetPostponedUntil` holds only the
+  comfortable reset), handled in `RootApplicationCoordinator`.
 - **Calibration** (`xDrip/Calibration/Sibionics2Calibrator.swift`): xDrip+ or JugglucoNG
   `CalibrationMath` (weighted OLS default, median slope, robust, elastic, ensemble) with
   Fresh/Balanced/Stable weighting, evaluated in the user's display unit. Mode raw value 1 must stay
@@ -170,8 +173,8 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 
 ## Not ported (yet)
 
-JugglucoNG alternative glucose models Balanced, Responsive and Adaptive V1 (Adaptive V2 is ported), GS3 variant,
-Sibionics reset reminder and raw source-journal backup/recovery; of the NovoPen import, the
+JugglucoNG alternative glucose models Balanced, Responsive and Adaptive V1 (Adaptive V2 is ported), GS3 variant
+and raw source-journal backup/recovery; of the NovoPen import, the
 unattended background read and the merge with hand-written entries.
 
 ## Git

@@ -639,6 +639,23 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
 
+    /// "Postpone 2 hours" from the reset reminder: holds the comfortable automatic reset (never the
+    /// forced one) and moves the reminder to the end of the postponement.
+    func postponeSensorReset(for address: String) {
+        runOnCentralQueue { [weak self] in
+            guard let self, self.variant.supportsAutoReset,
+                  let currentAddress = self.deviceAddress,
+                  currentAddress.caseInsensitiveCompare(address) == .orderedSame,
+                  let startDate = self.stateStore.load(for: currentAddress)?.sensorStartDate else { return }
+            let now = Date()
+            Sibionics2Configuration.setResetPostponedUntil(Sibionics2ResetReminder.postponedUntil(sensorStartDate: startDate, now: now),
+                                                           for: currentAddress)
+            Sibionics2Configuration.setResetReminderScheduledFor(now, for: currentAddress)
+            self.logEvent("reset postponed from the reminder")
+            self.scheduleAutoResetCheck(for: currentAddress)
+        }
+    }
+
     func requestSensorReset(for requestedAddress: String? = nil) {
         guard variant.supportsManualReset else { return }
         guard let address = requestedAddress ?? deviceAddress else {
@@ -791,6 +808,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
 
         Sibionics2Configuration.markResetSent(for: address)
+        Sibionics2ResetReminder.cancel(for: address)
         resetSentThisConnection = true
         readingPollGeneration += 1
         resetDisconnectGeneration += 1
@@ -822,6 +840,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let generation = autoResetCheckGeneration
         guard !Sibionics2Configuration.awaitingResetRestart(for: address),
               let startDate = stateStore.load(for: address)?.sensorStartDate else { return }
+        Sibionics2ResetReminder.schedule(for: address, sensorStartDate: startDate)
 
         let age = Date().timeIntervalSince(startDate)
         let autoResetEnabled = Sibionics2Configuration.autoResetEnabled(for: address)
@@ -852,7 +871,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             sensorStartDate: stateStore.load(for: address)?.sensorStartDate,
             enabled: Sibionics2Configuration.autoResetEnabled(for: address),
             previous: Sibionics2Configuration.previousReading(for: address),
-            latest: Sibionics2Configuration.latestReading(for: address)
+            latest: Sibionics2Configuration.latestReading(for: address),
+            postponedUntil: Sibionics2Configuration.resetPostponedUntil(for: address)
         )
         guard decision.resetNow else {
             scheduleAutoResetCheck(for: address)
