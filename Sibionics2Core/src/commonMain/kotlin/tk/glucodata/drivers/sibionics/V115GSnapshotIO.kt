@@ -8,6 +8,10 @@ internal class V115GSnapshotWriter {
         for (shift in 24 downTo 0 step 8) bytes.add((value ushr shift).toByte())
     }
 
+    fun writeLong(value: Long) {
+        for (shift in 56 downTo 0 step 8) bytes.add((value ushr shift).toByte())
+    }
+
     // DataOutputStream.writeFloat canonicalizes NaN, unlike toRawBits().
     fun writeFloat(value: Float) = writeInt(value.toBits())
 
@@ -28,6 +32,8 @@ internal class V115GSnapshotReader(private val bytes: ByteArray) {
 
     fun readInt(): Int = (readByte() shl 24) or (readByte() shl 16) or
         (readByte() shl 8) or readByte()
+
+    fun readLong(): Long = (readInt().toLong() shl 32) or (readInt().toLong() and 0xffffffffL)
 
     fun readFloat(): Float = Float.fromBits(readInt())
 

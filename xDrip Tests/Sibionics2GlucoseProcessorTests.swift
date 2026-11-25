@@ -248,6 +248,30 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         XCTAssertGreaterThan(intervals, 0)
     }
 
+    func testAdaptiveV1FollowsStockBeforeMinute120AndContinuesFromItsSnapshot() throws {
+        let rows = try startupRows()
+        var source = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: .adaptiveV1)
+        var stock = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        for row in rows.prefix(100) {
+            let model = source.process(row.reading(), mode: .replay)?.glucoseMgDl
+            let stockValue = stock.process(row.reading(), mode: .replay)?.glucoseMgDl
+            XCTAssertEqual(model == nil, stockValue == nil)
+            // JugglucoNG shows the stock value, rounded to 0.1 mmol/L, until minute 120.
+            if let model, let stockValue { XCTAssertEqual(model, stockValue, accuracy: 0.05 * 18 + 1e-6) }
+        }
+        let snapshot = source.snapshot()
+        XCTAssertFalse(snapshot.isEmpty)
+        XCTAssertEqual(snapshot[5], 6)
+        var restored = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: .adaptiveV1)
+        XCTAssertTrue(restored.restore(from: snapshot))
+        for row in rows.dropFirst(100) {
+            XCTAssertEqual(restored.process(row.reading(), mode: .live)?.glucoseMgDl,
+                           source.process(row.reading(), mode: .live)?.glucoseMgDl)
+        }
+        var adaptiveV2 = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: .adaptiveV2)
+        XCTAssertFalse(adaptiveV2.restore(from: snapshot))
+    }
+
     func testBalancedAndResponsiveProcessorsContinueFromTheirSnapshotsOnly() throws {
         let rows = try startupRows()
         for model in [Sibionics2GlucoseModel.balanced, .responsive] {

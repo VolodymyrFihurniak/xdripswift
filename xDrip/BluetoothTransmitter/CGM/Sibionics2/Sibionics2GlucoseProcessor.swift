@@ -16,6 +16,9 @@ enum Sibionics2StockFamily {
 enum Sibionics2GlucoseModel: Int, CaseIterable {
     /// The manufacturer's algorithm (V116A or V115G).
     case stock = 0
+    /// JugglucoNG's Adaptive V1 ("state model"): Kalman models on the vendor's chemical signal,
+    /// gated by evidence and pulled back to the stock value; the stock value before minute 120.
+    case adaptiveV1 = 2
     /// JugglucoNG's Balanced tracker: the stock value with small quantisation noise smoothed.
     case balanced = 4
     /// JugglucoNG's Responsive estimator: a glucose/velocity estimate with a small trend lead.
@@ -27,6 +30,7 @@ enum Sibionics2GlucoseModel: Int, CaseIterable {
     var title: String {
         switch self {
         case .stock: return Texts_BluetoothPeripheralView.sibionicsGlucoseModelStock
+        case .adaptiveV1: return Texts_BluetoothPeripheralView.sibionicsGlucoseModelAdaptiveV1
         case .balanced: return Texts_BluetoothPeripheralView.sibionicsGlucoseModelBalanced
         case .responsive: return Texts_BluetoothPeripheralView.sibionicsGlucoseModelResponsive
         case .adaptiveV2: return Texts_BluetoothPeripheralView.sibionicsGlucoseModelAdaptiveV2
@@ -48,11 +52,14 @@ private protocol SibionicsStockCore: SibionicsSnapshotCore {
     func process(rawMmol: Float, temperatureC: Float, index: Int32) -> Float
     func processAdaptiveV2(estimator: SibionicsAdaptiveV2Facade, temperatureC: Float,
                            impedance: Float, eventTimeMs: Int64) -> Float
+    func processAdaptiveV1(model: SibionicsAdaptiveV1Facade, stockMmol: Float, rawMmol: Float, temperatureC: Float,
+                           impedance: Float, index: Int32, eventTimeMs: Int64) -> Float
 }
 
 extension Sibionics2V116AFacade: SibionicsStockCore {}
 extension Sibionics1V115GFacade: SibionicsStockCore {}
 extension SibionicsAdaptiveV2Facade: SibionicsSnapshotCore {}
+extension SibionicsAdaptiveV1Facade: SibionicsSnapshotCore {}
 
 enum Sibionics2ProcessingMode {
     case live
@@ -84,6 +91,7 @@ struct Sibionics2GlucoseProcessor {
         case .adaptiveV2: return 3
         case .balanced: return 4
         case .responsive: return 5
+        case .adaptiveV1: return 6
         }
     }
     private static let maximumTrackerSnapshotLength = 256
@@ -101,6 +109,13 @@ struct Sibionics2GlucoseProcessor {
     private final class CoreBox {
         let value: SibionicsStockCore
         let adaptive: SibionicsAdaptiveV2Facade?
+        let adaptiveV1: SibionicsAdaptiveV1Facade?
+
+        /// Whichever model estimator keeps its own Kotlin state beside the stock core.
+        var estimator: SibionicsSnapshotCore? {
+            if let adaptive { return adaptive }
+            return adaptiveV1
+        }
 
         init(sensitivity: Float, stockFamily: Sibionics2StockFamily, model: Sibionics2GlucoseModel) {
             switch stockFamily {
@@ -108,6 +123,7 @@ struct Sibionics2GlucoseProcessor {
             case .v116a: value = Sibionics2V116AFacade(sensitivity: sensitivity)
             }
             adaptive = model == .adaptiveV2 ? SibionicsAdaptiveV2Facade(sensitivity: sensitivity) : nil
+            adaptiveV1 = model == .adaptiveV1 ? SibionicsAdaptiveV1Facade(sensitivity: sensitivity) : nil
         }
     }
 
@@ -191,6 +207,11 @@ struct Sibionics2GlucoseProcessor {
                                           impedance: Float(reading.impedance), index: reading.index, eventTimeMs: eventTimeMs)
                 responsive = estimator
             }
+            if let adaptiveV1 = coreBox.adaptiveV1 {
+                value = core.processAdaptiveV1(model: adaptiveV1, stockMmol: stockMmol, rawMmol: raw,
+                                               temperatureC: Float(reading.temperatureC), impedance: Float(reading.impedance),
+                                               index: Int32(reading.index), eventTimeMs: eventTimeMs)
+            }
             if value.isFinite, value > Validation.minimumCandidateMmol, value <= Validation.maximumCandidateMmol { trackedMmol = value }
         }
         guard let displayMmol = adaptiveMmol ?? trackedMmol ?? stockMmol else { return nil }
@@ -261,6 +282,7 @@ struct Sibionics2GlucoseProcessor {
         ensureUniqueCore()
         coreBox.value.reset()
         coreBox.adaptive?.reset()
+        coreBox.adaptiveV1?.reset()
         balanced?.reset()
         responsive?.reset()
         liveDeltaMmol = nil
@@ -277,7 +299,7 @@ struct Sibionics2GlucoseProcessor {
         if replayDeltaMmol != nil { flags |= 2 }
         if lastIndex != nil { flags |= 4 }
         var adaptiveBytes: [UInt8]?
-        if let adaptive = coreBox.adaptive {
+        if let adaptive = coreBox.estimator {
             guard let hex = Self.snapshotCoreHexBytes(from: adaptive),
                   !hex.isEmpty, hex.count <= Self.maximumCoreHexLength else { return Data() }
             adaptiveBytes = hex
@@ -327,7 +349,7 @@ struct Sibionics2GlucoseProcessor {
         let coreEnd = headerSize + Int(coreLength)
         var adaptiveHexBytes: [UInt8]?
         var trackerBytes: Data?
-        if model == .adaptiveV2 {
+        if model == .adaptiveV2 || model == .adaptiveV1 {
             guard let adaptiveLength = data.uint32BE(at: coreEnd),
                   adaptiveLength > 0, adaptiveLength <= Self.maximumCoreHexLength,
                   adaptiveLength % 2 == 0,
@@ -371,7 +393,7 @@ struct Sibionics2GlucoseProcessor {
 
         let restored = CoreBox(sensitivity: sensitivity, stockFamily: stockFamily, model: model)
         guard Self.restoreCoreSnapshot(hexBytes: coreHexBytes, into: restored.value) else { return false }
-        if let adaptive = restored.adaptive {
+        if let adaptive = restored.estimator {
             guard let adaptiveHexBytes,
                   Self.restoreCoreSnapshot(hexBytes: adaptiveHexBytes, into: adaptive) else { return false }
         }
@@ -384,7 +406,7 @@ struct Sibionics2GlucoseProcessor {
         case .responsive:
             guard let trackerBytes, let estimator = SibionicsResponsiveEstimator.restored(from: trackerBytes, sensitivity: sensitivity) else { return false }
             restoredResponsive = estimator
-        case .stock, .adaptiveV2:
+        case .stock, .adaptiveV2, .adaptiveV1:
             break
         }
         balanced = restoredBalanced
