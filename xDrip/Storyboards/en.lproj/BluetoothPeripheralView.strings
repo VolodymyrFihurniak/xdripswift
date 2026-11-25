@@ -256,6 +256,8 @@
 "sibionics.logCopy" = "Copy log";
 "sibionics.logCopied" = "Copied";
 "sibionics.logEmpty" = "No events yet";
+"sibionics.gs3SensorLifeDetail" = "14 days, extended automatically to 15 d 12 h";
+"sibionics.gs3Title" = "GS3 sensor";
 "sibionics.glucoseModelTitle" = "Glucose model";
 "sibionics.glucoseModelStock" = "Stock (default)";
 "sibionics.glucoseModelAdaptiveV2" = "Adaptive V2 (experimental)";

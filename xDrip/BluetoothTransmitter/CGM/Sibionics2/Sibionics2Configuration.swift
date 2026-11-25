@@ -25,6 +25,9 @@ enum Sibionics1SensorProfile {
     static let officialLifeInDays: Double = 14
     static let extendedLife: TimeInterval = 572 * Sibionics2Time.secondsPerHour - 19 * Sibionics2Time.secondsPerMinute
     static let extendedLifeInDays: Double = extendedLife / Sibionics2Time.secondsPerDay
+    /// JugglucoNG `GS3_EXPECTED_LIFETIME_MS`: 14 days + 36 hours.
+    static let gs3Life: TimeInterval = 14 * Sibionics2Time.secondsPerDay + 36 * Sibionics2Time.secondsPerHour
+    static let gs3LifeInDays: Double = gs3Life / Sibionics2Time.secondsPerDay
 }
 
 /// Valid ranges for decoded V120 readings before they enter the correction algorithm.
@@ -882,8 +885,20 @@ enum Sibionics2Configuration {
     static func sibionics1Family(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics1Family {
         Sibionics1Family.resolve(
             protocolMode: protocolMode(for: identifier, userDefaults: userDefaults),
-            keyGroup: confirmedKeyGroup(for: identifier, userDefaults: userDefaults)
+            keyGroup: confirmedKeyGroup(for: identifier, userDefaults: userDefaults),
+            isGS3: isGS3(for: identifier, userDefaults: userDefaults)
         )
+    }
+
+    /// The Sibionics 1 sensor is a GS3 (JugglucoNG Variant.GS3), chosen on the device screen.
+    static func isGS3(for identifier: String, userDefaults: UserDefaults = .standard) -> Bool {
+        bool("gs3", identifier: identifier, defaultValue: false, userDefaults: userDefaults)
+    }
+
+    /// A GS3 speaks V120 only, so its protocol is fixed; switching back lets the sensor be probed again.
+    static func setGS3(_ isGS3: Bool, for identifier: String, userDefaults: UserDefaults = .standard) {
+        setBool(isGS3, name: "gs3", identifier: identifier, userDefaults: userDefaults)
+        setProtocolMode(isGS3 ? .v120 : nil, for: identifier, userDefaults: userDefaults)
     }
 
     static func calibrationWeighting(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics2CalibrationWeighting {

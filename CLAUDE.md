@@ -67,6 +67,9 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
   S1 = label short code → `deriveShortCode(BLE name)` → family fallback
   (EU `YMWD016F` 1.58, Hematonix `YEZ1450H` 1.47, Chinese `GEPD802J` 1.27) → 1.27.
   GS1 label scanning (`SibionicsSensorLabel`) follows JugglucoNG `SibionicsRegistry`.
+- **GS3** (JugglucoNG `Variant.GS3`): a Sibionics 1 with the device-screen toggle "GS3 sensor"
+  (`Sibionics2Configuration.isGS3`, fixes the protocol to V120). V120 with the EU/Sijoy session key, the
+  V115G algorithm, fallback `YEZ1450H` (`Sibionics1Family.gs3`), lifetime 14 d + 36 h, name "Sibionics GS3".
 - **Lifetime / warm-up**: S1 = JugglucoNG `EXTENDED_CHINESE_LIFETIME_MS` (572 h − 19 min,
   `Sibionics1SensorProfile`), label 14 days; S2 = 23 days. `sensorWarmupDurationInMinutes()` is 0
   (JugglucoNG has no Sibionics warm-up; xDrip's 45-min default hid a new sensor's readings).
@@ -196,7 +199,7 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 
 ## Not ported (yet)
 
-GS3 variant and raw source-journal backup/recovery; of the NovoPen import, the
+Raw source-journal backup/recovery; of the NovoPen import, the
 unattended background read and the merge with hand-written entries.
 
 ## Git

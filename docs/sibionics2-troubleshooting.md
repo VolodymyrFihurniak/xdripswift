@@ -118,6 +118,13 @@ Bluetooth error, authentication attempts and key groups, stalled handshakes, mis
 resets and reconnects, up to 200 events. The newest twelve are listed; **Copy log** puts the whole
 log on the clipboard for a problem report. It is cleared when the sensor is deleted.
 
+## Sibionics GS3
+
+A GS3 is added as **Sibionics 1** with **GS3 sensor** switched on in its device settings. It then
+always uses the V120 protocol (no Chinese probe), the V115G algorithm, the Hematonix fallback code
+`YEZ1450H` when no label code is known, and the 14 days + 36 hours JugglucoNG allows a GS3. Switching
+it recalculates the sensor's history.
+
 ## Glucose model
 
 Sibionics 1 and 2 → **Glucose model**:

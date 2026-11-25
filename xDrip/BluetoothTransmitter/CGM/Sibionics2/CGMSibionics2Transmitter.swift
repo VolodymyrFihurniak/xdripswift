@@ -719,16 +719,23 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
     func maxSensorAgeInDays() -> Double? {
-        variant == .sibionics1
+        if isGS3 { return Sibionics1SensorProfile.gs3LifeInDays }
+        return variant == .sibionics1
             ? Sibionics1SensorProfile.extendedLifeInDays
             : Double(Sibionics2SensorProfile.expectedLifeInDays)
+    }
+
+    /// A Sibionics 1 set up as GS3 on the device screen.
+    var isGS3: Bool {
+        guard variant == .sibionics1, let deviceAddress else { return false }
+        return Sibionics2Configuration.isGS3(for: deviceAddress)
     }
 
     /// JugglucoNG shows Sibionics readings from the first minute: the stock algorithm already
     /// handles the start of a session. xDrip's generic 45-minute fallback discarded them.
     func sensorWarmupDurationInMinutes() -> Double? { 0 }
 
-    var productName: String { variant.productName }
+    var productName: String { isGS3 ? "Sibionics GS3" : variant.productName }
 
     /// Sibionics accepts no transmitter-side calibration write. Calibrations live
     /// in xDrip's CGM pipeline, so request fresh data to apply the saved profile.
@@ -1149,7 +1156,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
     private func factorySensitivity(for address: String) -> Double {
         let family: Sibionics1Family = usesChineseProtocol ? .chinese : Sibionics1Family.resolve(
-            protocolMode: .v120, keyGroup: Sibionics2Configuration.confirmedKeyGroup(for: address)
+            protocolMode: .v120, keyGroup: Sibionics2Configuration.confirmedKeyGroup(for: address),
+            isGS3: Sibionics2Configuration.isGS3(for: address)
         )
         return Sibionics2FactorySensitivity.effectiveSensitivity(
             advertisedName: advertisedName,
@@ -1183,7 +1191,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             deviceIdentifier: address,
             stateStore: stateStore,
             processor: Sibionics2GlucoseProcessor(sensitivity: sensitivity,
-                stockFamily: variant == .sibionics1 && sibionics1Connection?.mode == .chinese ? .v115g : .v116a,
+                // GS3 runs the V115G algorithm over V120 (JugglucoNG usesV116AAlgorithm is false for it).
+                stockFamily: variant == .sibionics1 && (sibionics1Connection?.mode == .chinese || Sibionics2Configuration.isGS3(for: address))
+                    ? .v115g : .v116a,
                 model: Sibionics2Configuration.glucoseModel(for: address)),
             allowsHistoricalBootstrap: variant == .sibionics1 && sibionics1Connection?.mode == .chinese
         )

@@ -357,6 +357,8 @@
 "sibionics.logCopy" = "Скопіювати журнал";
 "sibionics.logCopied" = "Скопійовано";
 "sibionics.logEmpty" = "Подій ще немає";
+"sibionics.gs3SensorLifeDetail" = "14 днів, автоматично продовжено до 15 д 12 год";
+"sibionics.gs3Title" = "Датчик GS3";
 "sibionics.glucoseModelTitle" = "Модель глюкози";
 "sibionics.glucoseModelStock" = "Стандартна (типово)";
 "sibionics.glucoseModelAdaptiveV2" = "Adaptive V2 (експериментальна)";

@@ -813,3 +813,27 @@ final class SensorReachAndLinkProblemTests: XCTestCase {
         XCTAssertNil(Sibionics2DeviceStatus.lastLinkProblem(for: address, userDefaults: defaults))
     }
 }
+
+/// JugglucoNG `SibionicsConstants.Variant.GS3`.
+final class SibionicsGS3Tests: XCTestCase {
+    func testGS3IsItsOwnFamilyWithTheHematonixFallbackAndFifteenAndAHalfDays() throws {
+        XCTAssertEqual(Sibionics1Family.resolve(protocolMode: .v120, keyGroup: .sijoy, isGS3: true), .gs3)
+        XCTAssertEqual(Sibionics1Family.resolve(protocolMode: .v120, keyGroup: .sijoy), .eu)
+        XCTAssertEqual(Sibionics1Family.gs3.fallbackShortCode, "YEZ1450H")
+        // GS3_EXPECTED_LIFETIME_MS = 14 days + 36 hours.
+        XCTAssertEqual(Sibionics1SensorProfile.gs3Life, 1_339_200, accuracy: 0.001)
+        XCTAssertEqual(Sibionics1SensorProfile.gs3LifeInDays, 15.5, accuracy: 1e-9)
+
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "SibionicsGS3Tests"))
+        defaults.removePersistentDomain(forName: "SibionicsGS3Tests")
+        let address = "11111111-2222-3333-4444-555555555555"
+        XCTAssertFalse(Sibionics2Configuration.isGS3(for: address, userDefaults: defaults))
+        Sibionics2Configuration.setGS3(true, for: address, userDefaults: defaults)
+        XCTAssertTrue(Sibionics2Configuration.isGS3(for: address, userDefaults: defaults))
+        XCTAssertEqual(Sibionics2Configuration.protocolMode(for: address, userDefaults: defaults), .v120)
+        XCTAssertEqual(Sibionics2Configuration.sibionics1Family(for: address, userDefaults: defaults), .gs3)
+        Sibionics2Configuration.setGS3(false, for: address, userDefaults: defaults)
+        XCTAssertNil(Sibionics2Configuration.protocolMode(for: address, userDefaults: defaults))
+        defaults.removePersistentDomain(forName: "SibionicsGS3Tests")
+    }
+}
