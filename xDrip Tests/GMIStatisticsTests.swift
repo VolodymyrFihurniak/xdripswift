@@ -278,7 +278,7 @@ final class GlucoseReportDayPartTests: XCTestCase {
     func testHourlyRangesUseTheConsensusLimitsAndCombineByHours() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
-        let midnight = Date(timeIntervalSince1970: 1_800_000_000 - 1_800_000_000 % 86_400)
+        let midnight = Date(timeIntervalSince1970: 1_799_971_200) // 1_800_000_000 rounded down to a UTC midnight
         func at(_ hour: Double) -> Date { midnight.addingTimeInterval(hour * 3600) }
         let samples: [(date: Date, mgDl: Double)] = [
             (at(1), 50), (at(1.5), 54), (at(2), 70), (at(7), 180), (at(7.2), 181),

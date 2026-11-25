@@ -1603,7 +1603,7 @@ final class TreatmentAmountAssistTests: XCTestCase {
         return calendar
     }
     /// Midnight UTC of a fixed day.
-    private let day = Date(timeIntervalSince1970: 1_800_000_000 - 1_800_000_000 % 86_400)
+    private let day = Date(timeIntervalSince1970: 1_799_971_200) // 1_800_000_000 rounded down to a UTC midnight
 
     /// One entry a day, `days` before `day`, at `minute` past midnight.
     private func entries(_ amounts: [Double], minute: Int) -> [TreatmentAmountAssist.Entry] {
