@@ -171,6 +171,12 @@ Statistics → CGM data: "Time in ranges by time of day" (JugglucoNG `StatsRange
 `GlucoseReportAnalytics.hourlyRanges` (24 × five bands, `GlucoseReportHourRanges`), blocks
 `GlucoseReportDayPart` combine by hour mask, none = whole day.
 
+Automatic backup (`AutomaticBackup` in `Utilities/Backup/BackupService.swift`, JugglucoNG
+`ScheduledBackupPolicy`; Settings → Data management toggle, off by default): at most once per 20 h on
+launch (+60 s) or foreground, settings + readings + treatments without accounts to
+Documents/Automatic backups (visible in Files), kept 7 days / 4 ISO weeks / 6 months, notification when
+it shrinks below half of the previous one.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new

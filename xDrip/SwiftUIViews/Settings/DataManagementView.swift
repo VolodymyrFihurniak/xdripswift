@@ -35,6 +35,17 @@ struct SettingsViewDataManagementSettingsViewModel: SettingsViewModelProtocol, S
                 accessory: .disclosure,
                 action: .dataManagement(.create)
             ),
+            // JugglucoNG scheduled backup: once a day on opening the app, into Files → xDrip → Automatic backups.
+            SettingsRow(
+                id: "dataManagement.automaticBackup",
+                title: Texts_SettingsView.automaticBackup,
+                detail: AutomaticBackup.isEnabled()
+                    ? String(format: Texts_SettingsView.automaticBackupLast,
+                             AutomaticBackup.lastDate()?.formatted(date: .abbreviated, time: .shortened) ?? Texts_SettingsView.automaticBackupNever)
+                    : nil,
+                control: .toggle(isOn: { AutomaticBackup.isEnabled() },
+                                 setIsOn: { AutomaticBackup.setEnabled($0) })
+            ),
             SettingsRow(
                 id: "dataManagement.restoreBackup",
                 title: Texts_SettingsView.backupRestore,

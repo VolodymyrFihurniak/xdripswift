@@ -568,6 +568,11 @@
 "settingsviews_nightscoutImportingData" = "Імпортування даних";
 "settingsviews_cleanDataConfirmationCode" = "Код підтвердження %@";
 "settingsviews_backupCreate" = "Створити резервну копію";
+"settingsviews_automaticBackup" = "Щоденна автоматична резервна копія";
+"settingsviews_automaticBackupLast" = "Остання: %@";
+"settingsviews_automaticBackupNever" = "Ще немає";
+"settingsviews_automaticBackupShrankTitle" = "Автоматична резервна копія значно менша";
+"settingsviews_automaticBackupShrankBody" = "Показники глюкози: %d → %d, записи: %d → %d. Попередні копії збережено у «Файли» → xDrip → Automatic backups.";
 "settingsviews_backupRestore" = "Відновити резервну копію";
 "settingsviews_backupCreated" = "Резервну копію успішно створено";
 "settingsviews_backupRestored" = "Резервну копію успішно відновлено";

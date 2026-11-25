@@ -294,6 +294,11 @@
 "settingsviews_cleanDataConfirmationCode" = "Confirmation code %@";
 "settingsviews_storeFrequentReadingsInHealthKitMessage" = "This option will override the 5-minute write limits and allow much frequent data to be added to Apple Health. Such as for 60-second Libre 2 Direct values.\n\nPlease only enable this option if you really need/want more frequent data. Most users should leave this option disabled.";
 "settingsviews_backupCreate" = "Create Backup";
+"settingsviews_automaticBackup" = "Automatic daily backup";
+"settingsviews_automaticBackupLast" = "Last: %@";
+"settingsviews_automaticBackupNever" = "None yet";
+"settingsviews_automaticBackupShrankTitle" = "Automatic backup is much smaller";
+"settingsviews_automaticBackupShrankBody" = "Glucose readings: %d → %d, treatments: %d → %d. Earlier backups are kept in Files → xDrip → Automatic backups.";
 "settingsviews_backupRestore" = "Restore Backup";
 "settingsviews_backupCreated" = "Backup Successfully Created";
 "settingsviews_backupRestored" = "Backup Successfully Restored";

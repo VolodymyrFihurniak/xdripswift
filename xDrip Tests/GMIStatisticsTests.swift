@@ -312,3 +312,39 @@ final class GlucoseReportDayPartTests: XCTestCase {
         XCTAssertEqual(GlucoseReportDayPart.toggled(.afternoon, in: mask), 0)
     }
 }
+
+/// JugglucoNG `ScheduledBackupPolicy` retention; expectations from a Python port.
+final class AutomaticBackupTests: XCTestCase {
+    func testFileNamesCarryTheirUTCTime() throws {
+        let date = Date(timeIntervalSince1970: 1_800_000_123)
+        let name = AutomaticBackup.fileName(for: date)
+        XCTAssertTrue(name.hasPrefix("xDrip_AutoBackup_") && name.hasSuffix("Z.xdripbackup"))
+        XCTAssertEqual(AutomaticBackup.timestamp(fromFileName: name), date)
+        XCTAssertNil(AutomaticBackup.timestamp(fromFileName: "xDrip_2027-01-01_0300.xdripbackup"))
+    }
+
+    func testRetentionKeepsSevenDaysFourWeeksAndSixMonths() throws {
+        let utc = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        // 2027-01-31 03:00 UTC (a Sunday) and the 59 days before it, plus a second backup that day.
+        let newest = Date(timeIntervalSince1970: 1_801_364_400)
+        var names = (0..<60).map { AutomaticBackup.fileName(for: newest.addingTimeInterval(TimeInterval(-$0 * 86_400))) }
+        names.append(AutomaticBackup.fileName(for: newest.addingTimeInterval(-2 * 3600)))
+        names.append("notes.txt")
+        let deleted = AutomaticBackup.filesToDelete(names, timeZone: utc)
+        XCTAssertEqual(deleted.count, 50)
+        XCTAssertFalse(deleted.contains("notes.txt"))
+        let kept = Set(names).subtracting(deleted).subtracting(["notes.txt"])
+        XCTAssertEqual(kept, Set([
+            "2026-12-31", "2027-01-10", "2027-01-17", "2027-01-24", "2027-01-25", "2027-01-26",
+            "2027-01-27", "2027-01-28", "2027-01-29", "2027-01-30", "2027-01-31"
+        ].map { "xDrip_AutoBackup_\($0)_03-00-00Z.xdripbackup" }))
+    }
+
+    func testAnomaliesNeedLessThanHalfOfThePreviousBackup() {
+        let previous = AutomaticBackup.Metrics(byteSize: 1000, bgReadings: 100, treatments: 10)
+        XCTAssertTrue(AutomaticBackup.anomalies(previous: nil, current: previous).isEmpty)
+        XCTAssertTrue(AutomaticBackup.anomalies(previous: previous, current: AutomaticBackup.Metrics(byteSize: 500, bgReadings: 50, treatments: 5)).isEmpty)
+        let shrunk = AutomaticBackup.anomalies(previous: previous, current: AutomaticBackup.Metrics(byteSize: 499, bgReadings: 49, treatments: 5))
+        XCTAssertEqual(shrunk.map(\.what), ["size", "bgReadings"])
+    }
+}
