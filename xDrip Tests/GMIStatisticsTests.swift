@@ -272,3 +272,43 @@ final class GMIStatisticsTests: XCTestCase {
         }
     }
 }
+
+/// JugglucoNG's range flow by hour and its day-part strip.
+final class GlucoseReportDayPartTests: XCTestCase {
+    func testHourlyRangesUseTheConsensusLimitsAndCombineByHours() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let midnight = Date(timeIntervalSince1970: 1_800_000_000 - 1_800_000_000 % 86_400)
+        func at(_ hour: Double) -> Date { midnight.addingTimeInterval(hour * 3600) }
+        let samples: [(date: Date, mgDl: Double)] = [
+            (at(1), 50), (at(1.5), 54), (at(2), 70), (at(7), 180), (at(7.2), 181),
+            (at(13), 250), (at(13.5), 251), (at(19), 120)
+        ]
+        let hours = GlucoseReportHourRanges.make(samples: samples, calendar: calendar)
+        XCTAssertEqual(hours.count, 24)
+        XCTAssertEqual(hours[1], GlucoseReportHourRanges(veryLow: 1, low: 1))
+        XCTAssertEqual(hours[2], GlucoseReportHourRanges(target: 1))
+        XCTAssertEqual(hours[7], GlucoseReportHourRanges(target: 1, high: 1))
+        XCTAssertEqual(hours[13], GlucoseReportHourRanges(high: 1, veryHigh: 1))
+
+        let night = GlucoseReportHourRanges.combined(hours, mask: GlucoseReportDayPart.night.hourMask)
+        XCTAssertEqual(night, GlucoseReportHourRanges(veryLow: 1, low: 1, target: 1))
+        XCTAssertEqual(GlucoseReportHourRanges.combined(hours, mask: 0).total, 8)
+        let distribution = try XCTUnwrap(night.distribution)
+        XCTAssertEqual(distribution.target, 100.0 / 3, accuracy: 1e-9)
+        XCTAssertNil(GlucoseReportHourRanges().distribution)
+    }
+
+    func testDayPartsToggleAndAllFourMeanTheWholeDay() {
+        XCTAssertEqual(GlucoseReportDayPart.morning.hourMask, 0b111111 << 6)
+        var mask = GlucoseReportDayPart.toggled(.night, in: 0)
+        XCTAssertEqual(mask, 0b111111)
+        mask = GlucoseReportDayPart.toggled(.evening, in: mask)
+        XCTAssertEqual(mask, 0b111111 | 0b111111 << 18)
+        mask = GlucoseReportDayPart.toggled(.night, in: mask)
+        XCTAssertEqual(mask, 0b111111 << 18)
+        mask = GlucoseReportDayPart.toggled(.night, in: mask)
+        mask = GlucoseReportDayPart.toggled(.morning, in: mask)
+        XCTAssertEqual(GlucoseReportDayPart.toggled(.afternoon, in: mask), 0)
+    }
+}

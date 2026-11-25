@@ -211,9 +211,87 @@ struct GlucoseReportAnalytics {
     let veryLowEventCount: Int
     let highEventCount: Int
     let veryHighEventCount: Int
+    /// Readings of each hour of the day (local time) in the five bands; 24 entries, or none.
+    var hourlyRanges: [GlucoseReportHourRanges] = []
 
     var hasData: Bool {
         sampleCount > 0
+    }
+}
+
+/// JugglucoNG's range flow by hour (`hourlyStats`): readings of one hour of the day in the five
+/// consensus bands, with the same limits as `rangeDistribution`.
+struct GlucoseReportHourRanges: Equatable {
+    var veryLow = 0
+    var low = 0
+    var target = 0
+    var high = 0
+    var veryHigh = 0
+
+    var total: Int { veryLow + low + target + high + veryHigh }
+
+    static let allHours = (1 << 24) - 1
+
+    mutating func add(mgDl: Double) {
+        if mgDl < GlucoseReportClinicalConstants.veryLowMgDl {
+            veryLow += 1
+        } else if mgDl < GlucoseReportClinicalConstants.timeInRangeLowMgDl {
+            low += 1
+        } else if mgDl <= GlucoseReportClinicalConstants.timeInRangeHighMgDl {
+            target += 1
+        } else if mgDl <= GlucoseReportClinicalConstants.veryHighMgDl {
+            high += 1
+        } else {
+            veryHigh += 1
+        }
+    }
+
+    static func + (lhs: GlucoseReportHourRanges, rhs: GlucoseReportHourRanges) -> GlucoseReportHourRanges {
+        GlucoseReportHourRanges(veryLow: lhs.veryLow + rhs.veryLow, low: lhs.low + rhs.low, target: lhs.target + rhs.target,
+                                high: lhs.high + rhs.high, veryHigh: lhs.veryHigh + rhs.veryHigh)
+    }
+
+    /// 24 entries, hour 0 first.
+    static func make(samples: [(date: Date, mgDl: Double)], calendar: Calendar = .current) -> [GlucoseReportHourRanges] {
+        var hours = Array(repeating: GlucoseReportHourRanges(), count: 24)
+        for sample in samples {
+            let hour = calendar.component(.hour, from: sample.date)
+            guard hours.indices.contains(hour) else { continue }
+            hours[hour].add(mgDl: sample.mgDl)
+        }
+        return hours
+    }
+
+    /// The hours in `mask` (bit 0 = 00:00–01:00) together; 0 or all bits = the whole day.
+    static func combined(_ hours: [GlucoseReportHourRanges], mask: Int) -> GlucoseReportHourRanges {
+        let effective = mask == 0 ? allHours : mask
+        return hours.enumerated().reduce(GlucoseReportHourRanges()) { sum, entry in
+            effective & (1 << entry.offset) != 0 ? sum + entry.element : sum
+        }
+    }
+
+    /// Percentages of the five bands; nil without readings.
+    var distribution: GlucoseReportRangeDistribution? {
+        guard total > 0 else { return nil }
+        let count = Double(total)
+        return GlucoseReportRangeDistribution(veryLow: Double(veryLow) / count * 100, low: Double(low) / count * 100,
+                                              target: Double(target) / count * 100, high: Double(high) / count * 100,
+                                              veryHigh: Double(veryHigh) / count * 100)
+    }
+}
+
+/// JugglucoNG's four six-hour blocks of the day.
+enum GlucoseReportDayPart: Int, CaseIterable, Identifiable {
+    case night = 0, morning = 6, afternoon = 12, evening = 18
+
+    var id: Int { rawValue }
+    var hourMask: Int { ((1 << 6) - 1) << rawValue }
+
+    /// Adds the block to `mask`, or takes it away when all its hours are already chosen; choosing
+    /// every hour goes back to the whole day (0).
+    static func toggled(_ part: GlucoseReportDayPart, in mask: Int) -> Int {
+        let next = mask & part.hourMask == part.hourMask ? mask & ~part.hourMask : mask | part.hourMask
+        return next == GlucoseReportHourRanges.allHours ? 0 : next
     }
 }
 

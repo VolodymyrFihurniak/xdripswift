@@ -82,6 +82,14 @@
 "common_statistics_weekly" = "Weekly";
 "common_statistics_cvTrend" = "CV trend";
 "common_statistics_dailyPattern" = "Daily Pattern";
+"common_statistics_dayParts" = "Time in ranges by time of day";
+"common_statistics_dayPartsNoData" = "No readings at these hours.";
+"common_statistics_veryHigh" = "Very high";
+"common_statistics_veryLow" = "Very low";
+"common_statistics_night" = "Night";
+"common_statistics_morning" = "Morning";
+"common_statistics_afternoon" = "Afternoon";
+"common_statistics_evening" = "Evening";
 "common_statistics_averageFormat" = "Average %@";
 "common_statistics_dailyPatternFooter" = "Bars show daily percentage in %@ range. The dashed line marks the 70%% clinical target.";
 "common_statistics_dailySummary" = "Daily Summary";

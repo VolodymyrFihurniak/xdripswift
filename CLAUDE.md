@@ -164,6 +164,10 @@ complete frame for 150 s is hung up and reconnected 5 s later (an immediate reco
 own hangup is never logged in); every link ends with a `Libre 2 link ended:` trace line
 (`Libre2LinkSummary`: reason, duration, frames, last frame age).
 
+Statistics → CGM data: "Time in ranges by time of day" (JugglucoNG `StatsRangeFlow` + day-part strip):
+`GlucoseReportAnalytics.hourlyRanges` (24 × five bands, `GlucoseReportHourRanges`), blocks
+`GlucoseReportDayPart` combine by hour mask, none = whole day.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new

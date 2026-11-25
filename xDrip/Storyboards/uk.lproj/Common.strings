@@ -226,6 +226,14 @@
 "common_statistics_estimatedA1cTrend" = "Тенденція оцінки HbA1c";
 "common_statistics_cvTrend" = "Тенденція КВ";
 "common_statistics_dailyPattern" = "Добовий профіль";
+"common_statistics_dayParts" = "Час у діапазонах за порою доби";
+"common_statistics_dayPartsNoData" = "У ці години показників немає.";
+"common_statistics_veryHigh" = "Дуже висока";
+"common_statistics_veryLow" = "Дуже низька";
+"common_statistics_night" = "Ніч";
+"common_statistics_morning" = "Ранок";
+"common_statistics_afternoon" = "День";
+"common_statistics_evening" = "Вечір";
 "common_statistics_averageFormat" = "Середнє %@";
 "common_statistics_dailyPatternFooter" = "Стовпці показують щоденний відсоток часу в діапазоні %@. Пунктирна лінія позначає клінічну ціль 70%%.";
 "common_statistics_averageTDD" = "Середня добова доза";
