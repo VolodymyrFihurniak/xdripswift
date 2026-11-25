@@ -124,6 +124,9 @@ extension UserDefaults {
         static let snoozeEndsWhenResolved = "experimentalSnoozeEndsWhenResolved"
         static let trendAlertOncePerEpisode = "experimentalTrendAlertOncePerEpisode"
         static let trendAlertEpisodes = "experimentalTrendAlertEpisodes"
+        static let deltaRunCount = "experimentalDeltaRunCount"
+        static let sameDirectionMinutes = "experimentalSameDirectionSuppressionMinutes"
+        static let sameDirectionLastFired = "experimentalSameDirectionLastFired"
         static let predictionCarbRatio = "experimentalPredictionCarbRatio"
         static let predictionSensitivity = "experimentalPredictionInsulinSensitivityMgDl"
         static let predictionAbsorption = "experimentalPredictionCarbAbsorption"
@@ -215,6 +218,26 @@ extension UserDefaults {
     }
 
     /// Raw values of the trend alarm kinds whose episode is running.
+    /// JugglucoNG / GDH fast change: Fast Drop and Fast Rise need this many 5-minute intervals in a
+    /// row past their threshold. 0 keeps xDrip's own two-reading rule. Off by default.
+    var experimentalDeltaRunCount: Int {
+        get { min(max(integer(forKey: ExperimentalKey.deltaRunCount), 0), 6) }
+        set { set(min(max(newValue, 0), 6), forKey: ExperimentalKey.deltaRunCount) }
+    }
+
+    /// JugglucoNG same-direction suppression window in minutes (0 off): after Fast Drop or the
+    /// predicted low has been acknowledged, the other one stays quiet this long.
+    var experimentalSameDirectionSuppressionMinutes: Int {
+        get { min(max(integer(forKey: ExperimentalKey.sameDirectionMinutes), 0), 30) }
+        set { set(min(max(newValue, 0), 30), forKey: ExperimentalKey.sameDirectionMinutes) }
+    }
+
+    /// Last firing per direction: ["falling": [kind raw value, epoch seconds]].
+    var experimentalSameDirectionLastFired: [String: [Double]] {
+        get { (dictionary(forKey: ExperimentalKey.sameDirectionLastFired) as? [String: [Double]]) ?? [:] }
+        set { set(newValue, forKey: ExperimentalKey.sameDirectionLastFired) }
+    }
+
     var experimentalTrendAlertEpisodes: Set<Int> {
         get { Set((array(forKey: ExperimentalKey.trendAlertEpisodes) as? [Int]) ?? []) }
         set { set(Array(newValue).sorted(), forKey: ExperimentalKey.trendAlertEpisodes) }
@@ -2042,5 +2065,98 @@ enum ExperimentalChartInputs {
                 .map { onBoard($0) }
         }
         return plots
+    }
+}
+
+// MARK: - Quiet window
+
+/// JugglucoNG's quiet window: a temporary, self-ending reduction of alarm *output* for the cinema
+/// or a lecture. Evaluation, thresholds and snoozes run as if there were no window; only sound (and
+/// in notification-only mode vibration) is taken away. It always ends (at most 24 hours, checked
+/// against the clock on every read), and an alarm that stays silenced for the breakthrough time
+/// sounds anyway: a low always, every alarm or the very high only by choice.
+enum ExperimentalQuietWindow {
+    enum Mode: Int, CaseIterable { case vibrateOnly = 0, notificationOnly = 1 }
+    enum Scope: Int, CaseIterable { case all = 0, veryHighOnly = 1 }
+    enum Delivery: Equatable {
+        case normal, vibrateOnly, silent
+        var allowsSound: Bool { self == .normal }
+        var allowsVibration: Bool { self != .silent }
+    }
+
+    static let maximumMinutes = 24 * 60
+    static let presetMinutes = [30, 60, 120, 180]
+    static let breakthroughChoices = [5, 10, 15, 20, 30]
+    static let defaultBreakthroughMinutes = 10
+    /// A silenced delivery this long after the previous one of the same alarm starts a new episode.
+    static let silencedEpisodeStale: TimeInterval = 30 * 60
+
+    private static let untilKey = "experimentalQuietWindowUntil"
+    private static let modeKey = "experimentalQuietWindowMode"
+    private static let scopeKey = "experimentalQuietWindowScope"
+    private static let breakthroughKey = "experimentalQuietWindowBreakthroughMinutes"
+    private static let silencedKey = "experimentalQuietWindowSilenced"
+
+    /// The end of the running window, nil when none runs (an end the clock has passed is cleared).
+    static func until(now: Date = Date(), defaults: UserDefaults = .standard) -> Date? {
+        guard let until = defaults.object(forKey: untilKey) as? Date else { return nil }
+        guard until > now else {
+            end(defaults: defaults)
+            return nil
+        }
+        return until
+    }
+
+    @discardableResult
+    static func start(minutes: Int, now: Date = Date(), defaults: UserDefaults = .standard) -> Date {
+        let until = now.addingTimeInterval(TimeInterval(min(max(minutes, 1), maximumMinutes) * 60))
+        defaults.set(until, forKey: untilKey)
+        defaults.removeObject(forKey: silencedKey)
+        return until
+    }
+
+    static func end(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: untilKey)
+        defaults.removeObject(forKey: silencedKey)
+    }
+
+    static func mode(defaults: UserDefaults = .standard) -> Mode { Mode(rawValue: defaults.integer(forKey: modeKey)) ?? .vibrateOnly }
+    static func setMode(_ mode: Mode, defaults: UserDefaults = .standard) { defaults.set(mode.rawValue, forKey: modeKey) }
+    static func scope(defaults: UserDefaults = .standard) -> Scope { Scope(rawValue: defaults.integer(forKey: scopeKey)) ?? .all }
+    static func setScope(_ scope: Scope, defaults: UserDefaults = .standard) { defaults.set(scope.rawValue, forKey: scopeKey) }
+
+    static func breakthroughMinutes(defaults: UserDefaults = .standard) -> Int {
+        let stored = defaults.integer(forKey: breakthroughKey)
+        return (5...30).contains(stored) ? stored : defaultBreakthroughMinutes
+    }
+
+    static func setBreakthroughMinutes(_ minutes: Int, defaults: UserDefaults = .standard) {
+        defaults.set((5...30).contains(minutes) ? minutes : defaultBreakthroughMinutes, forKey: breakthroughKey)
+    }
+
+    /// What an alarm that is silenced since `silencedSince` may do at `now`.
+    static func decide(kind: AlertKind, mode: Mode, scope: Scope, breakthroughMinutes: Int,
+                       silencedSince: Date, now: Date) -> Delivery {
+        let hypo = kind == .low || kind == .verylow
+        let mayBreakThrough = hypo || scope == .all || kind == .veryhigh
+        if mayBreakThrough, now.timeIntervalSince(silencedSince) >= TimeInterval(breakthroughMinutes * 60) { return .normal }
+        return mode == .notificationOnly ? .silent : .vibrateOnly
+    }
+
+    /// The delivery for an alarm being raised at `date`, remembering when its silenced episode began.
+    static func delivery(for kind: AlertKind, at date: Date, now: Date = Date(), defaults: UserDefaults = .standard) -> Delivery {
+        guard let until = until(now: now, defaults: defaults), date < until else { return .normal }
+        var silenced = (defaults.dictionary(forKey: silencedKey) as? [String: [Double]]) ?? [:]
+        let key = String(kind.rawValue)
+        var since = date
+        if let entry = silenced[key], entry.count == 2,
+           date.timeIntervalSince1970 - entry[1] <= silencedEpisodeStale {
+            since = Date(timeIntervalSince1970: entry[0])
+        }
+        let delivery = decide(kind: kind, mode: mode(defaults: defaults), scope: scope(defaults: defaults),
+                              breakthroughMinutes: breakthroughMinutes(defaults: defaults), silencedSince: since, now: date)
+        silenced[key] = [since.timeIntervalSince1970, date.timeIntervalSince1970]
+        defaults.set(silenced, forKey: silencedKey)
+        return delivery
     }
 }

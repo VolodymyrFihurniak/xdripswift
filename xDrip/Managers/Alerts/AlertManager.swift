@@ -887,6 +887,20 @@ public class AlertManager: NSObject {
         uNUserNotificationCenter.add(UNNotificationRequest(identifier: "experimentalSignalRestored", content: content, trigger: nil), withCompletionHandler: nil)
     }
 
+    /// The alert of the same direction whose acknowledged firing keeps `alertKind` quiet, if any.
+    private func sameDirectionBlocker(for alertKind: AlertKind) -> AlertKind? {
+        let window = UserDefaults.standard.experimentalSameDirectionSuppressionMinutes
+        guard window > 0, let direction = SameDirectionAlertRule.direction(of: alertKind),
+              let entry = UserDefaults.standard.experimentalSameDirectionLastFired[direction], entry.count == 2,
+              let lastKind = AlertKind(rawValue: Int(entry[0])) else { return nil }
+        let firedAt = Date(timeIntervalSince1970: entry[1])
+        // Acknowledged: the user snoozed it after it fired (the automatic snooze is set as it fires).
+        let snooze = getSnoozeParameters(alertKind: lastKind)
+        let acknowledged = snooze.snoozeTimeStamp.map { $0.timeIntervalSince(firedAt) > 2 } ?? false
+        return SameDirectionAlertRule.blocks(kind: alertKind, lastFired: (lastKind, firedAt), lastAcknowledged: acknowledged,
+                                             now: Date(), windowMinutes: window) ? lastKind : nil
+    }
+
     static func signalWasRestored(newest: Date, previous: Date?, lossMinutes: Double, lastNotified: Date?) -> Bool {
         guard let previous, lossMinutes > 0, newest.timeIntervalSince(previous) >= lossMinutes * 60 else { return false }
         return lastNotified.map { newest > $0 } ?? true
@@ -961,7 +975,15 @@ public class AlertManager: NSObject {
         }
         
         // check if alert is required
-        let (alertNeeded, alertBody, alertTitle, delayInSeconds) = alertKind.alertNeeded(currentAlertEntry: currentAlertEntry, nextAlertEntry: nextAlertEntry, lastBgReading: lastBgReading, lastButOneBgReading, lastCalibration: lastCalibration, transmitterBatteryInfo: transmitterBatteryInfo, deviceStatus: deviceStatus, forecast: forecast)
+        // Experimental GDH fast change: Fast Drop / Fast Rise judge a run of 5-minute intervals.
+        var recentReadings: [(date: Date, mgDl: Double)]?
+        if (alertKind == .fastdrop || alertKind == .fastrise), UserDefaults.standard.experimentalDeltaRunCount > 0 {
+            recentReadings = bgReadingsAccessor.getLatestBgReadings(limit: nil, fromDate: Date().addingTimeInterval(-GDHDeltaRun.history),
+                                                                    forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
+                .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
+                .sorted { $0.date < $1.date }
+        }
+        let (alertNeeded, alertBody, alertTitle, delayInSeconds) = alertKind.alertNeeded(currentAlertEntry: currentAlertEntry, nextAlertEntry: nextAlertEntry, lastBgReading: lastBgReading, lastButOneBgReading, lastCalibration: lastCalibration, transmitterBatteryInfo: transmitterBatteryInfo, deviceStatus: deviceStatus, forecast: forecast, recentReadings: recentReadings)
 
         // Experimental (after JugglucoNG's alert episodes): once glucose has clearly left a Low or
         // High alarm's zone, its snooze ends, so the next episode alarms at once. A snooze of all
@@ -991,6 +1013,15 @@ public class AlertManager: NSObject {
                 episodes.insert(alertKind.rawValue)
                 UserDefaults.standard.experimentalTrendAlertEpisodes = episodes
             }
+        }
+
+        // Experimental (JugglucoNG): Fast Drop and the predicted low state one observation twice.
+        // Once one of them has been acknowledged, the other stays quiet for the window.
+        if alertNeeded, !conditionIsSuppressedBySnooze, let blocker = sameDirectionBlocker(for: alertKind) {
+            trace("alert '%{public}@' kept quiet: '%{public}@' of the same direction was acknowledged",
+                  log: log, category: ConstantsLog.categoryAlertManager, type: .info,
+                  alertKind.descriptionForLogging(), blocker.descriptionForLogging())
+            return false
         }
 
         // A low initial Voltage B is not trustworthy during the configured initial period of Dexcom
@@ -1225,7 +1256,13 @@ public class AlertManager: NSObject {
                 soundToSet = "xdripalert.aif"
             }
             
-            if delayInSecondsToUse == 0 {
+            // Experimental quiet window: only sound (and vibration) go; the alert itself is raised.
+            let quietDelivery = ExperimentalQuietWindow.delivery(for: alertKind, at: Date().addingTimeInterval(TimeInterval(delayInSecondsToUse)))
+            if !quietDelivery.allowsSound {
+                content.sound = nil
+                trace("alert '%{public}@' raised without sound: quiet window", log: log, category: ConstantsLog.categoryAlertManager,
+                      type: .info, alertKind.descriptionForLogging())
+            } else if delayInSecondsToUse == 0 {
                 presentImmediateSound(alertKind: alertKind, alertType: applicableAlertType, entry: currentAlertEntry, soundFileName: soundToSet, content: content)
             } else if let soundToSet {
                 if !soundToSet.isEmpty {
@@ -1273,8 +1310,13 @@ public class AlertManager: NSObject {
             }
             
             // if vibrate required , and if delay is nil, then vibrate
-            if delayInSecondsToUse == 0, currentAlertEntry.alertType.vibrate {
+            if delayInSecondsToUse == 0, currentAlertEntry.alertType.vibrate, quietDelivery.allowsVibration {
                 AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            }
+            if delayInSecondsToUse == 0, let direction = SameDirectionAlertRule.direction(of: alertKind) {
+                var lastFired = UserDefaults.standard.experimentalSameDirectionLastFired
+                lastFired[direction] = [Double(alertKind.rawValue), Date().timeIntervalSince1970]
+                UserDefaults.standard.experimentalSameDirectionLastFired = lastFired
             }
             
             // log the result

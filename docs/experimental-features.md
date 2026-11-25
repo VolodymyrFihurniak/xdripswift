@@ -198,7 +198,7 @@ JugglucoNG's multiple expiry warnings were not ported.
 
 ## Alarm episodes
 
-Settings → Experimental features → Alarms, both off by default (adapted from JugglucoNG's alert
+Settings → Experimental features → Alarms, all off by default (adapted from JugglucoNG's alert
 episodes to xDrip's snooze-based alarms):
 
 - **End snooze when back in range** — a snoozed Low, Very Low, High or Very High alarm is unsnoozed
@@ -207,6 +207,25 @@ episodes to xDrip's snooze-based alarms):
   keeps a value hovering on the limit from re-alarming; Snooze All is not affected.
 - **Fast change alarms once per episode** — Fast Drop and Fast Rise alarm once, then stay quiet
   until a reading no longer meets their condition.
+- **Fast change over 5-minute intervals** (JugglucoNG GDH delta alarm, off by default, 2–6
+  intervals) — Fast Drop and Fast Rise alarm only when the change per 5 minutes has passed their
+  value for that many 5-minute intervals in a row and glucose is past their trigger level. The
+  change is scaled to 5 minutes, so a 1-minute sensor (Libre 2, Sibionics) and a 5-minute sensor
+  mean the same; a change in the other direction, a gap over 20 minutes or a slower interval starts
+  over. Off keeps upstream's comparison of the last two readings.
+- **Fast Drop and predicted low: one alarm** (5–30 minutes, off by default) — the two alarms describe
+  the same fall. Once one of them has fired and been snoozed, the other stays quiet for the chosen
+  time. Low and Very Low are never held back.
+
+## Quiet window
+
+Settings → Experimental features → Alarms → Quiet window (JugglucoNG "quiet mode"). Start it for
+30 minutes to 3 hours; it always ends, after 24 hours at the most, and posts a silent notification
+when it starts and when it ends. During the window alarms are still raised, shown and snoozable,
+only their sound is held back: *Vibrate only* keeps the vibration, *Notification only* drops it
+too. An alarm that stays raised for the break-through time (5–30 minutes, default 10) sounds
+anyway: Low and Very Low always, the others with *Every alarm*, only Very High with *Lows and Very
+High only*. A silenced alarm that has not come back for 30 minutes starts a new episode.
 
 ## Dose hints
 

@@ -125,7 +125,10 @@ Adaptive prediction (`xDrip/Managers/Therapy/AdaptiveGlucoseForecast.swift`): Ju
 `BgReading` dictionaries; alerts and Nightscout stay on the standard forecast.
 Power saving (`ExperimentalPowerSaving`, mode Off/On/Automatic, never while charging) throttles the
 "every reading" uploads, Live Activity/widget refresh (`allowsRefresh`, urgent out of range), the
-Home chart minute redraw and the adaptive refit — never readings or alarms. Basal injections
+Home chart minute redraw and the adaptive refit — never readings or alarms. Alarms (`AlertKind.swift`/`AlertManager`):
+`GDHDeltaRun` (JugglucoNG GDH delta alarm, replayed statelessly over 45 min of readings, change scaled
+to 5 min), `SameDirectionAlertRule` (Fast Drop ↔ predicted low after a snooze) and
+`ExperimentalQuietWindow` (sound/vibration held back, lows always break through) — all off by default. Basal injections
 (Nightscout event type Note) always count in `ExperimentalTreatment.fetch`.
 
 Food library (`xDrip/SwiftUIViews/Treatments/FoodLibrary.swift`, button in the carbs treatment

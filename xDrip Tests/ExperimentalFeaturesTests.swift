@@ -1433,3 +1433,93 @@ final class InsulinPenReaderTests: XCTestCase {
         XCTAssertEqual(InsulinPenStore.pens(defaults: defaults).map(\.serial), ["ZZZ"])
     }
 }
+
+// MARK: - Fast change over 5-minute intervals, same-direction rule, quiet window
+
+/// Run lengths were computed with a Python port of `GDHDeltaRun` (JugglucoNG DeltaAlarmState).
+final class AlertDeltaRunAndQuietWindowTests: XCTestCase {
+
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func readings(every seconds: TimeInterval, _ values: [Double]) -> [(date: Date, mgDl: Double)] {
+        values.enumerated().map { (date: start.addingTimeInterval(TimeInterval($0.offset) * seconds), mgDl: $0.element) }
+    }
+
+    func testDeltaIsScaledToFiveMinutesAndRejectsShortAndLongGaps() {
+        XCTAssertEqual(GDHDeltaRun.delta(newDate: start.addingTimeInterval(600), newValue: 190,
+                                         previousDate: start, previousValue: 200) ?? 0, -5, accuracy: 1e-9)
+        XCTAssertNil(GDHDeltaRun.delta(newDate: start.addingTimeInterval(100), newValue: 190, previousDate: start, previousValue: 200))
+        XCTAssertNil(GDHDeltaRun.delta(newDate: start.addingTimeInterval(1300), newValue: 190, previousDate: start, previousValue: 200))
+    }
+
+    func testOneMinuteSensorCountsFiveMinuteIntervals() {
+        // 2 mg/dL a minute for 16 minutes: 10 mg/dL per 5 minutes, three full intervals.
+        let falling = readings(every: 60, (0...16).map { 200 - 2 * Double($0) })
+        XCTAssertEqual(GDHDeltaRun.runLength(falling, thresholdMgDl: 9, falling: true), 3)
+        XCTAssertEqual(GDHDeltaRun.runLength(falling, thresholdMgDl: 11, falling: true), 0)
+        XCTAssertEqual(GDHDeltaRun.runLength(falling, thresholdMgDl: 9, falling: false), 0)
+    }
+
+    func testFiveMinuteSensorRunResetsOnReversalGapAndSlowInterval() {
+        XCTAssertEqual(GDHDeltaRun.runLength(readings(every: 300, [200, 188, 176, 164, 152]), thresholdMgDl: 10, falling: true), 4)
+        XCTAssertEqual(GDHDeltaRun.runLength(readings(every: 300, [200, 188, 176, 164, 152]), thresholdMgDl: 13, falling: true), 0)
+        XCTAssertEqual(GDHDeltaRun.runLength(readings(every: 300, [200, 188, 176, 164, 152, 155]), thresholdMgDl: 10, falling: true), 0)
+        XCTAssertEqual(GDHDeltaRun.runLength(readings(every: 300, [200, 188, 176, 174, 162]), thresholdMgDl: 10, falling: true), 1)
+        let gap: [(date: Date, mgDl: Double)] = [(start, 200), (start.addingTimeInterval(300), 188), (start.addingTimeInterval(600), 176),
+                                                 (start.addingTimeInterval(2100), 164), (start.addingTimeInterval(2400), 152)]
+        XCTAssertEqual(GDHDeltaRun.runLength(gap, thresholdMgDl: 10, falling: true), 1)
+    }
+
+    func testSameDirectionRuleNeedsAnAcknowledgedOtherAlarmOfTheSameDirection() {
+        let fired = (kind: AlertKind.predictedLow, at: start)
+        let now = start.addingTimeInterval(9 * 60)
+        XCTAssertTrue(SameDirectionAlertRule.blocks(kind: .fastdrop, lastFired: fired, lastAcknowledged: true, now: now, windowMinutes: 10))
+        XCTAssertFalse(SameDirectionAlertRule.blocks(kind: .fastdrop, lastFired: fired, lastAcknowledged: false, now: now, windowMinutes: 10))
+        XCTAssertFalse(SameDirectionAlertRule.blocks(kind: .fastdrop, lastFired: fired, lastAcknowledged: true,
+                                                     now: start.addingTimeInterval(10 * 60), windowMinutes: 10))
+        XCTAssertFalse(SameDirectionAlertRule.blocks(kind: .fastrise, lastFired: fired, lastAcknowledged: true, now: now, windowMinutes: 10))
+        XCTAssertFalse(SameDirectionAlertRule.blocks(kind: .predictedLow, lastFired: fired, lastAcknowledged: true, now: now, windowMinutes: 10))
+        XCTAssertFalse(SameDirectionAlertRule.blocks(kind: .fastdrop, lastFired: fired, lastAcknowledged: true, now: now, windowMinutes: 0))
+    }
+
+    func testQuietWindowDecision() {
+        let later = start.addingTimeInterval(10 * 60)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .high, mode: .vibrateOnly, scope: .all, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: start.addingTimeInterval(60)), .vibrateOnly)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .high, mode: .notificationOnly, scope: .all, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: start.addingTimeInterval(60)), .silent)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .high, mode: .vibrateOnly, scope: .all, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: later), .normal)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .high, mode: .vibrateOnly, scope: .veryHighOnly, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: later), .vibrateOnly)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .veryhigh, mode: .vibrateOnly, scope: .veryHighOnly, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: later), .normal)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .low, mode: .notificationOnly, scope: .veryHighOnly, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: later), .normal)
+    }
+
+    func testQuietWindowRemembersTheSilencedEpisodeAndEnds() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "ExperimentalQuietWindowTests"))
+        defaults.removePersistentDomain(forName: "ExperimentalQuietWindowTests")
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .high, at: start, now: start, defaults: defaults), .normal)
+
+        let until = ExperimentalQuietWindow.start(minutes: 60, now: start, defaults: defaults)
+        XCTAssertEqual(until, start.addingTimeInterval(3600))
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .high, at: start, now: start, defaults: defaults), .vibrateOnly)
+        let fiveLater = start.addingTimeInterval(5 * 60)
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .high, at: fiveLater, now: fiveLater, defaults: defaults), .vibrateOnly)
+        let tenLater = start.addingTimeInterval(10 * 60)
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .high, at: tenLater, now: tenLater, defaults: defaults), .normal)
+        // Another alarm has its own episode.
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .fastrise, at: tenLater, now: tenLater, defaults: defaults), .vibrateOnly)
+
+        let afterEnd = start.addingTimeInterval(3601)
+        XCTAssertNil(ExperimentalQuietWindow.until(now: afterEnd, defaults: defaults))
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .high, at: afterEnd, now: afterEnd, defaults: defaults), .normal)
+
+        XCTAssertEqual(ExperimentalQuietWindow.start(minutes: 10_000, now: start, defaults: defaults), start.addingTimeInterval(24 * 3600))
+        ExperimentalQuietWindow.end(defaults: defaults)
+        XCTAssertNil(ExperimentalQuietWindow.until(now: start, defaults: defaults))
+        defaults.removePersistentDomain(forName: "ExperimentalQuietWindowTests")
+    }
+}

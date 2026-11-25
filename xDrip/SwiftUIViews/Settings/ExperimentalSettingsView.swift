@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 extension SettingsViewGroupedSettingsViewModel {
     /// The Experimental features root section.
@@ -56,7 +57,7 @@ extension SettingsViewGroupedSettingsViewModel {
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving, alerts, doseHints, restricted, pens }
+    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving, alerts, quietWindow, doseHints, restricted, pens }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
@@ -83,8 +84,8 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
 
     static var alertsScreen: SettingsScreen {
         SettingsScreen(title: ExperimentalTexts.text("alerts", "Alarms"),
-                       introduction: { ExperimentalTexts.text("alertsIntroduction", "Experimental additions to the alarms, from JugglucoNG. Both are off by default.") },
-                       providers: { [ExperimentalSettingsViewModel(group: .alerts)] })
+                       introduction: { ExperimentalTexts.text("alertsIntroduction", "Experimental additions to the alarms, from JugglucoNG. All are off by default.") },
+                       providers: { [ExperimentalSettingsViewModel(group: .quietWindow), ExperimentalSettingsViewModel(group: .alerts)] })
     }
 
     static var restrictedScreen: SettingsScreen {
@@ -316,7 +317,57 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                              setIsOn: { UserDefaults.standard.experimentalSnoozeEndsWhenResolved = $0 })),
                 SettingsRow(id: "experimental.alerts.trendOncePerEpisode", title: ExperimentalTexts.text("trendOncePerEpisode", "Fast change alarms once per episode"),
                             control: .toggle(isOn: { UserDefaults.standard.experimentalTrendAlertOncePerEpisode },
-                                             setIsOn: { UserDefaults.standard.experimentalTrendAlertOncePerEpisode = $0 }))
+                                             setIsOn: { UserDefaults.standard.experimentalTrendAlertOncePerEpisode = $0 })),
+                SettingsRow(id: "experimental.alerts.deltaRun", title: ExperimentalTexts.text("deltaRun", "Fast change over 5-minute intervals"), accessory: .none,
+                            control: .menu(options: {
+                                let selected = UserDefaults.standard.experimentalDeltaRunCount
+                                return Self.deltaRunChoices.map { SettingsMenuOption(title: Self.deltaRunTitle($0), isSelected: $0 == selected) }
+                            }, selectOption: { index in
+                                guard Self.deltaRunChoices.indices.contains(index) else { return }
+                                UserDefaults.standard.experimentalDeltaRunCount = Self.deltaRunChoices[index]
+                            })),
+                SettingsRow(id: "experimental.alerts.sameDirection", title: ExperimentalTexts.text("sameDirection", "Fast Drop and predicted low: one alarm"), accessory: .none,
+                            control: .menu(options: {
+                                let selected = UserDefaults.standard.experimentalSameDirectionSuppressionMinutes
+                                return Self.sameDirectionChoices.map {
+                                    SettingsMenuOption(title: $0 == 0 ? Texts_Common.off : Self.minutesText($0), isSelected: $0 == selected)
+                                }
+                            }, selectOption: { index in
+                                guard Self.sameDirectionChoices.indices.contains(index) else { return }
+                                UserDefaults.standard.experimentalSameDirectionSuppressionMinutes = Self.sameDirectionChoices[index]
+                            }))
+            ]
+        case .quietWindow:
+            return [
+                SettingsRow(id: "experimental.quiet.state", title: ExperimentalTexts.text("quietWindow", "Quiet window"),
+                            control: .custom(content: { AnyView(QuietWindowControl()) })),
+                SettingsRow(id: "experimental.quiet.mode", title: ExperimentalTexts.text("quietMode", "During the window"), accessory: .none,
+                            control: .menu(options: {
+                                let selected = ExperimentalQuietWindow.mode()
+                                return ExperimentalQuietWindow.Mode.allCases.map { SettingsMenuOption(title: Self.title(for: $0), isSelected: $0 == selected) }
+                            }, selectOption: { index in
+                                let modes = ExperimentalQuietWindow.Mode.allCases
+                                guard modes.indices.contains(index) else { return }
+                                ExperimentalQuietWindow.setMode(modes[index])
+                            })),
+                SettingsRow(id: "experimental.quiet.breakthrough", title: ExperimentalTexts.text("quietBreakthrough", "Sound anyway after"), accessory: .none,
+                            control: .menu(options: {
+                                let selected = ExperimentalQuietWindow.breakthroughMinutes()
+                                return ExperimentalQuietWindow.breakthroughChoices.map { SettingsMenuOption(title: Self.minutesText($0), isSelected: $0 == selected) }
+                            }, selectOption: { index in
+                                let choices = ExperimentalQuietWindow.breakthroughChoices
+                                guard choices.indices.contains(index) else { return }
+                                ExperimentalQuietWindow.setBreakthroughMinutes(choices[index])
+                            })),
+                SettingsRow(id: "experimental.quiet.scope", title: ExperimentalTexts.text("quietScope", "Which alarms break through"), accessory: .none,
+                            control: .menu(options: {
+                                let selected = ExperimentalQuietWindow.scope()
+                                return ExperimentalQuietWindow.Scope.allCases.map { SettingsMenuOption(title: Self.title(for: $0), isSelected: $0 == selected) }
+                            }, selectOption: { index in
+                                let scopes = ExperimentalQuietWindow.Scope.allCases
+                                guard scopes.indices.contains(index) else { return }
+                                ExperimentalQuietWindow.setScope(scopes[index])
+                            }))
             ]
         case .powerSaving:
             return [
@@ -440,6 +491,28 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         }
     }
 
+    static let deltaRunChoices = [0, 2, 3, 4, 5, 6]
+    static let sameDirectionChoices = [0, 5, 10, 15, 30]
+
+    static func deltaRunTitle(_ count: Int) -> String {
+        count == 0 ? ExperimentalTexts.text("deltaRunOff", "Off (last two readings)")
+            : String(format: ExperimentalTexts.text("deltaRunCount", "%d intervals in a row"), count)
+    }
+
+    static func title(for mode: ExperimentalQuietWindow.Mode) -> String {
+        switch mode {
+        case .vibrateOnly: return ExperimentalTexts.text("quietVibrateOnly", "Vibrate only")
+        case .notificationOnly: return ExperimentalTexts.text("quietNotificationOnly", "Notification only")
+        }
+    }
+
+    static func title(for scope: ExperimentalQuietWindow.Scope) -> String {
+        switch scope {
+        case .all: return ExperimentalTexts.text("quietScopeAll", "Every alarm")
+        case .veryHighOnly: return ExperimentalTexts.text("quietScopeVeryHigh", "Lows and Very High only")
+        }
+    }
+
     static func minutesText(_ minutes: Int) -> String {
         DateComponentsFormatter.localizedString(from: DateComponents(minute: minutes), unitsStyle: .short) ?? "\(minutes)"
     }
@@ -447,6 +520,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
     func sectionTitle() -> String? {
         switch group {
         case .predictionMain, .insulins, .powerSaving, .alerts, .restricted, .pens: return nil
+        case .quietWindow: return ExperimentalTexts.text("quietWindow", "Quiet window")
         case .doseHints: return ExperimentalTexts.text("doseHintsTitle", "Dose hints")
         case .predictionAdaptive: return ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction")
         case .predictionModel: return ExperimentalTexts.text("predictionModel", "Model")
@@ -472,11 +546,14 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         case .predictionAccuracy:
             return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
         case .restricted, .pens: return nil
+        case .quietWindow:
+            return ExperimentalTexts.text("quietFooter", "For the cinema or a lecture: alarms are still raised and shown, only their sound (and, with Notification only, vibration) is held back. The window always ends, after 24 hours at the most. An alarm that stays raised for the break-through time sounds anyway: a low always, the other alarms as chosen above. Snoozes and thresholds work as usual.")
         case .doseHints:
             return ExperimentalTexts.text("doseHintsFooter", "NOT MEDICAL ADVICE. A line on the Home chart with arithmetic from your logged treatments and the model above: carbs when glucose is falling with insulin on board and would pass below the dose target within 45 minutes (rounded up, at least 5 g), or a correction when glucose is above the range and not coming down (the gap to the target divided by sensitivity, minus all insulin on board, rounded down to 0.5 U). Nothing is hinted within 20 mg/dL (1.1 mmol/L) of the target. It knows nothing about unlogged food, illness or exercise, and a wrong sensitivity or carb ratio makes it wrong. Decide doses with your own rules and your care team's.")
         case .alerts:
             return ExperimentalTexts.text("alertsFooter", "No High alarm while falling: the High alarm stays quiet while glucose is already falling by at least 0.5 mg/dL (0.03 mmol/L) a minute; Very High always alarms. Notify when signal is restored: one silent notification when readings come back after a gap at least as long as the Missed Reading alarm's delay (30 minutes when that alarm is off).")
                 + "\n\n" + ExperimentalTexts.text("alertsEpisodeFooter", "End snooze when back in range: a snoozed Low, Very Low, High or Very High alarm is unsnoozed once glucose is at least 9 mg/dL (0.5 mmol/L) back on the safe side of its value, so a new episode alarms at once instead of waiting out the old snooze. Snooze All is not affected. Fast change alarms once per episode: Fast Drop and Fast Rise alarm once and then stay quiet until a reading no longer meets their condition.")
+                + "\n\n" + ExperimentalTexts.text("alertsDeltaFooter", "Fast change over 5-minute intervals (GDH, as in JugglucoNG): Fast Drop and Fast Rise alarm when the change per 5 minutes has passed their value for this many intervals in a row, past their trigger level. The change is measured over 5 minutes, so it means the same for a sensor that reads every minute and one that reads every 5 minutes; a change the other way or a gap starts over. Off keeps the comparison of the last two readings. Fast Drop and predicted low, one alarm: once one of them has been snoozed, the other stays quiet for this long.")
         case .powerSaving:
             return ExperimentalTexts.text("powerSavingFooter", "While it saves: Nightscout, Apple Health and Dexcom Share get one reading every five minutes instead of every reading; the Live Activity and widgets refresh at most every five minutes, at once when glucose leaves the target range; the Home chart redraws its forecast and insulin every five minutes; the adaptive prediction relearns only while charging. Automatic saves while iPhone Low Power Mode is on or the battery is at 25 % or less. Nothing is saved while the phone charges.")
         case .insulins:
@@ -769,5 +846,77 @@ struct RestrictedModeSettingsView: View {
             }
         }
         .navigationTitle(ExperimentalTexts.text("restricted", "Restricted mode"))
+    }
+}
+
+// MARK: - Quiet window
+
+/// Starts and ends the quiet window and shows how long it still runs.
+struct QuietWindowControl: View {
+    @State private var until = ExperimentalQuietWindow.until()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let until {
+                Text(String(format: ExperimentalTexts.text("quietUntil", "Alarms are quiet until %@"),
+                            until.formatted(date: .omitted, time: .shortened)))
+                    .foregroundStyle(Color.orange)
+                Button(ExperimentalTexts.text("quietEnd", "End now"), role: .destructive) {
+                    ExperimentalQuietWindow.end()
+                    QuietWindowNotice.ended()
+                    self.until = nil
+                }
+            } else {
+                Text(ExperimentalTexts.text("quietOff", "Alarms sound as usual"))
+                    .foregroundStyle(.secondary)
+                HStack {
+                    ForEach(ExperimentalQuietWindow.presetMinutes, id: \.self) { minutes in
+                        Button(DateComponentsFormatter.localizedString(
+                            from: minutes < 60 ? DateComponents(minute: minutes) : DateComponents(hour: minutes / 60),
+                            unitsStyle: .short) ?? "\(minutes)") {
+                            let end = ExperimentalQuietWindow.start(minutes: minutes)
+                            QuietWindowNotice.started(until: end)
+                            until = end
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+        }
+        .onAppear { until = ExperimentalQuietWindow.until() }
+    }
+}
+
+/// Keeps the quiet window visible outside the app: a silent notification while it runs, replaced
+/// by "ended" when it is over (scheduled, so it appears even if the app is not running then).
+enum QuietWindowNotice {
+    static let identifier = "experimentalQuietWindow"
+
+    static func started(until: Date) {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        let running = UNMutableNotificationContent()
+        running.title = ExperimentalTexts.text("quietWindow", "Quiet window")
+        running.body = String(format: ExperimentalTexts.text("quietUntil", "Alarms are quiet until %@"),
+                              until.formatted(date: .omitted, time: .shortened))
+        center.add(UNNotificationRequest(identifier: identifier, content: running, trigger: nil), withCompletionHandler: nil)
+        let interval = until.timeIntervalSinceNow
+        guard interval > 1 else { return }
+        center.add(UNNotificationRequest(identifier: identifier, content: endedContent(),
+                                         trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)),
+                   withCompletionHandler: nil)
+    }
+
+    static func ended() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        center.add(UNNotificationRequest(identifier: identifier, content: endedContent(), trigger: nil), withCompletionHandler: nil)
+    }
+
+    private static func endedContent() -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = ExperimentalTexts.text("quietWindow", "Quiet window")
+        content.body = ExperimentalTexts.text("quietEnded", "The quiet window is over: alarms sound as usual.")
+        return content
     }
 }
