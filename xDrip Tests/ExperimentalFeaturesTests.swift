@@ -1786,3 +1786,52 @@ final class SatelliteMeterProtocolTests: XCTestCase {
         if case .failed = refused.onNotification(Data("pin.err".utf8)) {} else { XCTFail("a refused PIN must fail") }
     }
 }
+
+// MARK: - Insulin pen manual merge
+
+/// The cases of JugglucoNG `PenManualMergeTests`, against the Swift `PenManualMergePlanner`.
+final class PenManualMergeTests: XCTestCase {
+    private let anchor: Int64 = 1_700_000_000
+
+    private func dose(_ relative: Int64, _ units: Double, atMinute: Int64, priming: Bool = false) -> PenDose {
+        PenDose(relativeSeconds: relative, timestampSeconds: anchor + atMinute * 60, tenths: Int((units * 10).rounded()), flags: 0, priming: priming)
+    }
+
+    private func entry(_ id: Int, _ units: Double, atMinute: Int64, insulin: InsulinProfile? = .aspart) -> ManualInsulinEntry {
+        ManualInsulinEntry(id: id, timestampSeconds: anchor + atMinute * 60, units: units, insulin: insulin)
+    }
+
+    private func plan(_ doses: [PenDose], _ entries: [ManualInsulinEntry], penInsulin: InsulinProfile? = .aspart) -> PenManualMergePlanner.Plan {
+        PenManualMergePlanner.plan(doses: doses, entries: entries, penInsulin: penInsulin)
+    }
+
+    func testADoseWrittenDownBeforeInjectingBecomesTheSameEntry() {
+        let result = plan([dose(3600, 4, atMinute: 10)], [entry(42, 4, atMinute: 8)])
+        XCTAssertEqual(result.merges, [PenManualMerge(entryID: 42, doseRelativeSeconds: 3600, timestampSeconds: anchor + 600)])
+        XCTAssertNil(result.alignmentBreak)
+    }
+
+    func testThreeInARowMergeInOrderAndAirShotsDoNotShiftIt() {
+        let result = plan([dose(100, 6, atMinute: 0), dose(150, 1, atMinute: 299, priming: true), dose(200, 4, atMinute: 300),
+                           dose(300, 8, atMinute: 700)],
+                          [entry(1, 6, atMinute: -2), entry(2, 4, atMinute: 297), entry(3, 8, atMinute: 695)])
+        XCTAssertNil(result.alignmentBreak)
+        XCTAssertEqual(result.merges.map(\.entryID), [1, 2, 3])
+        XCTAssertEqual(result.merges.map(\.doseRelativeSeconds), [100, 200, 300])
+    }
+
+    func testAnEntryWithoutADoseStopsTheWalkAndTheRestPairsByTimeAndAmount() {
+        let result = plan([dose(200, 4, atMinute: 300), dose(300, 8, atMinute: 700)],
+                          [entry(1, 6, atMinute: 299), entry(2, 4, atMinute: 302), entry(3, 8, atMinute: 699)])
+        XCTAssertEqual(result.alignmentBreak, 0)
+        XCTAssertEqual(result.merges.map(\.entryID).sorted(), [2, 3])
+        XCTAssertEqual(result.merges.map(\.doseRelativeSeconds).sorted(), [200, 300])
+    }
+
+    func testDisagreeingAmountsDistanceAnotherInsulinOrAnUnknownPenMergeNothing() {
+        XCTAssertTrue(plan([dose(200, 4.5, atMinute: 300)], [entry(2, 4, atMinute: 298)]).merges.isEmpty)
+        XCTAssertTrue(plan([dose(100, 4, atMinute: 0)], [entry(1, 4, atMinute: 20)]).merges.isEmpty)
+        XCTAssertTrue(plan([dose(100, 4, atMinute: 0)], [entry(1, 4, atMinute: 1, insulin: .glargineU100)]).merges.isEmpty)
+        XCTAssertTrue(plan([dose(100, 4, atMinute: 0)], [entry(1, 4, atMinute: 1)], penInsulin: nil).merges.isEmpty)
+    }
+}

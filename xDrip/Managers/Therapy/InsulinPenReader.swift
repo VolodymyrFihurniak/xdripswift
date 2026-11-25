@@ -899,18 +899,109 @@ enum InsulinPenStore {
 }
 
 /// Decides what a scan offers for review and what an import writes.
+/// An insulin treatment somebody wrote down themselves, before the pen was read.
+struct ManualInsulinEntry: Equatable {
+    /// Position in the caller's list.
+    let id: Int
+    let timestampSeconds: Int64
+    let units: Double
+    /// The insulin it names, or the default insulin of its kind.
+    let insulin: InsulinProfile?
+}
+
+/// One hand-written entry the pen has now confirmed: it keeps its row and takes the dose's time.
+struct PenManualMerge: Equatable {
+    let entryID: Int
+    let doseRelativeSeconds: Int64
+    let timestampSeconds: Int64
+}
+
+/// JugglucoNG `PenManualMergePlanner`: writing a dose down and injecting it a minute later is one
+/// injection with two records. The n-th injection on the pen is taken for the n-th hand-written
+/// entry of the pen's insulin, and the amount decides: at the first pair whose amounts differ, or
+/// that sit more than 15 minutes apart, the order is no longer trusted and the rest is matched
+/// pairwise (closest first, same amount, each side once). Air shots are left out before the walk;
+/// a pen without a known insulin merges nothing.
+enum PenManualMergePlanner {
+    static let matchWindowSeconds: Int64 = 15 * 60
+
+    struct Plan: Equatable {
+        var merges: [PenManualMerge] = []
+        /// Where the order stopped lining up; nil when it held.
+        var alignmentBreak: Int?
+    }
+
+    static func plan(doses: [PenDose], entries: [ManualInsulinEntry], penInsulin: InsulinProfile?) -> Plan {
+        guard let penInsulin else { return Plan() }
+        let injections = doses.filter { !$0.priming }.sorted { $0.timestampSeconds < $1.timestampSeconds }
+        guard let first = injections.first, let last = injections.last, !entries.isEmpty else { return Plan() }
+        let from = first.timestampSeconds - matchWindowSeconds, to = last.timestampSeconds + matchWindowSeconds
+        let candidates = entries.filter { (from...to).contains($0.timestampSeconds) && $0.insulin == penInsulin }
+            .sorted { ($0.timestampSeconds, $0.id) < ($1.timestampSeconds, $1.id) }
+        guard !candidates.isEmpty else { return Plan() }
+
+        var plan = Plan()
+        var walked = 0
+        while walked < injections.count, walked < candidates.count {
+            let dose = injections[walked], entry = candidates[walked]
+            if tenths(entry.units) != dose.tenths || abs(entry.timestampSeconds - dose.timestampSeconds) > matchWindowSeconds {
+                plan.alignmentBreak = walked
+                break
+            }
+            plan.merges.append(merge(dose, entry))
+            walked += 1
+        }
+        if plan.alignmentBreak != nil {
+            plan.merges += pairwise(Array(injections.dropFirst(walked)), Array(candidates.dropFirst(walked)))
+        }
+        return plan
+    }
+
+    private static func pairwise(_ doses: [PenDose], _ entries: [ManualInsulinEntry]) -> [PenManualMerge] {
+        var pairs: [(apart: Int64, dose: PenDose, entry: ManualInsulinEntry)] = []
+        for dose in doses {
+            for entry in entries {
+                let apart = abs(entry.timestampSeconds - dose.timestampSeconds)
+                if apart <= matchWindowSeconds, tenths(entry.units) == dose.tenths { pairs.append((apart, dose, entry)) }
+            }
+        }
+        pairs.sort { ($0.apart, $0.entry.id) < ($1.apart, $1.entry.id) }
+        var claimedDoses = Set<Int64>(), claimedEntries = Set<Int>()
+        var merges: [PenManualMerge] = []
+        for pair in pairs where !claimedDoses.contains(pair.dose.relativeSeconds) && !claimedEntries.contains(pair.entry.id) {
+            claimedDoses.insert(pair.dose.relativeSeconds)
+            claimedEntries.insert(pair.entry.id)
+            merges.append(merge(pair.dose, pair.entry))
+        }
+        return merges.sorted { $0.timestampSeconds < $1.timestampSeconds }
+    }
+
+    private static func merge(_ dose: PenDose, _ entry: ManualInsulinEntry) -> PenManualMerge {
+        PenManualMerge(entryID: entry.id, doseRelativeSeconds: dose.relativeSeconds, timestampSeconds: dose.timestampSeconds)
+    }
+
+    /// Doses come off the pen in tenths of a unit; compare them there.
+    private static func tenths(_ units: Double) -> Int { Int((units * 10).rounded()) }
+}
+
 enum InsulinPenImport {
     /// How far a logged treatment may sit from the pen dose it stands for (JugglucoNG's window).
     static let matchWindowSeconds: TimeInterval = 300
+    /// `enteredBy` of imported doses, so they are never taken for hand-written ones.
+    static let enteredBy = "Insulin pen"
 
     struct Candidate: Identifiable, Equatable {
         let dose: PenDose
         /// An insulin treatment of the same size is already logged next to it.
         let alreadyLogged: Bool
+        /// The hand-written entry this dose confirms: ticked, that entry takes the pen's time
+        /// instead of a second treatment being added.
+        var mergesWith: Date? = nil
 
         var id: Int64 { dose.id }
-        /// Air shots and doses that are already in the log start unticked.
-        var preselected: Bool { !dose.priming && !alreadyLogged }
+        /// Air shots and doses that are already in the log start unticked; a confirmed entry
+        /// starts ticked, as JugglucoNG merges it.
+        var preselected: Bool { mergesWith != nil || (!dose.priming && !alreadyLogged) }
     }
 
     /// Doses past the pen's cursor (all of them for a full read), newest first.
@@ -950,7 +1041,7 @@ enum InsulinPenImport {
             _ = TreatmentEntry(date: dose.date, value: dose.units,
                                treatmentType: pen.isBasal ? .BasalInjection : .Insulin,
                                nightscoutEventType: pen.isBasal ? ConstantsNightscout.noteEventType : nil,
-                               enteredBy: nil, notes: notes(for: pen), nsManagedObjectContext: context)
+                               enteredBy: enteredBy, notes: notes(for: pen), nsManagedObjectContext: context)
         }
         guard doses.isEmpty || coreDataManager.saveChanges() else { return false }
         var pen = pen
@@ -963,6 +1054,45 @@ enum InsulinPenImport {
     }
 
     /// Insulin treatments around the scanned doses, for the "already logged" check.
+    /// Hand-written insulin treatments around the doses (not imported by a pen or another app),
+    /// with the insulin each names or its kind's default.
+    static func manualEntries(around doses: [PenDose], coreDataManager: CoreDataManager,
+                              defaults: UserDefaults = .standard) -> [(entry: ManualInsulinEntry, treatment: TreatmentEntry)] {
+        guard let first = doses.map(\.date).min(), let last = doses.map(\.date).max() else { return [] }
+        let window = TimeInterval(PenManualMergePlanner.matchWindowSeconds)
+        let request = TreatmentEntry.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "date >= %@ AND date <= %@ AND (treatmentdeleted == NO OR treatmentdeleted == nil) AND treatmentType IN %@",
+            first.addingTimeInterval(-window) as NSDate, last.addingTimeInterval(window) as NSDate,
+            [TreatmentType.Insulin.rawValue, TreatmentType.BasalInjection.rawValue])
+        let model = ExperimentalPredictionModel(defaults: defaults)
+        let treatments = ((try? coreDataManager.mainManagedObjectContext.fetch(request)) ?? [])
+            .filter { $0.enteredBy == nil || $0.enteredBy == ConstantsHomeView.applicationName }
+        return treatments.enumerated().map { offset, treatment in
+            let insulin = InsulinProfile.matching(notes: treatment.notes)
+                ?? (treatment.treatmentType == .BasalInjection ? model.basalInsulin : model.bolusInsulin)
+            return (ManualInsulinEntry(id: offset, timestampSeconds: Int64(treatment.date.timeIntervalSince1970.rounded()),
+                                       units: treatment.value, insulin: insulin), treatment)
+        }
+    }
+
+    /// Gives a confirmed entry the pen's time and names the pen's insulin in it.
+    @discardableResult
+    static func applyMerges(_ merges: [(treatment: TreatmentEntry, dose: PenDose)], pen: InsulinPen,
+                            coreDataManager: CoreDataManager) -> Bool {
+        guard !merges.isEmpty else { return true }
+        for (treatment, dose) in merges {
+            treatment.date = dose.date
+            if InsulinProfile.matching(notes: treatment.notes) == nil, let name = notes(for: pen) {
+                treatment.notes = [treatment.notes, name].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " ")
+            }
+            treatment.uploaded = false
+        }
+        guard coreDataManager.saveChanges() else { return false }
+        UserDefaults.standard.nightscoutSyncRequired = true
+        return true
+    }
+
     static func loggedInsulin(around doses: [PenDose], coreDataManager: CoreDataManager) -> [(date: Date, units: Double)] {
         guard let first = doses.map(\.date).min(), let last = doses.map(\.date).max() else { return [] }
         let request = TreatmentEntry.fetchRequest()
@@ -1082,6 +1212,8 @@ struct InsulinPenSettingsView: View {
         var pen: InsulinPen
         let candidates: [InsulinPenImport.Candidate]
         let complete: Bool
+        /// The hand-written treatment each confirmed dose would update.
+        var merges: [Int64: TreatmentEntry] = [:]
     }
 
     @State private var pens = InsulinPenStore.pens()
@@ -1135,7 +1267,7 @@ struct InsulinPenSettingsView: View {
         }
         .navigationTitle(ExperimentalTexts.text("pens", "Insulin pens (NFC)"))
         .sheet(item: $review) { review in
-            InsulinPenReviewView(pen: review.pen, candidates: review.candidates, complete: review.complete) { imported in
+            InsulinPenReviewView(pen: review.pen, candidates: review.candidates, complete: review.complete, merges: review.merges) { imported in
                 pens = InsulinPenStore.pens()
                 message = String(format: ExperimentalTexts.text("pensImportedNow", "%d doses added to the treatments."), imported)
             }
@@ -1168,12 +1300,27 @@ struct InsulinPenSettingsView: View {
             pens = InsulinPenStore.pens()
             let logged = TherapyMetricsManager.shared.configuredCoreDataManager
                 .map { InsulinPenImport.loggedInsulin(around: doses, coreDataManager: $0) } ?? []
-            let candidates = InsulinPenImport.candidates(doses: doses, cursor: pen.cursor, fullRead: wholeLog, logged: logged)
+            var candidates = InsulinPenImport.candidates(doses: doses, cursor: pen.cursor, fullRead: wholeLog, logged: logged)
+            // JugglucoNG's manual merge: a dose already written down by hand confirms that entry.
+            var merges: [Int64: TreatmentEntry] = [:]
+            if let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager {
+                let offered = candidates.map(\.dose)
+                let manual = InsulinPenImport.manualEntries(around: offered, coreDataManager: coreDataManager)
+                let plan = PenManualMergePlanner.plan(doses: offered, entries: manual.map(\.entry), penInsulin: pen.profile)
+                for merge in plan.merges where manual.indices.contains(merge.entryID) {
+                    merges[merge.doseRelativeSeconds] = manual[merge.entryID].treatment
+                }
+                candidates = candidates.map { candidate in
+                    var candidate = candidate
+                    candidate.mergesWith = merges[candidate.dose.relativeSeconds]?.date
+                    return candidate
+                }
+            }
             fullRead = false
             if candidates.isEmpty {
                 message = ExperimentalTexts.text("pensNothingNew", "No new doses on this pen.")
             } else {
-                review = Review(pen: pen, candidates: candidates, complete: complete)
+                review = Review(pen: pen, candidates: candidates, complete: complete, merges: merges)
             }
         case .failed:
             message = ExperimentalTexts.text("pen.readFailed", "The pen could not be read. Try again and hold the phone still.")
@@ -1193,16 +1340,19 @@ struct InsulinPenReviewView: View {
     let pen: InsulinPen
     let candidates: [InsulinPenImport.Candidate]
     let complete: Bool
+    let merges: [Int64: TreatmentEntry]
     let onImported: (Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var selected: Set<Int64>
     @State private var failed = false
 
-    init(pen: InsulinPen, candidates: [InsulinPenImport.Candidate], complete: Bool, onImported: @escaping (Int) -> Void) {
+    init(pen: InsulinPen, candidates: [InsulinPenImport.Candidate], complete: Bool, merges: [Int64: TreatmentEntry] = [:],
+         onImported: @escaping (Int) -> Void) {
         self.pen = pen
         self.candidates = candidates
         self.complete = complete
+        self.merges = merges
         self.onImported = onImported
         _selected = State(initialValue: Set(candidates.filter(\.preselected).map(\.id)))
     }
@@ -1242,13 +1392,17 @@ struct InsulinPenReviewView: View {
     }
 
     private var footer: String {
-        var text = ExperimentalTexts.text("pensReviewFooter", "Ticked doses are added as treatments. Unticked doses are not offered again unless the whole log is read. A small dose within a minute before another is taken for an air shot and starts unticked, as does a dose that is already in the treatments.")
+        var text = ExperimentalTexts.text("pensReviewFooter", "Ticked doses are added as treatments. Unticked doses are not offered again unless the whole log is read. A small dose within a minute before another is taken for an air shot and starts unticked, as does a dose that is already in the treatments. A dose that confirms an injection you wrote down yourself (same insulin and amount, at most 15 minutes apart, in the same order) starts ticked: that entry then takes the pen's time instead of the injection being added twice.")
         if pen.profile == nil { text += " " + ExperimentalTexts.text("pensNoInsulin", "No insulin is chosen for this pen, so the doses are added as boluses without a named insulin.") }
         if !complete { text += " " + ExperimentalTexts.text("pensPartial", "The read was cut short: older doses may be missing. Scan again to get them.") }
         return text
     }
 
     private func remark(_ candidate: InsulinPenImport.Candidate) -> String {
+        if let entryDate = candidate.mergesWith {
+            return " · " + String(format: ExperimentalTexts.text("pensConfirmsEntry", "confirms your entry at %@"),
+                                  entryDate.formatted(date: .omitted, time: .shortened))
+        }
         if candidate.dose.priming { return " · " + ExperimentalTexts.text("pensPriming", "air shot?") }
         if candidate.alreadyLogged { return " · " + ExperimentalTexts.text("pensAlreadyLogged", "already logged") }
         if candidate.dose.flags != 0 { return " · " + ExperimentalTexts.text("pensFlagged", "flagged by the pen") }
@@ -1257,11 +1411,16 @@ struct InsulinPenReviewView: View {
 
     private func add() {
         guard let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager else { failed = true; return }
-        let doses = candidates.map(\.dose).filter { selected.contains($0.id) }
+        let chosen = candidates.map(\.dose).filter { selected.contains($0.id) }
+        // A ticked dose that confirms a hand-written entry moves that entry to the pen's time
+        // instead of adding the injection a second time.
+        let confirmed = chosen.compactMap { dose in merges[dose.relativeSeconds].map { (treatment: $0, dose: dose) } }
+        let doses = chosen.filter { merges[$0.relativeSeconds] == nil }
         // A cut-short read may have missed doses between the cursor and what arrived, so the
         // cursor only moves when the read was complete.
         let reviewed = complete ? candidates.map(\.dose) : []
-        guard InsulinPenImport.write(doses, reviewed: reviewed, pen: pen, coreDataManager: coreDataManager) else { failed = true; return }
+        guard InsulinPenImport.applyMerges(confirmed, pen: pen, coreDataManager: coreDataManager),
+              InsulinPenImport.write(doses, reviewed: reviewed, pen: pen, coreDataManager: coreDataManager) else { failed = true; return }
         onImported(doses.count)
         dismiss()
     }

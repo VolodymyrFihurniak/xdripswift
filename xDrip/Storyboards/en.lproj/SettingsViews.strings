@@ -750,11 +750,12 @@
 "experimental.pensSaveFailed" = "The doses could not be saved.";
 "experimental.pensReview" = "Doses on the pen";
 "experimental.pensImport" = "Add";
-"experimental.pensReviewFooter" = "Ticked doses are added as treatments. Unticked doses are not offered again unless the whole log is read. A small dose within a minute before another is taken for an air shot and starts unticked, as does a dose that is already in the treatments.";
+"experimental.pensReviewFooter" = "Ticked doses are added as treatments. Unticked doses are not offered again unless the whole log is read. A small dose within a minute before another is taken for an air shot and starts unticked, as does a dose that is already in the treatments. A dose that confirms an injection you wrote down yourself (same insulin and amount, at most 15 minutes apart, in the same order) starts ticked: that entry then takes the pen's time instead of the injection being added twice.";
 "experimental.pensNoInsulin" = "No insulin is chosen for this pen, so the doses are added as boluses without a named insulin.";
 "experimental.pensPartial" = "The read was cut short: older doses may be missing. Scan again to get them.";
 "experimental.pensPriming" = "air shot?";
 "experimental.pensAlreadyLogged" = "already logged";
+"experimental.pensConfirmsEntry" = "confirms your entry at %@";
 "experimental.pensFlagged" = "flagged by the pen";
 "experimental.pen.hold" = "Hold the top of the iPhone to the pen's dose display and keep it there until the read finishes.";
 "experimental.pen.notAPen" = "This is not a supported insulin pen.";

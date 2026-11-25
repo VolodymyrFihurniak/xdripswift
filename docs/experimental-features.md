@@ -330,3 +330,9 @@ Settings → Experimental features → **Insulin pens (NFC)** reads the dose log
 The pen has no clock, only a counter: dose times are that counter set against the phone's clock at
 the moment of the scan. Doses older than 100 days are ignored. Nothing is imported without the
 review, and iOS only reads a pen while this screen's scan is running.
+
+A dose that confirms an injection you wrote down yourself before reading the pen (same insulin and
+amount, at most 15 minutes apart, matched in order as JugglucoNG does) is shown as "confirms your entry
+at …" and starts ticked: adding it moves that entry to the pen's exact time and names the pen's
+insulin in it, instead of logging the injection twice. iOS cannot read a pen in the background (an
+NFC session always starts from a tap), so JugglucoNG's unattended import has no counterpart here.

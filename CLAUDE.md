@@ -165,7 +165,9 @@ Glucose meters (`GlucoseMeterGATT`, `VerioMeterSession`, `GlucoseMeterLink` in E
 Insulin pens (`xDrip/Managers/Therapy/InsulinPenReader.swift`): Swift port of JugglucoNG
 `NovoPen/opennov` (NFC Type 4 `PenT4` → `PenPHD` record → IEEE 11073 `PenMessage`/`PenMachine`,
 run by `PenSession` over a `PenTransport`), `PenDoseParser`, `InsulinPenStore` (UserDefaults JSON,
-cursor = newest reviewed pen counter) and `InsulinPenImport`. CoreNFC needs the NDEF AID
+cursor = newest reviewed pen counter) and `InsulinPenImport`. `PenManualMergePlanner` (JugglucoNG): a dose
+that confirms a hand-written insulin entry (same insulin, amount, ≤ 15 min, in order) moves that entry to the
+pen's time instead of adding it twice; imported doses carry `enteredBy` "Insulin pen". CoreNFC needs the NDEF AID
 `D2760000850101` in Info.plist `...iso7816.select-identifiers`. Tested only against the
 `SimulatedPen` in the tests (verified with a Python port) — never against a real pen.
 
@@ -204,7 +206,8 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 
 ## Not ported (yet)
 
-Of the NovoPen import, the unattended background read and the merge with hand-written entries.
+NovoPen unattended background read: iOS opens an NFC session only on the user's tap (no background
+ISO 7816 reading), so a pen is always read from the Insulin pens screen.
 
 ## Git
 
