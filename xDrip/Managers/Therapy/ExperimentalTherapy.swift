@@ -2674,17 +2674,144 @@ struct VerioMeterSession {
     }
 }
 
+/// JugglucoNG `SatelliteMeterProtocol`: the ELTA Satellite (Сателлит+) meter over the Nordic UART
+/// service, ASCII commands one at a time: PIN, clock (UTC), then records `rd.000`… until an empty slot.
+enum SatelliteMeterProtocol {
+    static let service = CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
+    static let rx = CBUUID(string: "6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
+    static let tx = CBUUID(string: "6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
+    static let maximumBackfillRecords = 10
+    static let emptySlot = "rd000000000000000000"
+    /// The meter reports capillary values; JugglucoNG converts them to plasma.
+    static let capillaryToPlasma = 1.12
+
+    /// A three-digit PIN as typed, or the PIN derived from the code printed on the meter
+    /// (D or E and at least seven digits).
+    static func resolvePin(_ input: String?) -> String? {
+        let value = (input ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.count == 3, value.allSatisfy(\.isASCII), value.allSatisfy(\.isNumber) { return value }
+        guard let first = value.uppercased().first, first == "D" || first == "E" else { return nil }
+        let digits = value.dropFirst()
+        guard digits.count >= 7, digits.allSatisfy({ $0.isASCII && $0.isNumber }), let number = UInt64(digits.suffix(6)) else { return nil }
+        let scrambled = (number &* 599_681_139 &+ 123) & 0xFFFF_FFFF
+        return String(format: "%03d", Int(scrambled % 1000))
+    }
+
+    static func pinCommand(_ pin: String) -> Data { Data("pin.\(pin)".utf8) }
+
+    static func setTimeCommand(_ date: Date) -> Data {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        return Data(String(format: "settime.%02d%02d%02d%02d%02d%02d", (parts.year ?? 0) % 100, parts.month ?? 0, parts.day ?? 0,
+                           parts.hour ?? 0, parts.minute ?? 0, parts.second ?? 0).utf8)
+    }
+
+    static func recordCommand(_ index: Int) -> Data { Data(String(format: "rd.%03d", min(max(index, 0), 999)).utf8) }
+
+    static func decode(_ data: Data) -> String {
+        (String(data: data, encoding: .ascii) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// `rd` + yyMMddHHmmss (UTC) + three digits + glucose in tenths of mmol/L (capillary).
+    static func parseRecord(_ response: String, index: Int) -> GlucoseMeterRecord? {
+        let text = Array(response.lowercased())
+        guard text.count == 20, text[0] == "r", text[1] == "d", text[2...].allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        func number(_ range: Range<Int>) -> Int { Int(String(text[range])) ?? -1 }
+        var components = DateComponents()
+        components.year = 2000 + number(2..<4)
+        components.month = number(4..<6)
+        components.day = number(6..<8)
+        components.hour = number(8..<10)
+        components.minute = number(10..<12)
+        components.second = number(12..<14)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        guard components.isValidDate(in: calendar), let date = calendar.date(from: components) else { return nil }
+        let tenths = (Double(number(17..<20)) * capillaryToPlasma * GlucoseMeterGATT.mgDlPerMmol).rounded()
+        guard (200...7000).contains(tenths) else { return nil }
+        return GlucoseMeterRecord(sequence: index, date: date, mgDl: tenths / 10)
+    }
+}
+
+/// JugglucoNG `SatelliteMeterSession`: authentication, clock sync and up to ten records.
+struct SatelliteMeterSession {
+    enum Update: Equatable {
+        case send(Data)
+        case complete
+        case failed(String)
+    }
+
+    private enum Stage { case ready, awaitingPin, awaitingTimeAck, awaitingRecord, complete }
+
+    let pin: String
+    let now: Date
+    private var stage = Stage.ready
+    private var recordIndex = 0
+    private(set) var readings: [GlucoseMeterRecord] = []
+
+    init(pin: String, now: Date = Date()) {
+        self.pin = pin
+        self.now = now
+    }
+
+    mutating func notificationsEnabled() -> Update {
+        guard stage == .ready else { return fail("Satellite session already started") }
+        stage = .awaitingPin
+        return .send(SatelliteMeterProtocol.pinCommand(pin))
+    }
+
+    mutating func onNotification(_ data: Data) -> Update {
+        let response = SatelliteMeterProtocol.decode(data)
+        switch stage {
+        case .awaitingPin:
+            guard response.lowercased() == "pin.ok" else { return fail(ExperimentalTexts.text("meter.pinRejected", "The meter refused the code.")) }
+            stage = .awaitingTimeAck
+            return .send(SatelliteMeterProtocol.setTimeCommand(now))
+        case .awaitingTimeAck:
+            stage = .awaitingRecord
+            recordIndex = 0
+            return .send(SatelliteMeterProtocol.recordCommand(0))
+        case .awaitingRecord:
+            if response.lowercased() == SatelliteMeterProtocol.emptySlot { return finish() }
+            guard let reading = SatelliteMeterProtocol.parseRecord(response, index: recordIndex) else {
+                return fail("Malformed Satellite record")
+            }
+            guard reading.date <= now.addingTimeInterval(24 * 60 * 60) else { return fail("Satellite record timestamp is in the future") }
+            readings.append(reading)
+            recordIndex += 1
+            return recordIndex >= SatelliteMeterProtocol.maximumBackfillRecords ? finish() : .send(SatelliteMeterProtocol.recordCommand(recordIndex))
+        case .ready:
+            return fail("Satellite notification before authentication")
+        case .complete:
+            return .complete
+        }
+    }
+
+    private mutating func finish() -> Update {
+        stage = .complete
+        return .complete
+    }
+
+    private mutating func fail(_ message: String) -> Update {
+        stage = .complete
+        return .failed(message)
+    }
+}
+
 /// The paired meter and how far its records have been read (UserDefaults).
 enum GlucoseMeterStore {
-    enum Kind: String, Codable { case gatt, verio }
+    enum Kind: String, Codable { case gatt, verio, satellite }
 
     struct Meter: Codable, Equatable {
         let identifier: UUID
         let name: String
         let kind: Kind
-        /// Highest record number read.
+        /// Highest record number read (Satellite numbers its records from the newest, so not there).
         var lastSequence: Int?
         var lastSync: Date?
+        /// Satellite: the PIN, from the code printed on the meter.
+        var pin: String?
     }
 
     private static let key = "experimentalGlucoseMeter"
@@ -2762,6 +2889,8 @@ final class GlucoseMeterLink: NSObject, ObservableObject {
     private var records: [GlucoseMeterRecord] = []
     private var verio = VerioMeterSession()
     private var verioWrite: CBCharacteristic?
+    private var satellite: SatelliteMeterSession?
+    private var satelliteWrite: CBCharacteristic?
     private var timeoutGeneration = 0
     private var coreDataManager: CoreDataManager? { TherapyMetricsManager.shared.configuredCoreDataManager }
 
@@ -2778,7 +2907,7 @@ final class GlucoseMeterLink: NSObject, ObservableObject {
         found = []
         state = .scanning
         withCentral { [weak self] in
-            self?.central?.scanForPeripherals(withServices: [GlucoseMeterGATT.service, VerioMeterSession.service])
+            self?.central?.scanForPeripherals(withServices: [GlucoseMeterGATT.service, VerioMeterSession.service, SatelliteMeterProtocol.service])
             DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
                 guard let self, self.state == .scanning else { return }
                 self.central?.stopScan()
@@ -2792,9 +2921,10 @@ final class GlucoseMeterLink: NSObject, ObservableObject {
         if state == .scanning { state = .idle }
     }
 
-    /// Pairs `meter` (iOS asks for its PIN when the meter needs one) and reads it.
-    func pair(_ found: Found) {
-        GlucoseMeterStore.save(GlucoseMeterStore.Meter(identifier: found.id, name: found.name, kind: found.kind))
+    /// Pairs `meter` (iOS asks for its PIN when the meter needs one) and reads it. A Satellite needs
+    /// the code printed on it (`pin`).
+    func pair(_ found: Found, pin: String? = nil) {
+        GlucoseMeterStore.save(GlucoseMeterStore.Meter(identifier: found.id, name: found.name, kind: found.kind, pin: pin))
         sync()
     }
 
@@ -2845,6 +2975,8 @@ final class GlucoseMeterLink: NSObject, ObservableObject {
         if let peripheral { central?.cancelPeripheralConnection(peripheral) }
         peripheral = nil
         verioWrite = nil
+        satelliteWrite = nil
+        satellite = nil
     }
 
     private func finish(error: String? = nil) {
@@ -2853,13 +2985,31 @@ final class GlucoseMeterLink: NSObject, ObservableObject {
         var imported = 0
         if var saved = meter, let coreDataManager {
             imported = GlucoseMeterImport.save(records, meterName: saved.name, coreDataManager: coreDataManager)
-            if let highest = records.map(\.sequence).max() { saved.lastSequence = max(saved.lastSequence ?? 0, highest) }
+            if saved.kind != .satellite, let highest = records.map(\.sequence).max() {
+                saved.lastSequence = max(saved.lastSequence ?? 0, highest)
+            }
             if error == nil || !records.isEmpty { saved.lastSync = Date() }
             GlucoseMeterStore.save(saved)
             meter = saved
         }
         records = []
         state = error.map { .failed($0) } ?? .finished(imported: imported)
+    }
+
+    private func handleSatellite(_ update: SatelliteMeterSession.Update) {
+        switch update {
+        case .send(let command):
+            if let peripheral, let satelliteWrite {
+                peripheral.writeValue(command, for: satelliteWrite,
+                                      type: satelliteWrite.properties.contains(.write) ? .withResponse : .withoutResponse)
+            }
+        case .complete:
+            records += satellite?.readings ?? []
+            finish()
+        case .failed(let message):
+            records += satellite?.readings ?? []
+            finish(error: message)
+        }
     }
 
     private func writeNextVerioCommand() {
@@ -2892,7 +3042,8 @@ extension GlucoseMeterLink: CBCentralManagerDelegate {
             ?? ExperimentalTexts.text("meter.unnamed", "Glucose meter")
         let identifier = peripheral.identifier
         MainActor.assumeIsolated {
-            let kind: GlucoseMeterStore.Kind = services.contains(VerioMeterSession.service) ? .verio : .gatt
+            let kind: GlucoseMeterStore.Kind = services.contains(VerioMeterSession.service) ? .verio
+                : services.contains(SatelliteMeterProtocol.service) ? .satellite : .gatt
             guard !found.contains(where: { $0.id == identifier }) else { return }
             found.append(Found(id: identifier, name: name, kind: kind))
         }
@@ -2900,7 +3051,7 @@ extension GlucoseMeterLink: CBCentralManagerDelegate {
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         MainActor.assumeIsolated {
-            peripheral.discoverServices([GlucoseMeterGATT.service, VerioMeterSession.service])
+            peripheral.discoverServices([GlucoseMeterGATT.service, VerioMeterSession.service, SatelliteMeterProtocol.service])
         }
     }
 
@@ -2922,7 +3073,8 @@ extension GlucoseMeterLink: CBCentralManagerDelegate {
 extension GlucoseMeterLink: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         MainActor.assumeIsolated {
-            for service in peripheral.services ?? [] where service.uuid == GlucoseMeterGATT.service || service.uuid == VerioMeterSession.service {
+            for service in peripheral.services ?? []
+            where [GlucoseMeterGATT.service, VerioMeterSession.service, SatelliteMeterProtocol.service].contains(service.uuid) {
                 peripheral.discoverCharacteristics(nil, for: service)
             }
         }
@@ -2931,7 +3083,12 @@ extension GlucoseMeterLink: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         MainActor.assumeIsolated {
             let characteristics = service.characteristics ?? []
-            if service.uuid == VerioMeterSession.service {
+            if service.uuid == SatelliteMeterProtocol.service {
+                satelliteWrite = characteristics.first { $0.uuid == SatelliteMeterProtocol.rx }
+                if let notify = characteristics.first(where: { $0.uuid == SatelliteMeterProtocol.tx }) {
+                    peripheral.setNotifyValue(true, for: notify)
+                }
+            } else if service.uuid == VerioMeterSession.service {
                 verioWrite = characteristics.first { $0.uuid == VerioMeterSession.write }
                 if let notify = characteristics.first(where: { $0.uuid == VerioMeterSession.notify }) {
                     peripheral.setNotifyValue(true, for: notify)
@@ -2960,6 +3117,15 @@ extension GlucoseMeterLink: CBPeripheralDelegate {
             case VerioMeterSession.notify:
                 verio.begin()
                 writeNextVerioCommand()
+            case SatelliteMeterProtocol.tx:
+                guard let pin = SatelliteMeterProtocol.resolvePin(meter?.pin) else {
+                    finish(error: ExperimentalTexts.text("meter.pinRejected", "The meter refused the code."))
+                    return
+                }
+                var session = SatelliteMeterSession(pin: pin)
+                let update = session.notificationsEnabled()
+                satellite = session
+                handleSatellite(update)
             default:
                 break
             }
@@ -2989,6 +3155,11 @@ extension GlucoseMeterLink: CBPeripheralDelegate {
                 case .failed(let code): finish(error: String(format: ExperimentalTexts.text("meter.refused", "The meter refused the request (code %ld)."), code))
                 case nil: break
                 }
+            case SatelliteMeterProtocol.tx:
+                guard var session = satellite else { return }
+                let update = session.onNotification(value)
+                satellite = session
+                handleSatellite(update)
             case VerioMeterSession.notify:
                 verio.onNotification(value, alreadyHave: meter?.lastSequence ?? 0)
                 records += verio.takeReadings()

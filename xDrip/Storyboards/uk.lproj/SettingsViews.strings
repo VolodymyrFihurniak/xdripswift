@@ -1153,6 +1153,10 @@
 "experimental.meter.bluetoothOff" = "Bluetooth вимкнено або xDrip не має до нього доступу.";
 "experimental.meter.refused" = "Глюкометр відхилив запит (код %ld).";
 "experimental.meter.unnamed" = "Глюкометр";
+"experimental.meter.satelliteCode" = "Код на глюкометрі";
+"experimental.meter.pair" = "Сполучити";
+"experimental.meter.satelliteCodeMessage" = "Введіть код, надрукований на глюкометрі (літера й щонайменше сім цифр), або його тризначний PIN.";
+"experimental.meter.pinRejected" = "Глюкометр не прийняв код.";
 "experimental.alertsIntroduction" = "Експериментальні доповнення до сигналів із JugglucoNG. Усі типово вимкнені.";
 "experimental.muteHighFalling" = "Без сигналу «Високо» під час падіння";
 "experimental.signalRestored" = "Сповіщати про відновлення сигналу";

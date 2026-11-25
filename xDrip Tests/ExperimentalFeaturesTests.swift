@@ -1749,3 +1749,40 @@ final class GlucoseMeterProtocolTests: XCTestCase {
         XCTAssertEqual(GlucoseMeterImport.newRecords(records, existing: [(start.addingTimeInterval(30), 140)]).count, 2)
     }
 }
+
+/// JugglucoNG `SatelliteMeterProtocol`; PIN and values from a Python port.
+final class SatelliteMeterProtocolTests: XCTestCase {
+    func testPinFromPrintedCodeOrTyped() {
+        XCTAssertEqual(SatelliteMeterProtocol.resolvePin("E1234567"), "640")
+        XCTAssertEqual(SatelliteMeterProtocol.resolvePin("d0000001"), "262")
+        XCTAssertEqual(SatelliteMeterProtocol.resolvePin(" 042 "), "042")
+        XCTAssertNil(SatelliteMeterProtocol.resolvePin("E123"))
+        XCTAssertNil(SatelliteMeterProtocol.resolvePin("X1234567"))
+    }
+
+    func testCommandsAndRecords() throws {
+        XCTAssertEqual(SatelliteMeterProtocol.pinCommand("640"), Data("pin.640".utf8))
+        XCTAssertEqual(SatelliteMeterProtocol.recordCommand(7), Data("rd.007".utf8))
+        XCTAssertEqual(SatelliteMeterProtocol.setTimeCommand(Date(timeIntervalSince1970: 1_795_595_415)), Data("settime.261125083015".utf8))
+        // 6.5 mmol/L capillary → 131.2 mg/dL plasma, at 2026-11-25 08:30:15 UTC.
+        let record = try XCTUnwrap(SatelliteMeterProtocol.parseRecord("rd261125083015000065", index: 0))
+        XCTAssertEqual(record.date, Date(timeIntervalSince1970: 1_795_595_415))
+        XCTAssertEqual(record.mgDl, 131.2, accuracy: 1e-9)
+        XCTAssertNil(SatelliteMeterProtocol.parseRecord("rd261325083015000065", index: 0))
+    }
+
+    func testSessionStopsAtTheEmptySlot() {
+        let now = Date(timeIntervalSince1970: 1_795_595_415 + 3600)
+        var session = SatelliteMeterSession(pin: "640", now: now)
+        XCTAssertEqual(session.notificationsEnabled(), .send(Data("pin.640".utf8)))
+        XCTAssertEqual(session.onNotification(Data("pin.ok\r\n".utf8)), .send(SatelliteMeterProtocol.setTimeCommand(now)))
+        XCTAssertEqual(session.onNotification(Data("ok".utf8)), .send(Data("rd.000".utf8)))
+        XCTAssertEqual(session.onNotification(Data("rd261125083015000065".utf8)), .send(Data("rd.001".utf8)))
+        XCTAssertEqual(session.onNotification(Data(SatelliteMeterProtocol.emptySlot.utf8)), .complete)
+        XCTAssertEqual(session.readings.count, 1)
+
+        var refused = SatelliteMeterSession(pin: "111", now: now)
+        _ = refused.notificationsEnabled()
+        if case .failed = refused.onNotification(Data("pin.err".utf8)) {} else { XCTFail("a refused PIN must fail") }
+    }
+}

@@ -677,6 +677,10 @@
 "experimental.meter.bluetoothOff" = "Bluetooth is off or not allowed for xDrip.";
 "experimental.meter.refused" = "The meter refused the request (code %ld).";
 "experimental.meter.unnamed" = "Glucose meter";
+"experimental.meter.satelliteCode" = "Code on the meter";
+"experimental.meter.pair" = "Pair";
+"experimental.meter.satelliteCodeMessage" = "Enter the code printed on the meter (a letter and at least seven digits) or its three-digit PIN.";
+"experimental.meter.pinRejected" = "The meter refused the code.";
 "experimental.alertsIntroduction" = "Experimental additions to the alarms, from JugglucoNG. All are off by default.";
 "experimental.muteHighFalling" = "No High alarm while falling";
 "experimental.signalRestored" = "Notify when signal is restored";

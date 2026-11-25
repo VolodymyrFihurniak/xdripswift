@@ -916,6 +916,8 @@ struct ExperimentalPredictionInspectorView: View {
 struct GlucoseMeterSettingsView: View {
     @ObservedObject private var link = GlucoseMeterLink.shared
     @State private var meter = GlucoseMeterStore.meter()
+    @State private var pendingSatellite: GlucoseMeterLink.Found?
+    @State private var satelliteCode = ""
 
     var body: some View {
         List {
@@ -946,10 +948,16 @@ struct GlucoseMeterSettingsView: View {
                     }
                     ForEach(link.found) { found in
                         Button {
-                            link.pair(found)
-                            meter = GlucoseMeterStore.meter()
+                            if found.kind == .satellite {
+                                satelliteCode = ""
+                                pendingSatellite = found
+                            } else {
+                                link.pair(found)
+                                meter = GlucoseMeterStore.meter()
+                            }
                         } label: {
-                            LabeledContent(found.name, value: found.kind == .verio ? "OneTouch Verio" : "Glucose Profile")
+                            LabeledContent(found.name, value: found.kind == .verio ? "OneTouch Verio"
+                                           : found.kind == .satellite ? "Satellite" : "Glucose Profile")
                         }
                     }
                 }
@@ -965,6 +973,22 @@ struct GlucoseMeterSettingsView: View {
         }
         .navigationTitle(ExperimentalTexts.text("meter.title", "Glucose meters (Bluetooth)"))
         .onChange(of: link.state) { _ in meter = GlucoseMeterStore.meter() }
+        .alert(ExperimentalTexts.text("meter.satelliteCode", "Code on the meter"),
+               isPresented: Binding(get: { pendingSatellite != nil }, set: { if !$0 { pendingSatellite = nil } })) {
+            TextField("E1234567", text: $satelliteCode)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+            Button(Texts_Common.Cancel, role: .cancel) { pendingSatellite = nil }
+            Button(ExperimentalTexts.text("meter.pair", "Pair")) {
+                if let found = pendingSatellite, SatelliteMeterProtocol.resolvePin(satelliteCode) != nil {
+                    link.pair(found, pin: satelliteCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
+                    meter = GlucoseMeterStore.meter()
+                }
+                pendingSatellite = nil
+            }
+        } message: {
+            Text(ExperimentalTexts.text("meter.satelliteCodeMessage", "Enter the code printed on the meter (a letter and at least seven digits) or its three-digit PIN."))
+        }
         .onDisappear { link.stopScan() }
     }
 

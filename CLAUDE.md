@@ -149,7 +149,7 @@ usual amount in `TreatmentEditorViewModel` from xDrip-typed entries (`enteredBy`
 
 Glucose meters (`GlucoseMeterGATT`, `VerioMeterSession`, `GlucoseMeterLink` in ExperimentalTherapy.swift,
 `GlucoseMeterSettingsView`): own CBCentralManager, readings saved as BgCheck treatments
-(`GlucoseMeterImport`), paired meter in UserDefaults `experimentalGlucoseMeter`; Satellite not ported.
+(`GlucoseMeterImport`), paired meter in UserDefaults `experimentalGlucoseMeter`; Satellite = `SatelliteMeterProtocol`/`SatelliteMeterSession`.
 
 Insulin pens (`xDrip/Managers/Therapy/InsulinPenReader.swift`): Swift port of JugglucoNG
 `NovoPen/opennov` (NFC Type 4 `PenT4` → `PenPHD` record → IEEE 11073 `PenMessage`/`PenMachine`,
@@ -193,7 +193,7 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 
 ## Not ported (yet)
 
-JugglucoNG Satellite glucose meters, alternative glucose model Adaptive V1 (Balanced, Responsive and Adaptive V2 are ported), GS3 variant
+JugglucoNG alternative glucose model Adaptive V1 (Balanced, Responsive and Adaptive V2 are ported), GS3 variant
 and raw source-journal backup/recovery; of the NovoPen import, the
 unattended background read and the merge with hand-written entries.
 
