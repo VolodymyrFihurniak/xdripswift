@@ -118,6 +118,14 @@ Bluetooth error, authentication attempts and key groups, stalled handshakes, mis
 resets and reconnects, up to 200 events. The newest twelve are listed; **Copy log** puts the whole
 log on the clipboard for a problem report. It is cleared when the sensor is deleted.
 
+## Recalculating history
+
+xDrip keeps each Sibionics sensor's raw minutes (JugglucoNG's source journal). A new label code,
+sensitivity, glucose model or the GS3 switch recalculates the history from that journal on the phone,
+without downloading the sensor's whole life over Bluetooth; only minutes missing from the journal
+are asked from the sensor. Backups include the journals, and restoring one adds only minutes the
+phone does not already hold.
+
 ## Sibionics GS3
 
 A GS3 is added as **Sibionics 1** with **GS3 sensor** switched on in its device settings. It then

@@ -158,6 +158,9 @@ struct BackupPayload: Codable, Sendable {
     // Older backups have no battery history or CareLink identity map.
     var batteryHistory: [BackupBatteryHistorySample]? = nil
     var careLinkPatientAliases: [String: String]? = nil
+    /// Sibionics raw source journals by file name (JugglucoNG `SibionicsSourceJournalBackup`); older
+    /// backups have none.
+    var sibionicsSourceJournals: [String: Data]? = nil
 }
 
 // MARK: - Settings and Alerts

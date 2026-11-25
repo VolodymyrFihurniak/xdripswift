@@ -837,3 +837,56 @@ final class SibionicsGS3Tests: XCTestCase {
         defaults.removePersistentDomain(forName: "SibionicsGS3Tests")
     }
 }
+
+/// JugglucoNG `SibionicsSampleJournal` record layout; bytes and CRC-32 from a Python port
+/// (`struct.pack('>IIIqfffI', ...)`, `zlib.crc32`).
+final class SibionicsSourceJournalTests: XCTestCase {
+    private let sample = SibionicsSourceJournal.Sample(index: 42, timestampMs: 1_800_000_000_000, rawMmol: 7.5,
+                                                       temperatureC: 34.25, impedance: 1200, variantId: 2)
+
+    private func hex(_ string: String) -> Data {
+        Data(stride(from: 0, to: string.count, by: 2).map {
+            UInt8(string[string.index(string.startIndex, offsetBy: $0)..<string.index(string.startIndex, offsetBy: $0 + 2)], radix: 16)!
+        })
+    }
+
+    func testRecordMatchesJugglucoNGBytes() {
+        XCTAssertEqual(SibionicsSourceJournal.crc32(Array("123456789".utf8)), 0xCBF4_3926)
+        let expected = hex("534a5231000000010000002a000001a3185c500040f00000420900004496000000000002" + "341c31c1")
+        XCTAssertEqual(SibionicsSourceJournal.encode(sample), expected)
+        XCTAssertEqual(SibionicsSourceJournal.decode(expected), [sample])
+    }
+
+    func testDecodingStopsAtADamagedRecordAndLaterRecordsWin() {
+        let changed = SibionicsSourceJournal.Sample(index: 42, timestampMs: 1_800_000_000_000, rawMmol: 7.6,
+                                                    temperatureC: 34.25, impedance: 1200, variantId: 2)
+        var data = SibionicsSourceJournal.encode(sample) + SibionicsSourceJournal.encode(changed)
+        XCTAssertEqual(SibionicsSourceJournal.decode(data), [changed])
+        data.append(Data(repeating: 0, count: 39))
+        XCTAssertEqual(SibionicsSourceJournal.decode(data), [changed])
+        var damaged = SibionicsSourceJournal.encode(sample)
+        damaged[10] ^= 0xFF
+        XCTAssertTrue(SibionicsSourceJournal.decode(damaged).isEmpty)
+    }
+
+    func testChangesKeepTheFirstTimeAndSkipRepeats() {
+        let later = SibionicsSourceJournal.Sample(index: 42, timestampMs: 1_800_000_060_000, rawMmol: 7.5,
+                                                  temperatureC: 34.25, impedance: 1200, variantId: 2)
+        XCTAssertTrue(SibionicsSourceJournal.changes([later], existing: [42: sample]).isEmpty)
+        let other = SibionicsSourceJournal.Sample(index: 42, timestampMs: 1_800_000_060_000, rawMmol: 8,
+                                                  temperatureC: 34.25, impedance: 1200, variantId: 2)
+        XCTAssertEqual(SibionicsSourceJournal.changes([other], existing: [42: sample]).map(\.timestampMs), [1_800_000_000_000])
+    }
+
+    func testContiguousRunStopsAtTheFirstGap() {
+        func at(_ index: Int) -> SibionicsSourceJournal.Sample {
+            SibionicsSourceJournal.Sample(index: index, timestampMs: 1_800_000_000_000 + Int64(index) * 60_000, rawMmol: 7,
+                                          temperatureC: 34, impedance: 1000, variantId: 2)
+        }
+        XCTAssertEqual(SibionicsSourceJournal.contiguousRun([at(3), at(1), at(2), at(5)]).map(\.index), [1, 2, 3])
+        let reading = SibionicsSourceJournal.reading(from: at(2))
+        XCTAssertEqual(reading.index, 2)
+        XCTAssertEqual(reading.eventTime, Date(timeIntervalSince1970: 1_800_000_120))
+        XCTAssertEqual(reading.reindex, 1)
+    }
+}

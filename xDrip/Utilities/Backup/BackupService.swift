@@ -234,7 +234,8 @@ final class BackupService: @unchecked Sendable {
             profiles: snapshot.4,
             batteryHistory: snapshot.5,
             careLinkPatientAliases: options.includesTreatments
-                ? UserDefaults.standard.dictionary(forKey: UserDefaults.Key.careLinkPatientAliases.rawValue) as? [String: String] : nil
+                ? UserDefaults.standard.dictionary(forKey: UserDefaults.Key.careLinkPatientAliases.rawValue) as? [String: String] : nil,
+            sibionicsSourceJournals: options.includesBgReadings ? SibionicsSourceJournal.exportAll().nilIfEmpty : nil
         )
         let json = try encoder.encode(payload)
         let compressed = try (json as NSData).compressed(using: .lzfse) as Data
@@ -387,6 +388,10 @@ final class BackupService: @unchecked Sendable {
                 deviceStatusCounts = try self.restoreDeviceStatuses(payload.deviceStatuses ?? [], context: context)
                 profileCounts = try self.restoreProfiles(payload.profiles ?? [], context: context)
                 try self.restoreBatteryHistory(payload.batteryHistory ?? [], mode: mode, context: context)
+                // Merged, the phone's own minutes winning, so restoring never loses newer ones.
+                for (name, data) in payload.sibionicsSourceJournals ?? [:] {
+                    SibionicsSourceJournal.restore(name: name, data: data)
+                }
             }
             if restoresSettings && payload.settings != nil {
                 try self.replaceAlertTypes(payload.alertTypes, context: context)
@@ -1271,4 +1276,8 @@ enum AutomaticBackup {
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: notificationIdentifier, content: content, trigger: nil),
                                                withCompletionHandler: nil)
     }
+}
+
+private extension Dictionary {
+    var nilIfEmpty: Self? { isEmpty ? nil : self }
 }

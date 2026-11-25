@@ -47,6 +47,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var deviceInformationGeneration = 0
     private var historyRequest = Sibionics2HistoryRequestTracker()
     private var historyRecoveryToken = 0
+    private var journalReplayGeneration = 0
     private var historyWriteFailures = 0
     private var historyRetryScheduled = false
     private var historyReconnectCount = 0
@@ -584,6 +585,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             self.streamingWatchdogGeneration += 1
             self.autoResetCheckGeneration += 1
             self.resetDisconnectGeneration += 1
+            self.journalReplayGeneration += 1
             self.handshake = nil
             self.batchProcessor = nil
             self.probeReplaySessionStartDate = nil
@@ -621,7 +623,32 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             trace("Sibionics 2 probe code changed; replaying history with decoded factory sensitivity",
                   log: self.transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
-            self.requestNewReading()
+            // JugglucoNG rebuilds from its source journal; the sensor is asked only for what it lacks.
+            let journal = SibionicsSourceJournal.contiguousRun(
+                SibionicsSourceJournal.samples(for: address, sessionStart: self.probeReplaySessionStartDate))
+            self.journalReplayGeneration += 1
+            // A V120 journal must start at the first minute; a Chinese one may start after warm-up.
+            if journal.count > 1, let first = journal.first, first.index <= 1 || self.usesChineseProtocol {
+                self.logEvent("recalculating \(journal.count) minutes from the source journal")
+                self.replayFromJournal(journal.map(SibionicsSourceJournal.reading(from:)), generation: self.journalReplayGeneration)
+            } else {
+                self.requestNewReading()
+            }
+        }
+    }
+
+    /// Feeds journal minutes through the processor a day at a time, then asks the sensor for newer ones.
+    private func replayFromJournal(_ readings: [Sibionics2RawReading], generation: Int) {
+        guard journalReplayGeneration == generation else { return }
+        let chunk = Array(readings.prefix(1440))
+        receiveReadings(chunk, at: Date(), fromJournal: true)
+        let rest = Array(readings.dropFirst(chunk.count))
+        guard !rest.isEmpty else {
+            requestNewReading()
+            return
+        }
+        runOnCentralQueue(after: 0.05) { [weak self] in
+            self?.replayFromJournal(rest, generation: generation)
         }
     }
 
@@ -1314,9 +1341,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         disconnect()
     }
 
-    private func receiveReadings(_ readings: [Sibionics2RawReading], at receivedAt: Date) {
+    private func receiveReadings(_ readings: [Sibionics2RawReading], at receivedAt: Date, fromJournal: Bool = false) {
         guard let address = deviceAddress else { return }
-        if !readings.isEmpty {
+        if !readings.isEmpty, !fromJournal {
             if Sibionics2DeviceStatus.lastLinkProblem(for: address) != nil {
                 Sibionics2DeviceStatus.setLastLinkProblem(nil, for: address)
             }
@@ -1333,6 +1360,13 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let requiresHistoryReplay = currentProcessor.requiresHistoryReplay
         let currentState = currentProcessor.state
         batchProcessor = currentProcessor
+
+        // JugglucoNG's source journal: keep the raw minutes for a local recalculation and backups.
+        if !fromJournal, let first = readings.min(by: { $0.index < $1.index }) {
+            let inferredStart = first.eventTime.addingTimeInterval(-TimeInterval(first.index) * Sibionics2SensorProfile.sampleInterval)
+            SibionicsSourceJournal.append(readings, sessionStart: currentState?.sensorStartDate ?? inferredStart,
+                                          address: address, variant: variant)
+        }
 
         if requiresHistoryReplay, let sessionStart = currentState?.sensorStartDate {
             trace("Sibionics 2 waiting for missing history from saved cursor",

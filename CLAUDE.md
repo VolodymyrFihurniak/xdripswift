@@ -92,6 +92,11 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
   (`Sibionics2ProcessedGlucose.lowerMgDl/upperMgDl`) goes to `GlucoseUncertaintyStore` (36 h JSON) and
   is drawn as JugglucoNG's uncertainty ribbon on the Home chart (`experimentalUncertaintyRibbonEnabled`). Processor snapshot version 3 = version 2 + estimator state; the other
   model's snapshot is refused, so changing the model replays history.
+- **Source journal** (`SibionicsSourceJournal`, end of `Sibionics2ReadingBatchProcessor.swift`, JugglucoNG
+  `SibionicsSampleJournal` record layout SJR1 + CRC-32): every received raw minute per sensor in Application
+  Support/sibionics-source, new session = new journal. `probeCodeDidChange` (sensitivity, model, GS3) replays
+  the contiguous journal locally a day per step (`replayFromJournal`), then asks the sensor for newer minutes.
+  Backups carry the journals (`BackupPayload.sibionicsSourceJournals`), restored by merge, phone wins.
 - **Last link problem** (`Sibionics2DeviceStatus.lastLinkProblem`, JugglucoNG "Last BLE status"): set by
   `noteLinkProblem` on lost links, refusals, stalls and auth failures, cleared by a reading; shown on the
   device screen. Home says "no signal" after 3 min for 1-minute sensors (`RootHomeSensorReach`).
@@ -199,8 +204,7 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 
 ## Not ported (yet)
 
-Raw source-journal backup/recovery; of the NovoPen import, the
-unattended background read and the merge with hand-written entries.
+Of the NovoPen import, the unattended background read and the merge with hand-written entries.
 
 ## Git
 
