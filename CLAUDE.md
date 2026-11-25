@@ -147,6 +147,10 @@ request). It fills the editor's carbs/protein/fat; the meal itself is not stored
 Amount assist (`TreatmentAmountAssist`, JugglucoNG `JournalAmountAssist`, no setting): stepper step and
 usual amount in `TreatmentEditorViewModel` from xDrip-typed entries (`enteredBy` nil or the app name).
 
+Glucose meters (`GlucoseMeterGATT`, `VerioMeterSession`, `GlucoseMeterLink` in ExperimentalTherapy.swift,
+`GlucoseMeterSettingsView`): own CBCentralManager, readings saved as BgCheck treatments
+(`GlucoseMeterImport`), paired meter in UserDefaults `experimentalGlucoseMeter`; Satellite not ported.
+
 Insulin pens (`xDrip/Managers/Therapy/InsulinPenReader.swift`): Swift port of JugglucoNG
 `NovoPen/opennov` (NFC Type 4 `PenT4` → `PenPHD` record → IEEE 11073 `PenMessage`/`PenMachine`,
 run by `PenSession` over a `PenTransport`), `PenDoseParser`, `InsulinPenStore` (UserDefaults JSON,
@@ -189,7 +193,7 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 
 ## Not ported (yet)
 
-JugglucoNG alternative glucose model Adaptive V1 (Balanced, Responsive and Adaptive V2 are ported), GS3 variant
+JugglucoNG Satellite glucose meters, alternative glucose model Adaptive V1 (Balanced, Responsive and Adaptive V2 are ported), GS3 variant
 and raw source-journal backup/recovery; of the NovoPen import, the
 unattended background read and the merge with hand-written entries.
 

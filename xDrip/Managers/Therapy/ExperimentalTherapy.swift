@@ -13,6 +13,7 @@
 //
 
 import Foundation
+import CoreBluetooth
 import CoreData
 import SwiftUI
 
@@ -2426,5 +2427,575 @@ enum TreatmentAmountAssist {
     private static func timeOfDayDistance(_ first: Int, _ second: Int) -> Int {
         let distance = abs(first - second)
         return min(distance, 24 * 60 - distance)
+    }
+}
+
+// MARK: - Bluetooth glucose meters
+
+/// A finger-stick reading a meter sent: its record number on the meter, when, and mg/dL.
+struct GlucoseMeterRecord: Equatable {
+    let sequence: Int
+    let date: Date
+    let mgDl: Double
+}
+
+/// The Bluetooth SIG Glucose Profile (service 0x1808), as JugglucoNG `GlucoseMeterGatt` reads it:
+/// Glucose Measurement 0x2A18 notifications answer a Record Access Control Point 0x2A52 request.
+enum GlucoseMeterGATT {
+    static let service = CBUUID(string: "1808")
+    static let measurement = CBUUID(string: "2A18")
+    static let context = CBUUID(string: "2A34")
+    static let recordAccess = CBUUID(string: "2A52")
+    static let mgDlPerMmol = 18.0182
+
+    enum RecordAccessResult: Equatable {
+        case success
+        case noRecords
+        case failed(Int)
+    }
+
+    /// IEEE-11073 16-bit SFLOAT; nil for NaN, NRes, ±infinity and reserved values.
+    static func sfloat(_ raw: UInt16) -> Double? {
+        guard ![0x07FF, 0x0800, 0x07FE, 0x0802, 0x0801].contains(raw) else { return nil }
+        var mantissa = Int(raw & 0x0FFF)
+        if mantissa >= 0x0800 { mantissa -= 0x1000 }
+        var exponent = Int(raw >> 12)
+        if exponent >= 0x8 { exponent -= 0x10 }
+        return Double(mantissa) * pow(10, Double(exponent))
+    }
+
+    /// One Glucose Measurement, in the meter's local time (the phone's time zone); nil for a control
+    /// solution, a record without a concentration, or one that cannot be read.
+    static func parseMeasurement(_ data: Data, timeZone: TimeZone = .current) -> GlucoseMeterRecord? {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 10 else { return nil }
+        let flags = bytes[0]
+        let sequence = Int(bytes[1]) | Int(bytes[2]) << 8
+        var components = DateComponents()
+        components.year = Int(bytes[3]) | Int(bytes[4]) << 8
+        components.month = Int(bytes[5])
+        components.day = Int(bytes[6])
+        components.hour = Int(bytes[7])
+        components.minute = Int(bytes[8])
+        components.second = Int(bytes[9])
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        guard (2000...2100).contains(components.year ?? 0), var date = calendar.date(from: components) else { return nil }
+        var offset = 10
+        if flags & 0x01 != 0 {
+            guard bytes.count >= offset + 2 else { return nil }
+            let minutes = Int(Int16(bitPattern: UInt16(bytes[offset]) | UInt16(bytes[offset + 1]) << 8))
+            date = date.addingTimeInterval(TimeInterval(minutes * 60))
+            offset += 2
+        }
+        guard flags & 0x02 != 0, bytes.count >= offset + 3,
+              let value = sfloat(UInt16(bytes[offset]) | UInt16(bytes[offset + 1]) << 8) else { return nil }
+        // Type in the low nibble: 0x0A is control solution.
+        if bytes[offset + 2] & 0x0F == 0x0A { return nil }
+        let mgDl = flags & 0x04 != 0 ? value * 1000 * mgDlPerMmol : value * 100_000
+        guard mgDl.isFinite, (10...700).contains(mgDl) else { return nil }
+        return GlucoseMeterRecord(sequence: sequence, date: date, mgDl: mgDl)
+    }
+
+    /// Report stored records: all, or those from `sequence` on.
+    static func reportRecords(from sequence: Int?) -> Data {
+        guard let sequence else { return Data([0x01, 0x01]) }
+        return Data([0x01, 0x03, 0x01, UInt8(sequence & 0xFF), UInt8((sequence >> 8) & 0xFF)])
+    }
+
+    /// The meter's answer to a request (op code 0x06); nil for anything else.
+    static func recordAccessResult(_ data: Data) -> RecordAccessResult? {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 4, bytes[0] == 0x06 else { return nil }
+        switch bytes[3] {
+        case 0x01: return .success
+        case 0x06: return .noRecords
+        default: return .failed(Int(bytes[3]))
+        }
+    }
+}
+
+/// CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF), as JugglucoNG `Crc16CcittFalse`.
+enum CRC16CCITTFalse {
+    static func checksum(_ bytes: [UInt8]) -> UInt16 {
+        var crc: UInt16 = 0xFFFF
+        for byte in bytes {
+            crc ^= UInt16(byte) << 8
+            for _ in 0..<8 { crc = crc & 0x8000 != 0 ? (crc << 1) ^ 0x1021 : crc << 1 }
+        }
+        return crc
+    }
+
+    /// The last two bytes are the little-endian CRC of the rest.
+    static func validates(_ bytes: [UInt8]) -> Bool {
+        guard bytes.count >= 3 else { return false }
+        let expected = checksum(Array(bytes.dropLast(2)))
+        return expected == UInt16(bytes[bytes.count - 2]) | UInt16(bytes[bytes.count - 1]) << 8
+    }
+}
+
+/// JugglucoNG `VerioSession`: the OneTouch Verio (Flex/Reflect) vendor protocol. One command at a
+/// time, every data answer acked with 0x81; meter time, record counter, number of records, then
+/// records from the newest down to what is already stored (at most 15 per connection).
+struct VerioMeterSession {
+    static let service = CBUUID(string: "AF9DF7A1-E595-11E3-96B4-0002A5D5C51B")
+    static let write = CBUUID(string: "AF9DF7A2-E595-11E3-96B4-0002A5D5C51B")
+    static let notify = CBUUID(string: "AF9DF7A3-E595-11E3-96B4-0002A5D5C51B")
+    /// Meter timestamps count seconds from this offset.
+    static let timeOffset: Int64 = 946_684_799
+    static let maximumBackfillRecords = 15
+
+    private enum Stage { case idle, time, recordCounter, recordCount, records, done }
+
+    private var outbox: [Data] = []
+    private(set) var readings: [GlucoseMeterRecord] = []
+    private var stage = Stage.idle
+    private(set) var isFailed = false
+    private var meterTimeOffset: TimeInterval = 0
+    private var haveMeterTime = false
+    private var highestRecordNumber = -1
+    private var numberOfRecords = -1
+    private var requestedRecord = -1
+    private var nextRecordToRequest = -1
+    private var recordsRequested = 0
+    private var walkFloor = 0
+
+    var isDone: Bool { stage == .done }
+
+    mutating func begin() {
+        self = VerioMeterSession()
+        stage = .time
+        outbox.append(Self.command(0x20, 0x02))
+    }
+
+    mutating func take() -> Data? { outbox.isEmpty ? nil : outbox.removeFirst() }
+    mutating func putBack(_ command: Data) { outbox.insert(command, at: 0) }
+
+    mutating func takeReadings() -> [GlucoseMeterRecord] {
+        defer { readings = [] }
+        return readings
+    }
+
+    /// Frames a payload: 0x01 | 0x02 size 0x00 0x03 payload 0x03 crc16-LE.
+    static func command(_ payload: UInt8...) -> Data {
+        var frame: [UInt8] = [0x02, UInt8(payload.count + 7), 0x00, 0x03] + payload + [0x03]
+        let crc = CRC16CCITTFalse.checksum(frame)
+        frame += [UInt8(crc & 0xFF), UInt8(crc >> 8)]
+        return Data([0x01] + frame)
+    }
+
+    /// - Parameter alreadyHave: the highest record already stored; the walk stops there.
+    mutating func onNotification(_ data: Data, alreadyHave: Int, now: Date = Date()) {
+        guard stage != .idle else { return }
+        let message = [UInt8](data)
+        guard !message.isEmpty else { return }
+        if message.count == 1 { return } // the meter's ack of a command
+        guard message.count > 5 else { return reject() }
+        guard Int(message[2]) == message.count - 1 else { return reject() }
+        guard CRC16CCITTFalse.validates(Array(message.dropFirst())) else { return reject() }
+        guard message[5] == 0x06 else { return reject() }
+        handleData(Array(message[6..<(message.count - 3)]), alreadyHave: alreadyHave, now: now)
+        outbox.append(Data([0x81]))
+        if let next = advance() { outbox.append(next) }
+    }
+
+    private mutating func reject() {
+        outbox.append(Data([0x81]))
+        stage = .done
+        isFailed = true
+    }
+
+    private static func uint32(_ bytes: [UInt8], _ offset: Int) -> UInt32 {
+        UInt32(bytes[offset]) | UInt32(bytes[offset + 1]) << 8 | UInt32(bytes[offset + 2]) << 16 | UInt32(bytes[offset + 3]) << 24
+    }
+
+    private mutating func handleData(_ result: [UInt8], alreadyHave: Int, now: Date) {
+        switch stage {
+        case .time:
+            guard result.count == 4 else { return }
+            let meterTime = TimeInterval(Int64(Int32(bitPattern: Self.uint32(result, 0))) + Self.timeOffset)
+            meterTimeOffset = now.timeIntervalSince1970 - meterTime
+            haveMeterTime = true
+        case .recordCounter:
+            guard result.count == 4 else { return }
+            highestRecordNumber = Int(Int32(bitPattern: Self.uint32(result, 0)))
+        case .recordCount:
+            guard result.count == 2 else { return }
+            numberOfRecords = Int(result[0]) | Int(result[1]) << 8
+            startRecordRequests(alreadyHave: alreadyHave)
+        case .records:
+            let record = requestedRecord
+            defer {
+                // The walk moves on whatever the record says, or one bad record is asked for forever.
+                nextRecordToRequest = record - 1
+                recordsRequested += 1
+            }
+            guard record > 0, result.count >= 11, haveMeterTime else { return }
+            let mgDl = Int(result[4]) | Int(result[5]) << 8
+            guard (20...700).contains(mgDl) else { return }
+            let seconds = TimeInterval(Int64(Self.uint32(result, 0)) + Self.timeOffset) + meterTimeOffset
+            readings.append(GlucoseMeterRecord(sequence: record, date: Date(timeIntervalSince1970: seconds), mgDl: Double(mgDl)))
+        case .idle, .done:
+            break
+        }
+    }
+
+    private mutating func startRecordRequests(alreadyHave: Int) {
+        guard highestRecordNumber >= 0, numberOfRecords >= 0, numberOfRecords > 0 else {
+            nextRecordToRequest = 0
+            return
+        }
+        let oldest = max(highestRecordNumber - numberOfRecords, 0)
+        walkFloor = max(oldest, alreadyHave)
+        nextRecordToRequest = highestRecordNumber
+        recordsRequested = 0
+    }
+
+    private mutating func advance() -> Data? {
+        switch stage {
+        case .time: stage = .recordCounter
+        case .recordCounter: stage = .recordCount
+        case .recordCount: stage = .records
+        default: break
+        }
+        switch stage {
+        case .recordCounter: return Self.command(0x0A, 0x02, 0x06)
+        case .recordCount: return Self.command(0x27, 0x00)
+        case .records:
+            guard nextRecordToRequest > walkFloor, recordsRequested < Self.maximumBackfillRecords else {
+                stage = .done
+                return nil
+            }
+            requestedRecord = nextRecordToRequest
+            return Self.command(0xB3, UInt8(requestedRecord & 0xFF), UInt8((requestedRecord >> 8) & 0xFF))
+        default:
+            return nil
+        }
+    }
+}
+
+/// The paired meter and how far its records have been read (UserDefaults).
+enum GlucoseMeterStore {
+    enum Kind: String, Codable { case gatt, verio }
+
+    struct Meter: Codable, Equatable {
+        let identifier: UUID
+        let name: String
+        let kind: Kind
+        /// Highest record number read.
+        var lastSequence: Int?
+        var lastSync: Date?
+    }
+
+    private static let key = "experimentalGlucoseMeter"
+
+    static func meter(defaults: UserDefaults = .standard) -> Meter? {
+        defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(Meter.self, from: $0) }
+    }
+
+    static func save(_ meter: Meter?, defaults: UserDefaults = .standard) {
+        if let meter, let data = try? JSONEncoder().encode(meter) { defaults.set(data, forKey: key) } else { defaults.removeObject(forKey: key) }
+    }
+}
+
+/// Stores meter readings as BG check treatments, skipping any already logged within a minute
+/// with the same value.
+enum GlucoseMeterImport {
+    static func newRecords(_ records: [GlucoseMeterRecord], existing: [(date: Date, mgDl: Double)]) -> [GlucoseMeterRecord] {
+        var seen = existing
+        var result: [GlucoseMeterRecord] = []
+        for record in records.sorted(by: { $0.date < $1.date }) {
+            let duplicate = seen.contains { abs($0.date.timeIntervalSince(record.date)) <= 60 && abs($0.mgDl - record.mgDl) < 1 }
+            guard !duplicate else { continue }
+            result.append(record)
+            seen.append((record.date, record.mgDl))
+        }
+        return result
+    }
+
+    @discardableResult
+    static func save(_ records: [GlucoseMeterRecord], meterName: String, coreDataManager: CoreDataManager) -> Int {
+        guard let earliest = records.map(\.date).min() else { return 0 }
+        let context = coreDataManager.mainManagedObjectContext
+        let existing = TreatmentEntryAccessor(coreDataManager: coreDataManager)
+            .getLatestTreatments(limit: nil, fromDate: earliest.addingTimeInterval(-120))
+            .filter { $0.treatmentType == .BgCheck && !$0.treatmentdeleted }
+            .map { (date: $0.date, mgDl: $0.value) }
+        let fresh = newRecords(records, existing: existing)
+        for record in fresh {
+            _ = TreatmentEntry(date: record.date, value: record.mgDl, treatmentType: .BgCheck, nightscoutEventType: nil,
+                               enteredBy: meterName, notes: nil, nsManagedObjectContext: context)
+        }
+        if !fresh.isEmpty { coreDataManager.saveChanges() }
+        return fresh.count
+    }
+}
+
+/// Finds, pairs and reads a Bluetooth glucose meter with its own CoreBluetooth central, separate
+/// from xDrip's CGM connections (JugglucoNG `MeterScanner` + `GlucoseMeterGatt`).
+@MainActor
+final class GlucoseMeterLink: NSObject, ObservableObject {
+    struct Found: Identifiable, Equatable {
+        let id: UUID
+        let name: String
+        let kind: GlucoseMeterStore.Kind
+    }
+
+    enum State: Equatable {
+        case idle
+        case scanning
+        case reading(String)
+        case finished(imported: Int)
+        case failed(String)
+    }
+
+    static let shared = GlucoseMeterLink()
+    static let readTimeout: TimeInterval = 45
+
+    @Published private(set) var found: [Found] = []
+    @Published private(set) var state = State.idle
+
+    private var central: CBCentralManager?
+    private var peripheral: CBPeripheral?
+    private var meter: GlucoseMeterStore.Meter?
+    private var pendingAction: (() -> Void)?
+    private var records: [GlucoseMeterRecord] = []
+    private var verio = VerioMeterSession()
+    private var verioWrite: CBCharacteristic?
+    private var timeoutGeneration = 0
+    private var coreDataManager: CoreDataManager? { TherapyMetricsManager.shared.configuredCoreDataManager }
+
+    private func withCentral(_ action: @escaping () -> Void) {
+        if let central, central.state == .poweredOn {
+            action()
+        } else {
+            pendingAction = action
+            if central == nil { central = CBCentralManager(delegate: self, queue: nil) }
+        }
+    }
+
+    func startScan() {
+        found = []
+        state = .scanning
+        withCentral { [weak self] in
+            self?.central?.scanForPeripherals(withServices: [GlucoseMeterGATT.service, VerioMeterSession.service])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+                guard let self, self.state == .scanning else { return }
+                self.central?.stopScan()
+                self.state = .idle
+            }
+        }
+    }
+
+    func stopScan() {
+        central?.stopScan()
+        if state == .scanning { state = .idle }
+    }
+
+    /// Pairs `meter` (iOS asks for its PIN when the meter needs one) and reads it.
+    func pair(_ found: Found) {
+        GlucoseMeterStore.save(GlucoseMeterStore.Meter(identifier: found.id, name: found.name, kind: found.kind))
+        sync()
+    }
+
+    /// On returning to the app: reads the paired meter once it has not been read for 30 minutes.
+    func syncIfDue(now: Date = Date()) {
+        guard let saved = GlucoseMeterStore.meter(), state != .scanning else { return }
+        if case .reading = state { return }
+        guard saved.lastSync.map({ now.timeIntervalSince($0) >= 30 * 60 }) ?? true else { return }
+        sync()
+    }
+
+    func forget() {
+        disconnect()
+        GlucoseMeterStore.save(nil)
+        state = .idle
+    }
+
+    /// Reads the paired meter's new records. The meter must be on (most switch their Bluetooth on
+    /// for a while after a measurement).
+    func sync() {
+        guard let saved = GlucoseMeterStore.meter() else { return }
+        central?.stopScan()
+        meter = saved
+        records = []
+        state = .reading(saved.name)
+        withCentral { [weak self] in
+            guard let self, let central = self.central,
+                  let peripheral = central.retrievePeripherals(withIdentifiers: [saved.identifier]).first else {
+                self?.finish(error: ExperimentalTexts.text("meter.notFound", "The meter was not found. Switch it on and try again."))
+                return
+            }
+            self.peripheral = peripheral
+            peripheral.delegate = self
+            central.connect(peripheral)
+            self.timeoutGeneration += 1
+            let generation = self.timeoutGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.readTimeout) { [weak self] in
+                guard let self, self.timeoutGeneration == generation, case .reading = self.state else { return }
+                // Keep what arrived before the meter went quiet.
+                self.finish(error: self.records.isEmpty
+                            ? ExperimentalTexts.text("meter.timeout", "The meter did not answer. Switch it on, keep it close and try again.")
+                            : nil)
+            }
+        }
+    }
+
+    private func disconnect() {
+        if let peripheral { central?.cancelPeripheralConnection(peripheral) }
+        peripheral = nil
+        verioWrite = nil
+    }
+
+    private func finish(error: String? = nil) {
+        timeoutGeneration += 1
+        disconnect()
+        var imported = 0
+        if var saved = meter, let coreDataManager {
+            imported = GlucoseMeterImport.save(records, meterName: saved.name, coreDataManager: coreDataManager)
+            if let highest = records.map(\.sequence).max() { saved.lastSequence = max(saved.lastSequence ?? 0, highest) }
+            if error == nil || !records.isEmpty { saved.lastSync = Date() }
+            GlucoseMeterStore.save(saved)
+            meter = saved
+        }
+        records = []
+        state = error.map { .failed($0) } ?? .finished(imported: imported)
+    }
+
+    private func writeNextVerioCommand() {
+        guard let peripheral, let verioWrite, let command = verio.take() else {
+            if verio.isDone { finish() }
+            return
+        }
+        peripheral.writeValue(command, for: verioWrite, type: .withResponse)
+    }
+}
+
+extension GlucoseMeterLink: CBCentralManagerDelegate {
+    nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        MainActor.assumeIsolated {
+            guard central.state == .poweredOn, let action = pendingAction else {
+                if central.state == .unauthorized || central.state == .poweredOff {
+                    state = .failed(ExperimentalTexts.text("meter.bluetoothOff", "Bluetooth is off or not allowed for xDrip."))
+                }
+                return
+            }
+            pendingAction = nil
+            action()
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
+                                    advertisementData: [String: Any], rssi RSSI: NSNumber) {
+        let services = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
+        let name = peripheral.name ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String
+            ?? ExperimentalTexts.text("meter.unnamed", "Glucose meter")
+        let identifier = peripheral.identifier
+        MainActor.assumeIsolated {
+            let kind: GlucoseMeterStore.Kind = services.contains(VerioMeterSession.service) ? .verio : .gatt
+            guard !found.contains(where: { $0.id == identifier }) else { return }
+            found.append(Found(id: identifier, name: name, kind: kind))
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        MainActor.assumeIsolated {
+            peripheral.discoverServices([GlucoseMeterGATT.service, VerioMeterSession.service])
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        MainActor.assumeIsolated {
+            finish(error: error?.localizedDescription ?? ExperimentalTexts.text("meter.timeout", "The meter did not answer. Switch it on, keep it close and try again."))
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        MainActor.assumeIsolated {
+            guard case .reading = state else { return }
+            // Many meters hang up once they have sent everything.
+            finish(error: records.isEmpty && error != nil ? error?.localizedDescription : nil)
+        }
+    }
+}
+
+extension GlucoseMeterLink: CBPeripheralDelegate {
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        MainActor.assumeIsolated {
+            for service in peripheral.services ?? [] where service.uuid == GlucoseMeterGATT.service || service.uuid == VerioMeterSession.service {
+                peripheral.discoverCharacteristics(nil, for: service)
+            }
+        }
+    }
+
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        MainActor.assumeIsolated {
+            let characteristics = service.characteristics ?? []
+            if service.uuid == VerioMeterSession.service {
+                verioWrite = characteristics.first { $0.uuid == VerioMeterSession.write }
+                if let notify = characteristics.first(where: { $0.uuid == VerioMeterSession.notify }) {
+                    peripheral.setNotifyValue(true, for: notify)
+                }
+            } else {
+                // Measurements first, then the access point whose indication starts the request.
+                for uuid in [GlucoseMeterGATT.measurement, GlucoseMeterGATT.context, GlucoseMeterGATT.recordAccess] {
+                    if let characteristic = characteristics.first(where: { $0.uuid == uuid }) {
+                        peripheral.setNotifyValue(true, for: characteristic)
+                    }
+                }
+            }
+        }
+    }
+
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+        MainActor.assumeIsolated {
+            if let error {
+                finish(error: error.localizedDescription)
+                return
+            }
+            switch characteristic.uuid {
+            case GlucoseMeterGATT.recordAccess:
+                let next = (meter?.lastSequence).map { $0 + 1 }
+                peripheral.writeValue(GlucoseMeterGATT.reportRecords(from: next), for: characteristic, type: .withResponse)
+            case VerioMeterSession.notify:
+                verio.begin()
+                writeNextVerioCommand()
+            default:
+                break
+            }
+        }
+    }
+
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        MainActor.assumeIsolated {
+            if let error {
+                finish(error: error.localizedDescription)
+                return
+            }
+            if characteristic.uuid == VerioMeterSession.write { writeNextVerioCommand() }
+        }
+    }
+
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        let value = characteristic.value ?? Data()
+        let uuid = characteristic.uuid
+        MainActor.assumeIsolated {
+            switch uuid {
+            case GlucoseMeterGATT.measurement:
+                if let record = GlucoseMeterGATT.parseMeasurement(value) { records.append(record) }
+            case GlucoseMeterGATT.recordAccess:
+                switch GlucoseMeterGATT.recordAccessResult(value) {
+                case .success, .noRecords: finish()
+                case .failed(let code): finish(error: String(format: ExperimentalTexts.text("meter.refused", "The meter refused the request (code %ld)."), code))
+                case nil: break
+                }
+            case VerioMeterSession.notify:
+                verio.onNotification(value, alreadyHave: meter?.lastSequence ?? 0)
+                records += verio.takeReadings()
+                writeNextVerioCommand()
+            default:
+                break
+            }
+        }
     }
 }

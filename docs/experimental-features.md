@@ -290,6 +290,21 @@ Nothing is sent anywhere until you search or scan: a search sends the typed word
 barcode, to `openfoodfacts.org`. Open Food Facts is filled in by volunteers — check the figures
 against the package.
 
+## Glucose meters (Bluetooth)
+
+Settings → Experimental features → Glucose meters (after JugglucoNG's meter support). One meter is
+paired: search, tap it, and iOS asks for its PIN when the meter needs one. Its finger-stick readings
+are logged as **BG checks** (entered by the meter's name), so they show on the chart and go to
+Nightscout like any BG check; they are not used to calibrate. Supported: meters with the standard
+Bluetooth Glucose Profile (service 0x1808: Contour Next One, Accu-Chek Guide/Instant, CareSens and
+others) through the Record Access Control Point, and OneTouch Verio (vendor protocol ported from
+JugglucoNG `VerioSession`: at most 15 records per connection, newest first). Only records newer than
+the last one read are fetched, and a reading already logged within a minute with the same value is
+skipped. The meter is read with **Read now** and when xDrip comes to the foreground at least 30
+minutes after the last read; it has to be switched on (most meters enable Bluetooth for a while after
+a measurement). Not yet ported: Satellite meters (they need the meter's pairing code). Never tried
+on a real meter.
+
 ## Insulin pens (NFC)
 
 Settings → Experimental features → **Insulin pens (NFC)** reads the dose log of a **NovoPen 6** or

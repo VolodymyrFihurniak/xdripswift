@@ -1654,3 +1654,98 @@ final class TreatmentAmountAssistTests: XCTestCase {
         XCTAssertNil(TreatmentAmountAssist.uncoveredCarbs(carbs: carbs, doses: [minutesAgo(10, 0.5)], at: now))
     }
 }
+
+// MARK: - Bluetooth glucose meters
+
+/// Byte vectors built by hand from the Bluetooth SIG Glucose Profile and JugglucoNG `VerioSession`;
+/// CRC and frames checked with a Python port.
+final class GlucoseMeterProtocolTests: XCTestCase {
+    private let utc = TimeZone(identifier: "UTC")!
+
+    func testSFloatAndSpecialValues() {
+        XCTAssertEqual(try XCTUnwrap(GlucoseMeterGATT.sfloat(0xB078)), 0.0012, accuracy: 1e-12)
+        XCTAssertEqual(GlucoseMeterGATT.sfloat(0x0FFF), -1)
+        XCTAssertNil(GlucoseMeterGATT.sfloat(0x07FF))
+        XCTAssertNil(GlucoseMeterGATT.sfloat(0x0800))
+    }
+
+    func testMeasurementInKilogramsPerLitreWithTimeOffset() throws {
+        // flags: time offset + concentration (kg/L); sequence 7; 2026-11-25 08:30:00; +60 min; 120 mg/dL; finger blood.
+        let data = Data([0x03, 0x07, 0x00, 0xEA, 0x07, 11, 25, 8, 30, 0, 0x3C, 0x00, 0x78, 0xB0, 0x11])
+        let record = try XCTUnwrap(GlucoseMeterGATT.parseMeasurement(data, timeZone: utc))
+        XCTAssertEqual(record.sequence, 7)
+        XCTAssertEqual(record.mgDl, 120, accuracy: 1e-9)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = utc
+        XCTAssertEqual(record.date, calendar.date(from: DateComponents(year: 2026, month: 11, day: 25, hour: 9, minute: 30)))
+    }
+
+    func testMeasurementInMolesPerLitreAndControlSolution() throws {
+        // 6.5 mmol/L = 0.0065 mol/L: mantissa 65, exponent -4.
+        let mmol = Data([0x06, 0x02, 0x00, 0xEA, 0x07, 11, 25, 8, 30, 0, 0x41, 0xC0, 0x11])
+        XCTAssertEqual(try XCTUnwrap(GlucoseMeterGATT.parseMeasurement(mmol, timeZone: utc)).mgDl, 117.1183, accuracy: 1e-6)
+        let control = Data([0x02, 0x03, 0x00, 0xEA, 0x07, 11, 25, 8, 30, 0, 0x78, 0xB0, 0x1A])
+        XCTAssertNil(GlucoseMeterGATT.parseMeasurement(control, timeZone: utc))
+        XCTAssertNil(GlucoseMeterGATT.parseMeasurement(Data([0x00, 0x01, 0x00, 0xEA, 0x07, 11, 25, 8, 30, 0]), timeZone: utc))
+    }
+
+    func testRecordAccessControlPoint() {
+        XCTAssertEqual(GlucoseMeterGATT.reportRecords(from: nil), Data([0x01, 0x01]))
+        XCTAssertEqual(GlucoseMeterGATT.reportRecords(from: 0x0102), Data([0x01, 0x03, 0x01, 0x02, 0x01]))
+        XCTAssertEqual(GlucoseMeterGATT.recordAccessResult(Data([0x06, 0x00, 0x01, 0x01])), .success)
+        XCTAssertEqual(GlucoseMeterGATT.recordAccessResult(Data([0x06, 0x00, 0x01, 0x06])), .noRecords)
+        XCTAssertEqual(GlucoseMeterGATT.recordAccessResult(Data([0x06, 0x00, 0x01, 0x05])), .failed(5))
+        XCTAssertNil(GlucoseMeterGATT.recordAccessResult(Data([0x05, 0x00, 0x02, 0x00])))
+    }
+
+    func testCRCAndVerioFrame() {
+        XCTAssertEqual(CRC16CCITTFalse.checksum(Array("123456789".utf8)), 0x29B1)
+        XCTAssertEqual(VerioMeterSession.command(0x20, 0x02), Data([0x01, 0x02, 0x09, 0x00, 0x03, 0x20, 0x02, 0x03, 0xD4, 0x92]))
+    }
+
+    func testVerioSessionWalksDownToTheStoredRecord() {
+        func le32(_ value: UInt32) -> [UInt8] { [UInt8(value & 0xFF), UInt8(value >> 8 & 0xFF), UInt8(value >> 16 & 0xFF), UInt8(value >> 24)] }
+        func answer(_ payload: [UInt8]) -> Data { VerioMeterSession.command(0x06, payload[0], payload[1], payload[2], payload[3]) }
+        let meterSeconds: UInt32 = 850_000_000
+        // The phone is 60 s ahead of the meter.
+        let now = Date(timeIntervalSince1970: 1_796_684_799 + 60)
+        var session = VerioMeterSession()
+        session.begin()
+        XCTAssertEqual(session.take(), VerioMeterSession.command(0x20, 0x02))
+        session.onNotification(Data([0x81]), alreadyHave: 3, now: now)
+        XCTAssertNil(session.take())
+        session.onNotification(answer(le32(meterSeconds)), alreadyHave: 3, now: now)
+        XCTAssertEqual(session.take(), Data([0x81]))
+        XCTAssertEqual(session.take(), VerioMeterSession.command(0x0A, 0x02, 0x06))
+        session.onNotification(answer(le32(5)), alreadyHave: 3, now: now)
+        _ = session.take()
+        XCTAssertEqual(session.take(), VerioMeterSession.command(0x27, 0x00))
+        // Five records on the meter, three of them already stored: records 5 and 4 are asked for.
+        session.onNotification(VerioMeterSession.command(0x06, 0x05, 0x00), alreadyHave: 3, now: now)
+        _ = session.take()
+        XCTAssertEqual(session.take(), VerioMeterSession.command(0xB3, 0x05, 0x00))
+        let record: [UInt8] = le32(meterSeconds - 600) + [0x78, 0x00] + [0, 0, 0, 0, 0]
+        session.onNotification(Data(VerioMeterSession.command(0x06, record[0], record[1], record[2], record[3], record[4], record[5],
+                                                             record[6], record[7], record[8], record[9], record[10])),
+                               alreadyHave: 3, now: now)
+        _ = session.take()
+        XCTAssertEqual(session.take(), VerioMeterSession.command(0xB3, 0x04, 0x00))
+        XCTAssertEqual(session.takeReadings(),
+                       [GlucoseMeterRecord(sequence: 5, date: Date(timeIntervalSince1970: 1_796_684_799 - 600 + 60), mgDl: 120)])
+        session.onNotification(Data(VerioMeterSession.command(0x06, record[0], record[1], record[2], record[3], 0x64, 0x00,
+                                                             0, 0, 0, 0, 0)), alreadyHave: 3, now: now)
+        XCTAssertEqual(session.take(), Data([0x81]))
+        XCTAssertNil(session.take())
+        XCTAssertTrue(session.isDone)
+        XCTAssertFalse(session.isFailed)
+        XCTAssertEqual(session.takeReadings().map(\.mgDl), [100])
+    }
+
+    func testImportSkipsReadingsAlreadyLogged() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let records = [GlucoseMeterRecord(sequence: 1, date: start, mgDl: 120),
+                       GlucoseMeterRecord(sequence: 2, date: start.addingTimeInterval(3600), mgDl: 95)]
+        XCTAssertEqual(GlucoseMeterImport.newRecords(records, existing: [(start.addingTimeInterval(30), 120)]).map(\.sequence), [2])
+        XCTAssertEqual(GlucoseMeterImport.newRecords(records, existing: [(start.addingTimeInterval(30), 140)]).count, 2)
+    }
+}

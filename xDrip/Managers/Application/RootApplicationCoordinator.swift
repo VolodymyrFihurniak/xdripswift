@@ -606,6 +606,7 @@ import AppIntents
             // Schedule a call to updateLabelsAndChart when the app comes to the foreground, with a delay of 0.5 seconds. Because the application state is not immediately to .active, as a result, updates may not happen - especially the synctreatments may not happen because this may depend on the application state - by making a call just half a second later, when the status is surely = .active, the UI updates will be done correctly.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 if let coreDataManager = self.coreDataManager { AutomaticBackup.runIfDue(coreDataManager: coreDataManager) }
+                GlucoseMeterLink.shared.syncIfDue()
                 self.repairStoredSibionicsReadings()
                 self.updateLabelsAndChart(overrideApplicationState: true)
                 self.updateMiniChart()

@@ -35,6 +35,12 @@ extension SettingsViewGroupedSettingsViewModel {
                     settingsScreen: { ExperimentalSettingsViewModel.pensScreen }
                 ),
                 SettingsGroupedRow(
+                    id: "experimental.meters",
+                    title: ExperimentalTexts.text("meter.title", "Glucose meters (Bluetooth)"),
+                    detail: { GlucoseMeterStore.meter()?.name ?? "" },
+                    settingsScreen: { ExperimentalSettingsViewModel.metersScreen }
+                ),
+                SettingsGroupedRow(
                     id: "experimental.alerts",
                     title: ExperimentalTexts.text("alerts", "Alarms"),
                     settingsScreen: { ExperimentalSettingsViewModel.alertsScreen }
@@ -59,7 +65,7 @@ extension SettingsViewGroupedSettingsViewModel {
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving, alerts, quietWindow, doseHints, restricted, pens }
+    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving, alerts, quietWindow, doseHints, restricted, pens, meters }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
@@ -76,6 +82,12 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         SettingsScreen(title: ExperimentalTexts.text("insulins", "Insulins"),
                        introduction: { ExperimentalTexts.text("insulinsIntroduction", "Experimental. Each insulin has its own action curve, from JugglucoNG's catalogue. A bolus or basal injection uses the insulin named in its notes; the treatment editor offers a choice. Otherwise the defaults below apply.") },
                        providers: { [ExperimentalSettingsViewModel(group: .insulins)] })
+    }
+
+    static var metersScreen: SettingsScreen {
+        SettingsScreen(title: ExperimentalTexts.text("meter.title", "Glucose meters (Bluetooth)"),
+                       introduction: { ExperimentalTexts.text("meter.introduction", "Experimental and not yet confirmed on a real meter. Reads finger-stick readings from a Bluetooth glucose meter (the standard Glucose Profile: Contour Next One, Accu-Chek Guide and Instant, CareSens and others; or OneTouch Verio) and logs them as BG checks.") },
+                       providers: { [ExperimentalSettingsViewModel(group: .meters)] })
     }
 
     static var pensScreen: SettingsScreen {
@@ -273,6 +285,13 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                 SettingsRow(id: "experimental.accuracy.show", title: ExperimentalTexts.text("accuracyShow", "Prediction accuracy"),
                             control: .custom(content: {
                                 AnyView(NavigationLink(ExperimentalTexts.text("accuracyShow", "Prediction accuracy")) { ExperimentalPredictionAccuracyView() })
+                            }))
+            ]
+        case .meters:
+            return [
+                SettingsRow(id: "experimental.meters.open", title: ExperimentalTexts.text("meter.open", "Meter and readings"),
+                            control: .custom(content: {
+                                AnyView(NavigationLink(ExperimentalTexts.text("meter.open", "Meter and readings")) { GlucoseMeterSettingsView() })
                             }))
             ]
         case .pens:
@@ -529,7 +548,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
 
     func sectionTitle() -> String? {
         switch group {
-        case .predictionMain, .insulins, .powerSaving, .alerts, .restricted, .pens: return nil
+        case .predictionMain, .insulins, .powerSaving, .alerts, .restricted, .pens, .meters: return nil
         case .quietWindow: return ExperimentalTexts.text("quietWindow", "Quiet window")
         case .doseHints: return ExperimentalTexts.text("doseHintsTitle", "Dose hints")
         case .predictionAdaptive: return ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction")
@@ -555,7 +574,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("predictionNightscoutFooter", "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.")
         case .predictionAccuracy:
             return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
-        case .restricted, .pens: return nil
+        case .restricted, .pens, .meters: return nil
         case .quietWindow:
             return ExperimentalTexts.text("quietFooter", "For the cinema or a lecture: alarms are still raised and shown, only their sound (and, with Notification only, vibration) is held back. The window always ends, after 24 hours at the most. An alarm that stays raised for the break-through time sounds anyway: a low always, the other alarms as chosen above. Snoozes and thresholds work as usual.")
         case .doseHints:
@@ -889,6 +908,78 @@ struct ExperimentalPredictionInspectorView: View {
 
     private func glucose(_ mgDl: Double) -> String {
         ExperimentalSettingsViewModel.numberText(display(mgDl), fractionDigits: isMgDl ? 0 : 1)
+    }
+}
+
+/// JugglucoNG's glucose meter settings: one paired meter, read on demand and when the app comes
+/// back to the foreground; its readings become BG checks.
+struct GlucoseMeterSettingsView: View {
+    @ObservedObject private var link = GlucoseMeterLink.shared
+    @State private var meter = GlucoseMeterStore.meter()
+
+    var body: some View {
+        List {
+            if let meter {
+                Section(footer: Text(ExperimentalTexts.text("meter.pairedFooter", "Switch the meter on (most do after a measurement) before reading it. Only readings newer than the last one read are fetched; a reading already logged within a minute with the same value is skipped."))) {
+                    LabeledContent(ExperimentalTexts.text("meter.paired", "Meter"), value: meter.name)
+                    LabeledContent(ExperimentalTexts.text("meter.lastSync", "Last read"),
+                                   value: meter.lastSync?.formatted(date: .abbreviated, time: .shortened)
+                                       ?? ExperimentalTexts.text("meter.never", "Never"))
+                    Button(ExperimentalTexts.text("meter.sync", "Read now")) { link.sync() }
+                        .disabled(isBusy)
+                    Button(ExperimentalTexts.text("meter.forget", "Forget this meter"), role: .destructive) {
+                        link.forget()
+                        self.meter = nil
+                    }
+                }
+            } else {
+                Section(footer: Text(ExperimentalTexts.text("meter.scanFooter", "Put the meter in pairing mode (see its manual), then search. iOS asks for the meter's PIN when it needs one."))) {
+                    if link.state == .scanning {
+                        HStack {
+                            ProgressView()
+                            Text(ExperimentalTexts.text("meter.searching", "Searching…"))
+                            Spacer()
+                            Button(Texts_Common.Cancel) { link.stopScan() }
+                        }
+                    } else {
+                        Button(ExperimentalTexts.text("meter.search", "Search for meters")) { link.startScan() }
+                    }
+                    ForEach(link.found) { found in
+                        Button {
+                            link.pair(found)
+                            meter = GlucoseMeterStore.meter()
+                        } label: {
+                            LabeledContent(found.name, value: found.kind == .verio ? "OneTouch Verio" : "Glucose Profile")
+                        }
+                    }
+                }
+            }
+            if let status = statusText {
+                Section {
+                    HStack {
+                        if isBusy { ProgressView() }
+                        Text(status)
+                    }
+                }
+            }
+        }
+        .navigationTitle(ExperimentalTexts.text("meter.title", "Glucose meters (Bluetooth)"))
+        .onChange(of: link.state) { _ in meter = GlucoseMeterStore.meter() }
+        .onDisappear { link.stopScan() }
+    }
+
+    private var isBusy: Bool {
+        if case .reading = link.state { return true }
+        return link.state == .scanning
+    }
+
+    private var statusText: String? {
+        switch link.state {
+        case .idle, .scanning: return nil
+        case .reading(let name): return String(format: ExperimentalTexts.text("meter.reading", "Reading %@…"), name)
+        case .finished(let imported): return String(format: ExperimentalTexts.text("meter.imported", "%ld new readings logged as BG checks."), imported)
+        case .failed(let message): return message
+        }
     }
 }
 
