@@ -148,6 +148,11 @@ FRAM header crc is valid and the state is not-yet-started; success = state re-re
 Gen2 (patch info byte 2 low nibble ≥ 9), US 14-day and Pro are refused (JugglucoNG uses Abbott's library
 for them); Libre 3 has its own upstream setup. Never tried on a real sensor.
 
+Libre 2 link (`CGMLibre2Transmitter`, after JugglucoNG #773 and 3e7789f9e): a connected link without a
+complete frame for 150 s is hung up and reconnected 5 s later (an immediate reconnect after the app's
+own hangup is never logged in); every link ends with a `Libre 2 link ended:` trace line
+(`Libre2LinkSummary`: reason, duration, frames, last frame age).
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new

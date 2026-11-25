@@ -55,6 +55,13 @@ class CGMLibre2Transmitter: BluetoothTransmitter, CGMTransmitter {
     /// Bluetooth name selected from the NFC result. Newer 7F sensors advertise the returned
     /// MAC-derived name instead of the legacy "ABBOTT" + sensor serial number.
     private var expectedBluetoothNameFromNFC: String?
+
+    /// The current link, for the stream watchdog and the per-link summary (JugglucoNG #773).
+    private var linkConnectedAt: Date?
+    private var linkFrameCount = 0
+    private var linkLastFrameAt: Date?
+    private var streamWatchdogGeneration = 0
+    private var watchdogEndedLink = false
     
     // MARK: - Initialization
 
@@ -144,6 +151,13 @@ class CGMLibre2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
     override func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         super.centralManager(central, didConnect: peripheral)
+
+        linkConnectedAt = Date()
+        linkFrameCount = 0
+        linkLastFrameAt = nil
+        watchdogEndedLink = false
+        // Armed on connect, so it also bounds a login that stalls on a connected link.
+        armStreamWatchdog()
         
         if let sensorSerialNumber = tempSensorSerialNumber {
             // we need to send the sensorSerialNumber here. Possibly this is a new transmitter being scanned for, in which case the call to cGMLibre2TransmitterDelegate?.received(sensorSerialNumber: ..) in NFCTagReaderSessionDelegate functions wouldn't have stored the status in coredata, because it' doesn't find the transmitter, so let's store it again, at each connect, if not nil
@@ -169,6 +183,51 @@ class CGMLibre2Transmitter: BluetoothTransmitter, CGMTransmitter {
                     self?.bluetoothTransmitterDelegate?.error(message: TextsLibreNFC.donotusethelibrelinkapp)
                 }
             }
+        }
+    }
+
+    override func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        streamWatchdogGeneration += 1
+        if let connectedAt = linkConnectedAt {
+            let summary = Libre2LinkSummary(
+                endedByWatchdog: watchdogEndedLink, error: error?.localizedDescription,
+                connectedSeconds: Date().timeIntervalSince(connectedAt), frames: linkFrameCount,
+                lastFrameSecondsAgo: linkLastFrameAt.map { Date().timeIntervalSince($0) })
+            trace("Libre 2 link ended: %{public}@", log: log, category: ConstantsLog.categoryCGMLibre2, type: .info, summary.description)
+        }
+        linkConnectedAt = nil
+        // The base class reconnects inside this call; `reconnectAfterDisconnect` still sees the flag.
+        super.centralManager(central, didDisconnectPeripheral: peripheral, error: error)
+        watchdogEndedLink = false
+    }
+
+    /// After this app hangs up a link, wait before connecting again: an immediate reconnect lands
+    /// on the old radio link and the sensor never answers the login (JugglucoNG 3e7789f9e: 0 of
+    /// 69 such reconnects logged in). Links the sensor or the radio dropped reconnect at once.
+    override func reconnectAfterDisconnect(_ central: CBCentralManager) {
+        guard watchdogEndedLink else {
+            super.reconnectAfterDisconnect(central)
+            return
+        }
+        runOnCentralQueue(after: Libre2LinkSummary.reconnectDelayAfterOwnHangUp) { [self] in
+            guard getConnectionStatus() != .connected else { return }
+            super.reconnectAfterDisconnect(central)
+        }
+    }
+
+    /// A Libre 2 sends one complete frame a minute. A link that stays connected without one is
+    /// reconnected after `Libre2LinkSummary.streamTimeout` instead of waiting for the missed
+    /// reading alarm (JugglucoNG #773). Fragments do not re-arm it, complete frames do.
+    private func armStreamWatchdog() {
+        streamWatchdogGeneration += 1
+        let generation = streamWatchdogGeneration
+        runOnCentralQueue(after: Libre2LinkSummary.streamTimeout) { [weak self] in
+            guard let self, self.streamWatchdogGeneration == generation,
+                  self.getConnectionStatus() == .connected else { return }
+            trace("Libre 2 connected but no complete frame for %{public}@ s; reconnecting", log: self.log,
+                  category: ConstantsLog.categoryCGMLibre2, type: .error, Int(Libre2LinkSummary.streamTimeout).description)
+            self.watchdogEndedLink = true
+            self.disconnect()
         }
     }
 
@@ -379,6 +438,10 @@ class CGMLibre2Transmitter: BluetoothTransmitter, CGMTransmitter {
             UserDefaults.standard.appInForeGround.description
         )
 
+        linkFrameCount += 1
+        linkLastFrameAt = Date()
+        armStreamWatchdog()
+
         var copy = parsedBLEData.bleGlucose
         cgmTransmitterDelegate?.cgmTransmitterInfoReceived(glucoseData: &copy, transmitterBatteryInfo: nil, sensorAge: TimeInterval(minutes: Double(parsedBLEData.sensorTimeInMinutes)))
         cGMLibre2TransmitterDelegate?.received(sensorTimeInMinutes: Int(parsedBLEData.sensorTimeInMinutes), from: self)
@@ -557,5 +620,30 @@ extension CGMLibre2Transmitter: LibreNFCDelegate {
 
         expectedBluetoothNameFromNFC = expectedBluetoothName
         updateExpectedDeviceName(name: expectedBluetoothName)
+    }
+}
+
+/// One line per Libre 2 link for the trace: why it ended, how long it lasted, how many complete
+/// frames it carried and how old the last one was (JugglucoNG #773).
+struct Libre2LinkSummary: CustomStringConvertible {
+    /// A minute's frame plus a missed one and some slack, as JugglucoNG.
+    static let streamTimeout: TimeInterval = 150
+    static let reconnectDelayAfterOwnHangUp: TimeInterval = 5
+
+    let endedByWatchdog: Bool
+    let error: String?
+    let connectedSeconds: TimeInterval
+    let frames: Int
+    let lastFrameSecondsAgo: TimeInterval?
+
+    var reason: String {
+        if endedByWatchdog { return "no frame for \(Int(Self.streamTimeout)) s" }
+        if let error { return "lost (\(error))" }
+        return "closed by the app"
+    }
+
+    var description: String {
+        "reason=\(reason), lasted=\(Int(connectedSeconds)) s, frames=\(frames), lastFrame="
+            + (lastFrameSecondsAgo.map { "\(Int($0)) s ago" } ?? "none")
     }
 }

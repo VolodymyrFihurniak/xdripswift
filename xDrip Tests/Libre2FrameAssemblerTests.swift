@@ -170,3 +170,17 @@ final class LibreSensorActivationTests: XCTestCase {
         }
     }
 }
+
+final class Libre2LinkSummaryTests: XCTestCase {
+    func testSummaryNamesWhyTheLinkEnded() {
+        XCTAssertEqual(Libre2LinkSummary.streamTimeout, 150)
+        XCTAssertEqual(Libre2LinkSummary.reconnectDelayAfterOwnHangUp, 5)
+        let watchdog = Libre2LinkSummary(endedByWatchdog: true, error: nil, connectedSeconds: 612.4, frames: 8, lastFrameSecondsAgo: 151.9)
+        XCTAssertEqual(watchdog.description, "reason=no frame for 150 s, lasted=612 s, frames=8, lastFrame=151 s ago")
+        let lost = Libre2LinkSummary(endedByWatchdog: false, error: "The connection has timed out unexpectedly.",
+                                     connectedSeconds: 2, frames: 0, lastFrameSecondsAgo: nil)
+        XCTAssertEqual(lost.description, "reason=lost (The connection has timed out unexpectedly.), lasted=2 s, frames=0, lastFrame=none")
+        XCTAssertEqual(Libre2LinkSummary(endedByWatchdog: false, error: nil, connectedSeconds: 30, frames: 1, lastFrameSecondsAgo: 0).reason,
+                       "closed by the app")
+    }
+}
