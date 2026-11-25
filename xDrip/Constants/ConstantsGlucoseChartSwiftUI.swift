@@ -40,6 +40,9 @@ enum ConstantsGlucoseChartSwiftUI {
     static let experimentalPredictionFutureShare: Double = 0.25
     static let experimentalPredictionMinimumFutureSpan: TimeInterval = 30 * 60
     static let experimentalPredictionColor = Color(red: 0.55, green: 0.65, blue: 0.95).opacity(0.9)
+    /// JugglucoNG `UncertaintyBands.FILL_ALPHA` / `EDGE_ALPHA`.
+    static let experimentalUncertaintyFillColor = Color.primary.opacity(0.13)
+    static let experimentalUncertaintyEdgeColor = Color.primary.opacity(0.26)
     static let experimentalGlucoseLineWidth: CGFloat = 2.5
     /// Widgets, Live Activity and the watch draw smaller charts.
     static let experimentalCompactGlucoseLineWidth: CGFloat = 2

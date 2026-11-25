@@ -9,6 +9,7 @@
 import CoreData
 import Foundation
 import os
+import UserNotifications
 
 // Creates and restores self-contained archives without carrying live sensor or connection state.
 final class BackupService: @unchecked Sendable {
@@ -233,7 +234,8 @@ final class BackupService: @unchecked Sendable {
             profiles: snapshot.4,
             batteryHistory: snapshot.5,
             careLinkPatientAliases: options.includesTreatments
-                ? UserDefaults.standard.dictionary(forKey: UserDefaults.Key.careLinkPatientAliases.rawValue) as? [String: String] : nil
+                ? UserDefaults.standard.dictionary(forKey: UserDefaults.Key.careLinkPatientAliases.rawValue) as? [String: String] : nil,
+            sibionicsSourceJournals: options.includesBgReadings ? SibionicsSourceJournal.exportAll().nilIfEmpty : nil
         )
         let json = try encoder.encode(payload)
         let compressed = try (json as NSData).compressed(using: .lzfse) as Data
@@ -386,6 +388,10 @@ final class BackupService: @unchecked Sendable {
                 deviceStatusCounts = try self.restoreDeviceStatuses(payload.deviceStatuses ?? [], context: context)
                 profileCounts = try self.restoreProfiles(payload.profiles ?? [], context: context)
                 try self.restoreBatteryHistory(payload.batteryHistory ?? [], mode: mode, context: context)
+                // Merged, the phone's own minutes winning, so restoring never loses newer ones.
+                for (name, data) in payload.sibionicsSourceJournals ?? [:] {
+                    SibionicsSourceJournal.restore(name: name, data: data)
+                }
             }
             if restoresSettings && payload.settings != nil {
                 try self.replaceAlertTypes(payload.alertTypes, context: context)
@@ -1119,4 +1125,159 @@ private extension Optional where Wrapped == Bool {
     var nsNumber: NSNumber? {
         map { NSNumber(value: $0) }
     }
+}
+
+// MARK: - Automatic backup
+
+/// JugglucoNG's scheduled backup (`ScheduledBackupPolicy`): once a day, when the app is opened or
+/// comes to the foreground, a backup of settings, glucose readings and treatments (no accounts,
+/// so no password) goes to Files → xDrip → Automatic backups. Older ones are thinned to the newest
+/// of each of the last 7 days, 4 weeks and 6 months. A backup that holds less than half of what
+/// the previous one held raises a notification, and the earlier backups stay.
+enum AutomaticBackup {
+    static let directoryName = "Automatic backups"
+    static let filePrefix = "xDrip_AutoBackup_"
+    static let fileExtension = "xdripbackup"
+    static let minimumInterval: TimeInterval = 20 * 60 * 60
+    static let dailyKeep = 7
+    static let weeklyKeep = 4
+    static let monthlyKeep = 6
+    static let notificationIdentifier = "automaticBackupAnomaly"
+
+    private static let enabledKey = "automaticBackupEnabled"
+    private static let lastDateKey = "automaticBackupLastDate"
+    private static let lastMetricsKey = "automaticBackupLastMetrics"
+    private static var isRunning = false
+
+    struct Metrics: Codable, Equatable {
+        let byteSize: Int
+        let bgReadings: Int
+        let treatments: Int
+    }
+
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool { defaults.bool(forKey: enabledKey) }
+    static func setEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) { defaults.set(enabled, forKey: enabledKey) }
+    static func lastDate(defaults: UserDefaults = .standard) -> Date? { defaults.object(forKey: lastDateKey) as? Date }
+
+    static var directoryURL: URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent(directoryName, isDirectory: true)
+    }
+
+    private static func stampFormatter() -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss'Z'"
+        return formatter
+    }
+
+    static func fileName(for date: Date) -> String {
+        filePrefix + stampFormatter().string(from: date) + "." + fileExtension
+    }
+
+    /// The time in an automatic backup's name; nil for any other file.
+    static func timestamp(fromFileName name: String) -> Date? {
+        guard name.hasPrefix(filePrefix), name.hasSuffix("." + fileExtension) else { return nil }
+        let stamp = String(name.dropFirst(filePrefix.count).dropLast(fileExtension.count + 1))
+        guard stamp.count == 20 else { return nil }
+        return stampFormatter().date(from: stamp)
+    }
+
+    /// JugglucoNG `entriesToDelete`: keep the newest backup of each of the latest `dailyKeep` days,
+    /// `weeklyKeep` ISO weeks and `monthlyKeep` months (at least one each); files of other names stay.
+    static func filesToDelete(_ names: [String], dailyKeep: Int = dailyKeep, weeklyKeep: Int = weeklyKeep,
+                              monthlyKeep: Int = monthlyKeep, timeZone: TimeZone = .current) -> [String] {
+        let dated = names.compactMap { name in timestamp(fromFileName: name).map { (name: name, date: $0) } }
+            .sorted { $0.date != $1.date ? $0.date > $1.date : $0.name > $1.name }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        var iso = Calendar(identifier: .iso8601)
+        iso.timeZone = timeZone
+        var keep = Set<String>()
+        func keepNewest(_ limit: Int, period: (Date) -> String) {
+            var seen = Set<String>()
+            for entry in dated where seen.count < max(limit, 1) {
+                if seen.insert(period(entry.date)).inserted { keep.insert(entry.name) }
+            }
+        }
+        keepNewest(dailyKeep) { date in
+            let parts = calendar.dateComponents([.year, .month, .day], from: date)
+            return "\(parts.year ?? 0)-\(parts.month ?? 0)-\(parts.day ?? 0)"
+        }
+        keepNewest(weeklyKeep) { date in
+            let parts = iso.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+            return "\(parts.yearForWeekOfYear ?? 0)-W\(parts.weekOfYear ?? 0)"
+        }
+        keepNewest(monthlyKeep) { date in
+            let parts = calendar.dateComponents([.year, .month], from: date)
+            return "\(parts.year ?? 0)-\(parts.month ?? 0)"
+        }
+        return dated.map(\.name).filter { !keep.contains($0) }
+    }
+
+    /// JugglucoNG `detectAnomaly`: what fell to less than half of the previous backup.
+    static func anomalies(previous: Metrics?, current: Metrics) -> [(what: String, previous: Int, current: Int)] {
+        guard let previous else { return [] }
+        var result: [(String, Int, Int)] = []
+        if previous.byteSize > 0, current.byteSize > 0, current.byteSize * 2 < previous.byteSize {
+            result.append(("size", previous.byteSize, current.byteSize))
+        }
+        if previous.bgReadings > 0, current.bgReadings * 2 < previous.bgReadings {
+            result.append(("bgReadings", previous.bgReadings, current.bgReadings))
+        }
+        if previous.treatments > 0, current.treatments * 2 < previous.treatments {
+            result.append(("treatments", previous.treatments, current.treatments))
+        }
+        return result
+    }
+
+    /// Makes today's backup when automatic backup is on and the last one is at least 20 hours old.
+    @MainActor
+    static func runIfDue(coreDataManager: CoreDataManager, defaults: UserDefaults = .standard, now: Date = Date()) {
+        guard isEnabled(defaults: defaults), !isRunning,
+              lastDate(defaults: defaults).map({ now.timeIntervalSince($0) >= minimumInterval }) ?? true,
+              let directory = directoryURL else { return }
+        isRunning = true
+        let log = OSLog(subsystem: ConstantsLog.subSystem, category: ConstantsLog.categoryDataManagement)
+        Task { @MainActor in
+            defer { isRunning = false }
+            do {
+                let created = try await BackupService(coreDataManager: coreDataManager).createBackup(options: BackupOptions())
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let target = directory.appendingPathComponent(fileName(for: created.manifest.createdAt))
+                if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
+                try FileManager.default.moveItem(at: created.url, to: target)
+                let size = (try? FileManager.default.attributesOfItem(atPath: target.path)[.size] as? Int) ?? 0
+                let metrics = Metrics(byteSize: size, bgReadings: created.manifest.bgReadingCount, treatments: created.manifest.treatmentCount)
+                let previous = defaults.data(forKey: lastMetricsKey).flatMap { try? JSONDecoder().decode(Metrics.self, from: $0) }
+                let found = anomalies(previous: previous, current: metrics)
+                defaults.set(try? JSONEncoder().encode(metrics), forKey: lastMetricsKey)
+                defaults.set(created.manifest.createdAt, forKey: lastDateKey)
+                let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+                for name in filesToDelete(names) {
+                    try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+                }
+                trace("automatic backup written: %{public}@ bytes, %{public}@ readings, %{public}@ treatments",
+                      log: log, category: ConstantsLog.categoryDataManagement, type: .info,
+                      size.description, metrics.bgReadings.description, metrics.treatments.description)
+                if !found.isEmpty, let previous { notifyShrink(previous: previous, current: metrics) }
+            } catch {
+                trace("automatic backup failed: %{public}@", log: log, category: ConstantsLog.categoryDataManagement,
+                      type: .error, error.localizedDescription)
+            }
+        }
+    }
+
+    private static func notifyShrink(previous: Metrics, current: Metrics) {
+        let content = UNMutableNotificationContent()
+        content.title = Texts_SettingsView.automaticBackupShrankTitle
+        content.body = String(format: Texts_SettingsView.automaticBackupShrankBody,
+                              previous.bgReadings, current.bgReadings, previous.treatments, current.treatments)
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: notificationIdentifier, content: content, trigger: nil),
+                                               withCompletionHandler: nil)
+    }
+}
+
+private extension Dictionary {
+    var nilIfEmpty: Self? { isEmpty ? nil : self }
 }

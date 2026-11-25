@@ -32,6 +32,20 @@ class Sibionics1V115GFacade(sensitivity: Float) {
         eventTimeMs: Long,
     ): Float = estimator.process(core.latestSensorObservation, temperatureC, impedance, eventTimeMs)
 
+    /**
+     * Runs Adaptive V1 on the stock value of the sample [process] has just handled and its
+     * chemical signal; [stockMmol] is the caller's stock value for that sample.
+     */
+    fun processAdaptiveV1(
+        model: SibionicsAdaptiveV1Facade,
+        stockMmol: Float,
+        rawMmol: Float,
+        temperatureC: Float,
+        impedance: Float,
+        index: Int,
+        eventTimeMs: Long,
+    ): Float = model.process(stockMmol, rawMmol, temperatureC, impedance, index, eventTimeMs, core.latestChemicalSignal)
+
     /** Hex snapshots cross the Swift boundary in bounded chunks. */
     fun snapshotByteCount(): Int = core.snapshot().size
 

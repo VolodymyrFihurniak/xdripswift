@@ -357,6 +357,38 @@ class Texts_Common {
         return NSLocalizedString("common_statistics_dailyPattern", tableName: filename, bundle: Bundle.main, value: "Daily Pattern", comment: "statistics daily pattern chart title")
     }()
 
+    static let statisticsDayParts = {
+        return NSLocalizedString("common_statistics_dayParts", tableName: filename, bundle: Bundle.main, value: "Time in ranges by time of day", comment: "statistics day parts card title")
+    }()
+
+    static let statisticsDayPartsNoData = {
+        return NSLocalizedString("common_statistics_dayPartsNoData", tableName: filename, bundle: Bundle.main, value: "No readings at these hours.", comment: "statistics day parts without data")
+    }()
+
+    static let statisticsVeryHigh = {
+        return NSLocalizedString("common_statistics_veryHigh", tableName: filename, bundle: Bundle.main, value: "Very high", comment: "statistics very high band")
+    }()
+
+    static let statisticsVeryLow = {
+        return NSLocalizedString("common_statistics_veryLow", tableName: filename, bundle: Bundle.main, value: "Very low", comment: "statistics very low band")
+    }()
+
+    static let statisticsNight = {
+        return NSLocalizedString("common_statistics_night", tableName: filename, bundle: Bundle.main, value: "Night", comment: "statistics block 00:00-06:00")
+    }()
+
+    static let statisticsMorning = {
+        return NSLocalizedString("common_statistics_morning", tableName: filename, bundle: Bundle.main, value: "Morning", comment: "statistics block 06:00-12:00")
+    }()
+
+    static let statisticsAfternoon = {
+        return NSLocalizedString("common_statistics_afternoon", tableName: filename, bundle: Bundle.main, value: "Afternoon", comment: "statistics block 12:00-18:00")
+    }()
+
+    static let statisticsEvening = {
+        return NSLocalizedString("common_statistics_evening", tableName: filename, bundle: Bundle.main, value: "Evening", comment: "statistics block 18:00-24:00")
+    }()
+
     static let statisticsAverageFormat = {
         return NSLocalizedString("common_statistics_averageFormat", tableName: filename, bundle: Bundle.main, value: "Average %@", comment: "statistics average value format")
     }()

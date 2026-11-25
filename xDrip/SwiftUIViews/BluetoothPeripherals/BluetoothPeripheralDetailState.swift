@@ -1021,7 +1021,9 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                 row(
                     id: "sibionics1-sensor-life",
                     title: Texts_BluetoothPeripheralView.sibionics1SensorLifeTitle,
-                    detail: Texts_BluetoothPeripheralView.sibionics1SensorLifeDetail
+                    detail: Sibionics2Configuration.isGS3(for: address)
+                        ? Texts_BluetoothPeripheralView.sibionicsGS3SensorLifeDetail
+                        : Texts_BluetoothPeripheralView.sibionics1SensorLifeDetail
                 )
             ] : [])
         )
@@ -1068,6 +1070,17 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                     title: Texts_BluetoothPeripheralView.sibionics1LabelRemove,
                     action: { [weak self] in
                         self?.saveSibionicsLabelShortCode(nil, for: bluetoothPeripheral)
+                    }
+                ),
+                toggleRow(
+                    id: "sibionics1-gs3",
+                    title: Texts_BluetoothPeripheralView.sibionicsGS3Title,
+                    isOn: Sibionics2Configuration.isGS3(for: address),
+                    setValue: { [weak self] isGS3 in
+                        guard isGS3 != Sibionics2Configuration.isGS3(for: address) else { return }
+                        Sibionics2Configuration.setGS3(isGS3, for: address)
+                        // Another algorithm and lifetime: replay the sensor's history with them.
+                        self?.sensitivityInputDidChange(for: bluetoothPeripheral)
                     }
                 ),
                 row(
@@ -1151,7 +1164,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                 // JugglucoNG resets every Sibionics type manually; automatic reset is Sibionics 2 only.
                 (expectedBluetoothPeripheralType != .Sibionics1Type || row.id != "sibionics2-auto-reset") &&
                 (row.id != "sibionics1-label-remove" || labelShortCode != nil) &&
-                (row.id != "sibionics2-label-scan" || !isSibionics1)
+                (row.id != "sibionics2-label-scan" || !isSibionics1) &&
+                (row.id != "sibionics1-gs3" || isSibionics1)
             }
         )
         let deviceInfoSection = sibionicsDeviceInfoSection(address: address, isSibionics1: isSibionics1)
@@ -1215,6 +1229,15 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
     /// and registration key group that produced readings.
     private func sibionicsDeviceInfoSection(address: String, isSibionics1: Bool) -> BluetoothPeripheralDetailSection {
         var rows = [BluetoothPeripheralDetailRow]()
+        // Why readings stopped, until the next reading (JugglucoNG "Last BLE status").
+        rows.append(row(
+            id: "sibionics-last-link-problem",
+            title: Texts_BluetoothPeripheralView.sibionicsLastLinkProblem,
+            detail: Sibionics2DeviceStatus.lastLinkProblem(for: address).map {
+                $0.text + " · " + RelativeDateTimeFormatter().localizedString(for: $0.date, relativeTo: Date())
+            } ?? Texts_BluetoothPeripheralView.sibionicsNoLinkProblem,
+            detailIndicator: Sibionics2DeviceStatus.lastLinkProblem(for: address) != nil ? SettingsIndicator(color: Color.orange) : nil
+        ))
         let battery = Sibionics2DeviceStatus.battery(for: address)
         // Battery is a Sibionics 2 value, as in JugglucoNG.
         if !isSibionics1 { rows.append(row(

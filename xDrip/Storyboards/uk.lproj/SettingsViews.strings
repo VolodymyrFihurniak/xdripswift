@@ -568,6 +568,11 @@
 "settingsviews_nightscoutImportingData" = "Імпортування даних";
 "settingsviews_cleanDataConfirmationCode" = "Код підтвердження %@";
 "settingsviews_backupCreate" = "Створити резервну копію";
+"settingsviews_automaticBackup" = "Щоденна автоматична резервна копія";
+"settingsviews_automaticBackupLast" = "Остання: %@";
+"settingsviews_automaticBackupNever" = "Ще немає";
+"settingsviews_automaticBackupShrankTitle" = "Автоматична резервна копія значно менша";
+"settingsviews_automaticBackupShrankBody" = "Показники глюкози: %d → %d, записи: %d → %d. Попередні копії збережено у «Файли» → xDrip → Automatic backups.";
 "settingsviews_backupRestore" = "Відновити резервну копію";
 "settingsviews_backupCreated" = "Резервну копію успішно створено";
 "settingsviews_backupRestored" = "Резервну копію успішно відновлено";
@@ -838,11 +843,22 @@
 "experimental.accuracyCount" = "Записано прогнозів: %ld. Для надійної оцінки горизонту потрібно щонайменше %ld порівняних прогнозів.";
 "experimental.accuracyLine" = "Похибка %@ · без змін %@ · зміщення %@";
 "experimental.accuracyClear" = "Видалити записані прогнози";
+"experimental.inspectorTitle" = "Минулі прогнози";
+"experimental.inspectorPrevious" = "Попередній прогноз";
+"experimental.inspectorNext" = "Наступний прогноз";
+"experimental.inspectorForecastAt" = "Прогноз о %@";
+"experimental.inspectorFooter" = "Суцільна лінія — показники, що були далі. Штрихова — стандартний прогноз, пунктирна — адаптивний. Прогноз порівнюється з глюкозою на кожному горизонті, за потреби — між двома показниками.";
+"experimental.inspectorIn" = "Через";
+"experimental.inspectorActual" = "Насправді";
+"experimental.inspectorPending" = "очікується";
+"experimental.inspectorMissing" = "немає показника";
 "experimental.predictionNightscout" = "Відвантажувати в Nightscout";
 "experimental.predictionNightscoutFooter" = "Кожні п’ять хвилин прогноз відвантажується як devicestatus у форматі OpenAPS, як це робить AAPS, тож Nightscout показує його лініями прогнозу (увімкніть плагін openaps). Недоступно, поки xDrip стежить за статусом AID із Nightscout. Болюси також передають вибраний інсулін у нотатках, а вуглеводи — білки й жири.";
 
 /* Fork: Ukrainian translation completed */
 "experimental.chartCursor" = "Лінійка на графіку";
+"experimental.uncertaintyRibbon" = "Імовірний діапазон навколо показників";
+"experimental.uncertaintyRibbonDetail" = "Sibionics Adaptive V2";
 "experimental.iobValue" = "IOB %@";
 "experimental.cobValue" = "COB %@";
 "experimental.basalOnBoardValue" = "Базальний %@";
@@ -1118,7 +1134,30 @@
 "experimental.predictedLowEvidence" = "Враховувати IOB і недавню глюкозу";
 "experimental.predictedLowEvidenceFooter" = "«Враховувати IOB і недавню глюкозу» зменшує хибні попередження: сигнал тоді потребує тренду вниз і вуглеводів на борту, які не покривають падіння. Він спрацьовує одразу, коли глюкоза в межах 15 мг/дл (0,8 ммоль/л) від значення, дійде до нього за 10 хвилин або падіння пояснює інсулін, що діятиме найближчі 30 хвилин. Якщо інсуліну на борту немає, падіння, яке лише повертається після недавнього підйому, чекає. В інших випадках його має підтвердити другий показник. Сигналів «Низько» й «Дуже низько» це не стосується.";
 "experimental.alerts" = "Сигнали";
-"experimental.alertsIntroduction" = "Експериментальні доповнення до сигналів із JugglucoNG. Обидва типово вимкнені.";
+"experimental.meter.title" = "Глюкометри (Bluetooth)";
+"experimental.meter.introduction" = "Експериментально, ще не перевірено на справжньому глюкометрі. Зчитує показники з пальця з Bluetooth-глюкометра (стандартний профіль глюкози: Contour Next One, Accu-Chek Guide та Instant, CareSens та інші; або OneTouch Verio) і записує їх як перевірки ГК.";
+"experimental.meter.open" = "Глюкометр і показники";
+"experimental.meter.pairedFooter" = "Перед зчитуванням увімкніть глюкометр (більшість вмикаються після вимірювання). Зчитуються лише показники, новіші за останній зчитаний; показник, уже записаний у межах хвилини з тим самим значенням, пропускається.";
+"experimental.meter.paired" = "Глюкометр";
+"experimental.meter.lastSync" = "Останнє зчитування";
+"experimental.meter.never" = "Ніколи";
+"experimental.meter.sync" = "Зчитати зараз";
+"experimental.meter.forget" = "Забути цей глюкометр";
+"experimental.meter.scanFooter" = "Переведіть глюкометр у режим сполучення (див. інструкцію) і почніть пошук. iOS запитає PIN глюкометра, якщо він потрібен.";
+"experimental.meter.searching" = "Пошук…";
+"experimental.meter.search" = "Шукати глюкометри";
+"experimental.meter.reading" = "Зчитування %@…";
+"experimental.meter.imported" = "Нових показників записано як перевірки ГК: %ld.";
+"experimental.meter.notFound" = "Глюкометр не знайдено. Увімкніть його й спробуйте ще раз.";
+"experimental.meter.timeout" = "Глюкометр не відповів. Увімкніть його, тримайте поруч і спробуйте ще раз.";
+"experimental.meter.bluetoothOff" = "Bluetooth вимкнено або xDrip не має до нього доступу.";
+"experimental.meter.refused" = "Глюкометр відхилив запит (код %ld).";
+"experimental.meter.unnamed" = "Глюкометр";
+"experimental.meter.satelliteCode" = "Код на глюкометрі";
+"experimental.meter.pair" = "Сполучити";
+"experimental.meter.satelliteCodeMessage" = "Введіть код, надрукований на глюкометрі (літера й щонайменше сім цифр), або його тризначний PIN.";
+"experimental.meter.pinRejected" = "Глюкометр не прийняв код.";
+"experimental.alertsIntroduction" = "Експериментальні доповнення до сигналів із JugglucoNG. Усі типово вимкнені.";
 "experimental.muteHighFalling" = "Без сигналу «Високо» під час падіння";
 "experimental.signalRestored" = "Сповіщати про відновлення сигналу";
 "experimental.alertsFooter" = "Без сигналу «Високо» під час падіння: сигнал «Високо» мовчить, поки глюкоза вже падає щонайменше на 0,5 мг/дл (0,03 ммоль/л) за хвилину; «Дуже високо» спрацьовує завжди. Сповіщати про відновлення сигналу: одне беззвучне сповіщення, коли показники повертаються після перерви, не коротшої за затримку сигналу пропущених показників (30 хвилин, якщо той сигнал вимкнено).";
@@ -1145,6 +1184,10 @@
 
 /* Food library */
 "experimental.food.library" = "Бібліотека продуктів";
+"experimental.assist.usual" = "Зазвичай: %@";
+"experimental.assist.less" = "На %@ менше";
+"experimental.assist.more" = "На %@ більше";
+"experimental.assist.uncovered" = "%@ г вуглеводів за останні 90 хвилин ще без болюсу.";
 "experimental.food.meal" = "Страва";
 "experimental.food.search" = "Пошук продуктів";
 "experimental.food.searchOnline" = "Шукати в Open Food Facts";
@@ -1183,11 +1226,12 @@
 "experimental.pensSaveFailed" = "Не вдалося зберегти дози.";
 "experimental.pensReview" = "Дози на ручці";
 "experimental.pensImport" = "Додати";
-"experimental.pensReviewFooter" = "Позначені дози додаються як записи лікування. Непозначені більше не пропонуються, доки не зчитано весь журнал. Мала доза за хвилину до іншої вважається випусканням повітря й спочатку не позначена, як і доза, що вже є в записах лікування.";
+"experimental.pensReviewFooter" = "Позначені дози додаються як записи лікування. Непозначені більше не пропонуються, доки не зчитано весь журнал. Мала доза за хвилину до іншої вважається випусканням повітря й спочатку не позначена, як і доза, що вже є в записах лікування. Доза, що підтверджує ін'єкцію, яку ви записали самі (той самий інсулін і кількість, щонайбільше 15 хвилин різниці, у тому ж порядку), спочатку позначена: тоді цей запис отримує час із ручки, а ін'єкція не додається вдруге.";
 "experimental.pensNoInsulin" = "Для цієї ручки не вибрано інсулін, тому дози додаються як болюси без назви інсуліну.";
 "experimental.pensPartial" = "Зчитування обірвалося: старіших доз може бракувати. Скануйте ще раз, щоб отримати їх.";
 "experimental.pensPriming" = "випускання повітря?";
 "experimental.pensAlreadyLogged" = "уже записано";
+"experimental.pensConfirmsEntry" = "підтверджує ваш запис о %@";
 "experimental.pensFlagged" = "позначено ручкою";
 "experimental.pen.hold" = "Прикладіть верхню частину iPhone до дисплея дози ручки й тримайте, доки зчитування не завершиться.";
 "experimental.pen.notAPen" = "Це не підтримувана інсулінова ручка.";
@@ -1198,6 +1242,26 @@
 "experimental.snoozeEndsWhenResolved" = "Завершувати відкладення після повернення в діапазон";
 "experimental.trendOncePerEpisode" = "Сигнал швидкої зміни один раз на епізод";
 "experimental.alertsEpisodeFooter" = "Завершувати відкладення після повернення в діапазон: відкладений сигнал низької, дуже низької, високої чи дуже високої глюкози знову стає активним, щойно глюкоза щонайменше на 9 мг/дл (0,5 ммоль/л) повернулася на безпечний бік від його значення, тож новий епізод сигналізує одразу, а не чекає кінця старого відкладення. На «Відкласти всі» це не впливає. Сигнал швидкої зміни один раз на епізод: сигнали швидкого падіння та швидкого зростання спрацьовують один раз і мовчать, доки показник не перестане відповідати їхній умові.";
+
+/* Fast change, same direction, quiet window */
+"experimental.deltaRun" = "Швидка зміна за 5-хвилинні інтервали";
+"experimental.deltaRunCount" = "%d інтервали поспіль";
+"experimental.deltaRunOff" = "Вимкнено (два останні показники)";
+"experimental.sameDirection" = "Швидке падіння та прогноз низької: один сигнал";
+"experimental.alertsDeltaFooter" = "Швидка зміна за 5-хвилинні інтервали (GDH, як у JugglucoNG): сигнали швидкого падіння та швидкого зростання спрацьовують, коли зміна за 5 хвилин перевищує їхнє значення стільки інтервалів поспіль і глюкоза вже за їхнім рівнем спрацювання. Зміна вимірюється за 5 хвилин, тож означає те саме для датчика, що міряє щохвилини, і для датчика, що міряє раз на 5 хвилин; зміна в інший бік або пропуск починають відлік знову. «Вимкнено» залишає порівняння двох останніх показників. Швидке падіння та прогноз низької, один сигнал: щойно один із них відкладено, інший мовчить стільки часу.";
+"experimental.quietWindow" = "Тихе вікно";
+"experimental.quietMode" = "Під час вікна";
+"experimental.quietBreakthrough" = "Все одно звучати через";
+"experimental.quietScope" = "Які сигнали пробиваються";
+"experimental.quietVibrateOnly" = "Лише вібрація";
+"experimental.quietNotificationOnly" = "Лише сповіщення";
+"experimental.quietScopeAll" = "Усі сигнали";
+"experimental.quietScopeVeryHigh" = "Низькі та дуже висока";
+"experimental.quietUntil" = "Сигнали тихі до %@";
+"experimental.quietEnd" = "Завершити зараз";
+"experimental.quietOff" = "Сигнали звучать як завжди";
+"experimental.quietEnded" = "Тихе вікно завершилося: сигнали звучать як завжди.";
+"experimental.quietFooter" = "Для кіно чи лекції: сигнали так само спрацьовують і показуються, стримується лише їхній звук (а з «Лише сповіщення» — і вібрація). Вікно завжди завершується, щонайпізніше через 24 години. Сигнал, що залишається активним довше за час прориву, все одно звучить: низька глюкоза завжди, інші сигнали — як вибрано вище. Відкладення та пороги працюють як завжди.";
 
 /* Issue Report */
 "settingsviews_includeWatchLogs" = "Додати журнали Watch";

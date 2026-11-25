@@ -16,6 +16,13 @@ Island, Smart Stack and CarPlay included), the watch app and the rotated day-com
 (landscape, and the iPad AGP view). Companions pick it up with the next reading. The small
 overview chart under the main chart keeps its dots.
 
+**Likely range around readings** (on by default, as in JugglucoNG) draws a faint band around the
+readings of a Sibionics sensor on the Adaptive V2 glucose model: the estimator's 90 % interval for
+each minute. It is the model's own probability, not a measured accuracy. The band keeps its width
+and follows the reading drawn (so a calibration moves it with the line), breaks where a reading has
+no interval or at a 17-minute gap, and is kept for 36 hours. Stock readings and other sensors have
+no band. Main chart only; readings, alarms and uploads are unchanged.
+
 ## Chart cursor
 
 JugglucoNG's scrub cursor, on by default. Touch the glucose line (within 26 points; JugglucoNG
@@ -104,6 +111,12 @@ prediction analysis does: for 15, 30, 60 and 120 minutes ahead it shows the mean
 the bias (positive means the forecast ran high) and the error of simply assuming no change.
 Readings are interpolated across gaps of at most 2.5 reading intervals (6–20 minutes). A horizon
 needs at least 36 compared forecasts before it says much.
+
+**Past forecasts** (Prediction accuracy → Past forecasts, JugglucoNG's prediction inspector) shows
+one recorded forecast at a time over the hour before and the two hours after it: the readings that
+followed (solid), the standard forecast (dashed) and the adaptive one (dotted), and a table of what
+each said at 15, 30, 60 and 120 minutes against the glucose then (waiting / no reading when there is
+none yet). Arrows step to earlier and later forecasts.
 
 ### Nightscout
 
@@ -198,7 +211,7 @@ JugglucoNG's multiple expiry warnings were not ported.
 
 ## Alarm episodes
 
-Settings → Experimental features → Alarms, both off by default (adapted from JugglucoNG's alert
+Settings → Experimental features → Alarms, all off by default (adapted from JugglucoNG's alert
 episodes to xDrip's snooze-based alarms):
 
 - **End snooze when back in range** — a snoozed Low, Very Low, High or Very High alarm is unsnoozed
@@ -207,6 +220,25 @@ episodes to xDrip's snooze-based alarms):
   keeps a value hovering on the limit from re-alarming; Snooze All is not affected.
 - **Fast change alarms once per episode** — Fast Drop and Fast Rise alarm once, then stay quiet
   until a reading no longer meets their condition.
+- **Fast change over 5-minute intervals** (JugglucoNG GDH delta alarm, off by default, 2–6
+  intervals) — Fast Drop and Fast Rise alarm only when the change per 5 minutes has passed their
+  value for that many 5-minute intervals in a row and glucose is past their trigger level. The
+  change is scaled to 5 minutes, so a 1-minute sensor (Libre 2, Sibionics) and a 5-minute sensor
+  mean the same; a change in the other direction, a gap over 20 minutes or a slower interval starts
+  over. Off keeps upstream's comparison of the last two readings.
+- **Fast Drop and predicted low: one alarm** (5–30 minutes, off by default) — the two alarms describe
+  the same fall. Once one of them has fired and been snoozed, the other stays quiet for the chosen
+  time. Low and Very Low are never held back.
+
+## Quiet window
+
+Settings → Experimental features → Alarms → Quiet window (JugglucoNG "quiet mode"). Start it for
+30 minutes to 3 hours; it always ends, after 24 hours at the most, and posts a silent notification
+when it starts and when it ends. During the window alarms are still raised, shown and snoozable,
+only their sound is held back: *Vibrate only* keeps the vibration, *Notification only* drops it
+too. An alarm that stays raised for the break-through time (5–30 minutes, default 10) sounds
+anyway: Low and Very Low always, the others with *Every alarm*, only Very High with *Lows and Very
+High only*. A silenced alarm that has not come back for 30 minutes starts a new episode.
 
 ## Dose hints
 
@@ -230,6 +262,15 @@ Devices tabs open only after it is entered, and lock again when the app goes to 
 Readings, alarms, the chart and treatments stay available. The PIN is kept in the app's settings
 unencrypted; reinstalling the app removes it.
 
+## Amount assist
+
+In the treatment editor (bolus, basal injection, carbs), as JugglucoNG's journal does, with no
+setting: − and + buttons move the amount by the step your own entries use (1, 0.5, 0.25 or 0.1 U;
+15, 10 or 5 g, learned once 85 % of at least 8 entries of the last 60 days sit on it), and a
+**Usual** button fills in what you most often log within two hours of this time of day. Only
+amounts typed in xDrip count, not pump or Nightscout entries. While adding a bolus, carbs of the last
+90 minutes that no dose has answered yet are shown. Nothing is estimated or dosed for you.
+
 ## Food library
 
 In the treatment editor, a carbs entry has a **Food library** button (it needs no setting). Pick
@@ -248,6 +289,23 @@ only the totals; the amount last used for a food is remembered.
 Nothing is sent anywhere until you search or scan: a search sends the typed words, a scan sends the
 barcode, to `openfoodfacts.org`. Open Food Facts is filled in by volunteers — check the figures
 against the package.
+
+## Glucose meters (Bluetooth)
+
+Settings → Experimental features → Glucose meters (after JugglucoNG's meter support). One meter is
+paired: search, tap it, and iOS asks for its PIN when the meter needs one. Its finger-stick readings
+are logged as **BG checks** (entered by the meter's name), so they show on the chart and go to
+Nightscout like any BG check; they are not used to calibrate. Supported: meters with the standard
+Bluetooth Glucose Profile (service 0x1808: Contour Next One, Accu-Chek Guide/Instant, CareSens and
+others) through the Record Access Control Point, OneTouch Verio (vendor protocol ported from
+JugglucoNG `VerioSession`: at most 15 records per connection, newest first). Only records newer than
+the last one read are fetched (a read cut short keeps the cursor below records it did not get), and a reading already logged within a minute with the same value is
+skipped. The meter is read with **Read now** and when xDrip comes to the foreground at least 30
+minutes after the last read; it has to be switched on (most meters enable Bluetooth for a while after
+a measurement). ELTA Satellite (Сателлит+, Nordic UART, JugglucoNG `SatelliteMeterProtocol`) asks for
+the code printed on the meter (or its three-digit PIN) when paired; it sets the meter's clock and
+reads up to ten records, newest first, converting capillary to plasma (×1.12) as JugglucoNG does.
+Never tried on a real meter.
 
 ## Insulin pens (NFC)
 
@@ -272,3 +330,9 @@ Settings → Experimental features → **Insulin pens (NFC)** reads the dose log
 The pen has no clock, only a counter: dose times are that counter set against the phone's clock at
 the moment of the scan. Doses older than 100 days are ignored. Nothing is imported without the
 review, and iOS only reads a pen while this screen's scan is running.
+
+A dose that confirms an injection you wrote down yourself before reading the pen (same insulin and
+amount, at most 15 minutes apart, matched in order as JugglucoNG does) is shown as "confirms your entry
+at …" and starts ticked: adding it moves that entry to the pen's exact time and names the pen's
+insulin in it, instead of logging the injection twice. iOS cannot read a pen in the background (an
+NFC session always starts from a tap), so JugglucoNG's unattended import has no counterpart here.

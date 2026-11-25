@@ -238,22 +238,25 @@ enum Sibionics2FactorySensitivity {
 }
 
 /// Sibionics 1 product lines, which differ in key group, fallback sensitivity token
-/// and stock algorithm (JugglucoNG SibionicsConstants.Variant EU, HEMATONIX, CHINESE).
+/// and stock algorithm (JugglucoNG SibionicsConstants.Variant EU, HEMATONIX, CHINESE, GS3).
 enum Sibionics1Family {
     case eu
     case hematonix
     case chinese
+    /// JugglucoNG GS3: V120 with the EU session key, the V115G algorithm, 14 days + 36 h.
+    case gs3
 
     var fallbackShortCode: String {
         switch self {
         case .eu: return "YMWD016F"
-        case .hematonix: return "YEZ1450H"
+        case .hematonix, .gs3: return "YEZ1450H"
         case .chinese: return "GEPD802J"
         }
     }
 
     /// The family follows the confirmed protocol and the key group that produced readings.
-    static func resolve(protocolMode: Sibionics1ProtocolMode?, keyGroup: Sibionics2KeyGroup?) -> Sibionics1Family {
+    static func resolve(protocolMode: Sibionics1ProtocolMode?, keyGroup: Sibionics2KeyGroup?, isGS3: Bool = false) -> Sibionics1Family {
+        if isGS3 { return .gs3 }
         if protocolMode == .chinese { return .chinese }
         return keyGroup == .hematonix ? .hematonix : .eu
     }

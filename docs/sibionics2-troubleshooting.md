@@ -74,6 +74,7 @@ Sibionics 1 covers three JugglucoNG product lines, told apart at runtime:
 - Factory sensitivity follows JugglucoNG: the short code from a scanned sensor label, else the one derived from the Bluetooth name, then the line's fallback token, then 1.27. The 14-character probe decoder is Sibionics 2 only.
 - **Scan the label**: open the Sibionics 1 device, tap **Factory sensitivity** and point the camera at the GS1 code on the package (QR or Data Matrix). The code must carry a Sibionics GTIN (`0697283164…`) with a valid check digit and the dates, batch and serial fields; a Sibionics 2 serial (`P…`/`XPT…`) is refused. The short code is taken from JugglucoNG's 16-character identity window, and changing it replays history with the new sensitivity. **Remove scanned label code** returns to the name or fallback.
 - Manual reset sends the line's direct command (`24 E7 6F 34` for V120, `AA 55 10 F1` for Chinese). Automatic reset is Sibionics 2 only, as in JugglucoNG. The first request after a reset asks for index 1; if the existing session answers, the reset did not take and the saved cursor is used again.
+- Sibionics 2 reset reminder (JugglucoNG): a notification 4 hours before the reset point (day 22), repeated every 2 hours until the sensor is reset, with **Reset sensor** and **Postpone 2 hours**. Postponing holds only the automatic reset at steady glucose; the forced reset 4 hours before day 23 still happens. The reminder also shows with automatic reset off, so the sensor can be reset by hand in time.
 
 - Sensor life follows JugglucoNG: the label says 14 days, but every Sibionics 1 session is extended automatically to 572 h − 19 min (≈ 23 days 19 h 41 min). Expiry warnings and the sensor age use the extended end; the device screen shows both.
 - There is no warm-up wait for any Sibionics sensor: readings are shown from the first minute, as in JugglucoNG. Earlier builds hid the first 45 minutes of a new sensor.
@@ -117,11 +118,38 @@ Bluetooth error, authentication attempts and key groups, stalled handshakes, mis
 resets and reconnects, up to 200 events. The newest twelve are listed; **Copy log** puts the whole
 log on the clipboard for a problem report. It is cleared when the sensor is deleted.
 
+## Recalculating history
+
+xDrip keeps each Sibionics sensor's raw minutes (JugglucoNG's source journal). A new label code,
+sensitivity, glucose model or the GS3 switch recalculates the history from that journal on the phone,
+without downloading the sensor's whole life over Bluetooth; only minutes missing from the journal
+are asked from the sensor. Backups include the journals, and restoring one adds only minutes the
+phone does not already hold.
+
+## Sibionics GS3
+
+A GS3 is added as **Sibionics 1** with **GS3 sensor** switched on in its device settings. It then
+always uses the V120 protocol (no Chinese probe), the V115G algorithm, the Hematonix fallback code
+`YEZ1450H` when no label code is known, and the 14 days + 36 hours JugglucoNG allows a GS3. Switching
+it recalculates the sensor's history.
+
 ## Glucose model
 
 Sibionics 1 and 2 → **Glucose model**:
 
 - **Stock (default)** — the manufacturer's algorithm (V116A, or V115G for the Chinese Sibionics 1).
+- **Adaptive V1 (experimental)** — JugglucoNG's state model. It follows the sensor's compensated
+  chemical signal (before the manufacturer's filters) with a steady and a dynamic Kalman model, and
+  may leave the stock value only as far as the evidence (fall persistence, plausible rate, agreement
+  with the stock direction, signal quality) allows, fading back otherwise. It shows the stock value for
+  the first 120 minutes of a sensor and never sits more than a little above a low stock value.
+- **Balanced (experimental)** — JugglucoNG's Balanced tracker around the stock value. It smooths
+  the stock value's small 0.1 mmol/L steps (never more than 0.2 mmol/L away from it) and follows the
+  stock value exactly for the first minutes, on a step of 1 mmol/L or more, on a turn, at or below
+  3.9 mmol/L and when temperature or impedance jump.
+- **Responsive (experimental)** — JugglucoNG's Responsive estimator: glucose and its speed, with a
+  robust clamp on outliers and a small lead in the direction of the trend, kept within about 0.65
+  mmol/L (16 %) of the stock value, more when the signal looks poor.
 - **Adaptive V2 (experimental)** — JugglucoNG's probabilistic estimator. It reads the sensor's
   calibrated signal before the manufacturer's display filtering and deconvolution, so it follows
   changes sooner and looks less smooth. It gives a value every minute once the stock algorithm has
@@ -147,3 +175,11 @@ the address, and `refused the authentication address; asking again with the next
 Frequent "connection has timed out" disconnects themselves are radio: distance, the body between phone
 and sensor, or a phone case. Keeping the phone on the same side as the sensor helps. Readings missed while
 disconnected are filled in from the sensor's history on the next connection.
+
+## Last link problem and "no signal"
+
+The device screen's sensor information starts with **Last link problem**: why readings stopped (link
+lost, no readings while connected, sensor not responding, sensor refused every address, authentication
+failed) and when. It stays until the next reading arrives. On Home, the reading age turns amber and adds
+**no signal** once a one-minute sensor (Sibionics, Libre 2, Libre 3) has not been heard for 3 minutes,
+or any other sensor for 11 minutes.

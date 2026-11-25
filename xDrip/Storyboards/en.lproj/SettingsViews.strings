@@ -294,6 +294,11 @@
 "settingsviews_cleanDataConfirmationCode" = "Confirmation code %@";
 "settingsviews_storeFrequentReadingsInHealthKitMessage" = "This option will override the 5-minute write limits and allow much frequent data to be added to Apple Health. Such as for 60-second Libre 2 Direct values.\n\nPlease only enable this option if you really need/want more frequent data. Most users should leave this option disabled.";
 "settingsviews_backupCreate" = "Create Backup";
+"settingsviews_automaticBackup" = "Automatic daily backup";
+"settingsviews_automaticBackupLast" = "Last: %@";
+"settingsviews_automaticBackupNever" = "None yet";
+"settingsviews_automaticBackupShrankTitle" = "Automatic backup is much smaller";
+"settingsviews_automaticBackupShrankBody" = "Glucose readings: %d → %d, treatments: %d → %d. Earlier backups are kept in Files → xDrip → Automatic backups.";
 "settingsviews_backupRestore" = "Restore Backup";
 "settingsviews_backupCreated" = "Backup Successfully Created";
 "settingsviews_backupRestored" = "Backup Successfully Restored";
@@ -608,9 +613,20 @@
 "experimental.accuracyCount" = "%ld forecasts recorded. A horizon needs at least %ld compared forecasts to say much.";
 "experimental.accuracyLine" = "Error %@ · no change %@ · bias %@";
 "experimental.accuracyClear" = "Delete recorded forecasts";
+"experimental.inspectorTitle" = "Past forecasts";
+"experimental.inspectorPrevious" = "Earlier forecast";
+"experimental.inspectorNext" = "Later forecast";
+"experimental.inspectorForecastAt" = "Forecast at %@";
+"experimental.inspectorFooter" = "Solid: the readings that followed. Dashed: the standard forecast; dotted: the adaptive one. A forecast is compared with the glucose at each horizon, read between two readings when needed.";
+"experimental.inspectorIn" = "In";
+"experimental.inspectorActual" = "Actual";
+"experimental.inspectorPending" = "waiting";
+"experimental.inspectorMissing" = "no reading";
 "experimental.predictionNightscout" = "Upload to Nightscout";
 "experimental.predictionNightscoutFooter" = "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.";
 "experimental.chartCursor" = "Chart cursor";
+"experimental.uncertaintyRibbon" = "Likely range around readings";
+"experimental.uncertaintyRibbonDetail" = "Sibionics Adaptive V2";
 "experimental.iobValue" = "IOB %@";
 "experimental.cobValue" = "COB %@";
 "experimental.basalOnBoardValue" = "Basal %@";
@@ -642,7 +658,30 @@
 "experimental.predictedLowEvidence" = "Consider IOB and recent glucose";
 "experimental.predictedLowEvidenceFooter" = "Consider IOB and recent glucose cuts false warnings: the alert then needs a falling trend and carbs on board that do not cover the drop. It warns at once when glucose is within 15 mg/dL (0.8 mmol/L) of the value, would reach it within 10 minutes, or insulin acting in the next 30 minutes explains the drop. With no insulin on board, a fall that only returns from a recent rise waits. Otherwise a second reading must confirm it. The Low and Very Low alarms are not affected.";
 "experimental.alerts" = "Alarms";
-"experimental.alertsIntroduction" = "Experimental additions to the alarms, from JugglucoNG. Both are off by default.";
+"experimental.meter.title" = "Glucose meters (Bluetooth)";
+"experimental.meter.introduction" = "Experimental and not yet confirmed on a real meter. Reads finger-stick readings from a Bluetooth glucose meter (the standard Glucose Profile: Contour Next One, Accu-Chek Guide and Instant, CareSens and others; or OneTouch Verio) and logs them as BG checks.";
+"experimental.meter.open" = "Meter and readings";
+"experimental.meter.pairedFooter" = "Switch the meter on (most do after a measurement) before reading it. Only readings newer than the last one read are fetched; a reading already logged within a minute with the same value is skipped.";
+"experimental.meter.paired" = "Meter";
+"experimental.meter.lastSync" = "Last read";
+"experimental.meter.never" = "Never";
+"experimental.meter.sync" = "Read now";
+"experimental.meter.forget" = "Forget this meter";
+"experimental.meter.scanFooter" = "Put the meter in pairing mode (see its manual), then search. iOS asks for the meter's PIN when it needs one.";
+"experimental.meter.searching" = "Searching…";
+"experimental.meter.search" = "Search for meters";
+"experimental.meter.reading" = "Reading %@…";
+"experimental.meter.imported" = "%ld new readings logged as BG checks.";
+"experimental.meter.notFound" = "The meter was not found. Switch it on and try again.";
+"experimental.meter.timeout" = "The meter did not answer. Switch it on, keep it close and try again.";
+"experimental.meter.bluetoothOff" = "Bluetooth is off or not allowed for xDrip.";
+"experimental.meter.refused" = "The meter refused the request (code %ld).";
+"experimental.meter.unnamed" = "Glucose meter";
+"experimental.meter.satelliteCode" = "Code on the meter";
+"experimental.meter.pair" = "Pair";
+"experimental.meter.satelliteCodeMessage" = "Enter the code printed on the meter (a letter and at least seven digits) or its three-digit PIN.";
+"experimental.meter.pinRejected" = "The meter refused the code.";
+"experimental.alertsIntroduction" = "Experimental additions to the alarms, from JugglucoNG. All are off by default.";
 "experimental.muteHighFalling" = "No High alarm while falling";
 "experimental.signalRestored" = "Notify when signal is restored";
 "experimental.alertsFooter" = "No High alarm while falling: the High alarm stays quiet while glucose is already falling by at least 0.5 mg/dL (0.03 mmol/L) a minute; Very High always alarms. Notify when signal is restored: one silent notification when readings come back after a gap at least as long as the Missed Reading alarm's delay (30 minutes when that alarm is off).";
@@ -669,6 +708,10 @@
 
 /* Food library */
 "experimental.food.library" = "Food library";
+"experimental.assist.usual" = "Usual: %@";
+"experimental.assist.less" = "%@ less";
+"experimental.assist.more" = "%@ more";
+"experimental.assist.uncovered" = "%@ g of carbs in the last 90 minutes have no bolus yet.";
 "experimental.food.meal" = "Meal";
 "experimental.food.search" = "Search foods";
 "experimental.food.searchOnline" = "Search Open Food Facts";
@@ -707,11 +750,12 @@
 "experimental.pensSaveFailed" = "The doses could not be saved.";
 "experimental.pensReview" = "Doses on the pen";
 "experimental.pensImport" = "Add";
-"experimental.pensReviewFooter" = "Ticked doses are added as treatments. Unticked doses are not offered again unless the whole log is read. A small dose within a minute before another is taken for an air shot and starts unticked, as does a dose that is already in the treatments.";
+"experimental.pensReviewFooter" = "Ticked doses are added as treatments. Unticked doses are not offered again unless the whole log is read. A small dose within a minute before another is taken for an air shot and starts unticked, as does a dose that is already in the treatments. A dose that confirms an injection you wrote down yourself (same insulin and amount, at most 15 minutes apart, in the same order) starts ticked: that entry then takes the pen's time instead of the injection being added twice.";
 "experimental.pensNoInsulin" = "No insulin is chosen for this pen, so the doses are added as boluses without a named insulin.";
 "experimental.pensPartial" = "The read was cut short: older doses may be missing. Scan again to get them.";
 "experimental.pensPriming" = "air shot?";
 "experimental.pensAlreadyLogged" = "already logged";
+"experimental.pensConfirmsEntry" = "confirms your entry at %@";
 "experimental.pensFlagged" = "flagged by the pen";
 "experimental.pen.hold" = "Hold the top of the iPhone to the pen's dose display and keep it there until the read finishes.";
 "experimental.pen.notAPen" = "This is not a supported insulin pen.";
@@ -722,6 +766,26 @@
 "experimental.snoozeEndsWhenResolved" = "End snooze when back in range";
 "experimental.trendOncePerEpisode" = "Fast change alarms once per episode";
 "experimental.alertsEpisodeFooter" = "End snooze when back in range: a snoozed Low, Very Low, High or Very High alarm is unsnoozed once glucose is at least 9 mg/dL (0.5 mmol/L) back on the safe side of its value, so a new episode alarms at once instead of waiting out the old snooze. Snooze All is not affected. Fast change alarms once per episode: Fast Drop and Fast Rise alarm once and then stay quiet until a reading no longer meets their condition.";
+
+/* Fast change, same direction, quiet window */
+"experimental.deltaRun" = "Fast change over 5-minute intervals";
+"experimental.deltaRunCount" = "%d intervals in a row";
+"experimental.deltaRunOff" = "Off (last two readings)";
+"experimental.sameDirection" = "Fast Drop and predicted low: one alarm";
+"experimental.alertsDeltaFooter" = "Fast change over 5-minute intervals (GDH, as in JugglucoNG): Fast Drop and Fast Rise alarm when the change per 5 minutes has passed their value for this many intervals in a row, past their trigger level. The change is measured over 5 minutes, so it means the same for a sensor that reads every minute and one that reads every 5 minutes; a change the other way or a gap starts over. Off keeps the comparison of the last two readings. Fast Drop and predicted low, one alarm: once one of them has been snoozed, the other stays quiet for this long.";
+"experimental.quietWindow" = "Quiet window";
+"experimental.quietMode" = "During the window";
+"experimental.quietBreakthrough" = "Sound anyway after";
+"experimental.quietScope" = "Which alarms break through";
+"experimental.quietVibrateOnly" = "Vibrate only";
+"experimental.quietNotificationOnly" = "Notification only";
+"experimental.quietScopeAll" = "Every alarm";
+"experimental.quietScopeVeryHigh" = "Lows and Very High only";
+"experimental.quietUntil" = "Alarms are quiet until %@";
+"experimental.quietEnd" = "End now";
+"experimental.quietOff" = "Alarms sound as usual";
+"experimental.quietEnded" = "The quiet window is over: alarms sound as usual.";
+"experimental.quietFooter" = "For the cinema or a lecture: alarms are still raised and shown, only their sound (and, with Notification only, vibration) is held back. The window always ends, after 24 hours at the most. An alarm that stays raised for the break-through time sounds anyway: a low always, the other alarms as chosen above. Snoozes and thresholds work as usual.";
 
 /* Issue Report */
 "settingsviews_includeWatchLogs" = "Include Watch Logs";

@@ -236,7 +236,153 @@ private struct StatisticsCGMDataPage: View {
         StatisticsSection(title: Texts_Common.statisticsTimeInTightRange, detail: "TITR") {
             StatisticsRangeCard(buckets: analytics.tightRangeDistribution.tightRangeBuckets(usesMgDl: analytics.usesMgDl))
         }
+        if analytics.hourlyRanges.count == 24, analytics.hourlyRanges.contains(where: { $0.total > 0 }) {
+            StatisticsSection(title: Texts_Common.statisticsDayParts) {
+                StatisticsDayPartsCard(hourlyRanges: analytics.hourlyRanges, usesMgDl: analytics.usesMgDl)
+            }
+        }
         StatisticsSummaryView(analytics: analytics)
+    }
+}
+
+/// JugglucoNG's range flow with its day-part strip: the five bands for the chosen hours, high to
+/// low, and the day's four six-hour blocks with their own time in range. Blocks combine; none
+/// chosen is the whole day.
+private struct StatisticsDayPartsCard: View {
+    let hourlyRanges: [GlucoseReportHourRanges]
+    let usesMgDl: Bool
+    @State private var hourMask = 0
+
+    private struct Band: Identifiable {
+        let id: String
+        let title: String
+        let detail: String
+        let percentage: Double
+        let color: Color
+    }
+
+    private var bands: [Band] {
+        let combined = GlucoseReportHourRanges.combined(hourlyRanges, mask: hourMask)
+        guard let distribution = combined.distribution else { return [] }
+        let veryLow = GlucoseReportClinicalConstants.veryLowMgDl, low = GlucoseReportClinicalConstants.timeInRangeLowMgDl
+        let high = GlucoseReportClinicalConstants.timeInRangeHighMgDl, veryHigh = GlucoseReportClinicalConstants.veryHighMgDl
+        return [
+            Band(id: "veryHigh", title: Texts_Common.statisticsVeryHigh, detail: "> \(format(veryHigh))",
+                 percentage: distribution.veryHigh, color: GlucoseReportColors.veryHigh),
+            Band(id: "high", title: Texts_Common.highStatistics, detail: "\(format(high))–\(format(veryHigh))",
+                 percentage: distribution.high, color: GlucoseReportColors.high),
+            Band(id: "target", title: Texts_Common.inRangeStatistics, detail: "\(format(low))–\(format(high))",
+                 percentage: distribution.target, color: GlucoseReportColors.target),
+            Band(id: "low", title: Texts_Common.lowStatistics, detail: "\(format(veryLow))–\(format(low))",
+                 percentage: distribution.low, color: GlucoseReportColors.low),
+            Band(id: "veryLow", title: Texts_Common.statisticsVeryLow, detail: "< \(format(veryLow))",
+                 percentage: distribution.veryLow, color: GlucoseReportColors.veryLow)
+        ]
+    }
+
+    var body: some View {
+        StatisticsCard {
+            let bands = bands
+            if bands.isEmpty {
+                Text(Texts_Common.statisticsDayPartsNoData)
+                    .font(.footnote)
+                    .foregroundStyle(Color(.colorSecondary))
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    // The stacked bar: each band as tall as its share of the time.
+                    GeometryReader { geometry in
+                        VStack(spacing: 1) {
+                            ForEach(bands) { band in
+                                if band.percentage > 0.05 {
+                                    Rectangle()
+                                        .fill(band.color)
+                                        .frame(height: max(2, geometry.size.height * band.percentage / 100))
+                                }
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .frame(width: 14)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(bands) { band in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Circle().fill(band.color).frame(width: 7, height: 7)
+                                Text(band.title)
+                                    .font(band.id == "target" ? .callout.weight(.semibold) : .caption)
+                                    .foregroundStyle(Color(.colorPrimary))
+                                Text(band.detail)
+                                    .font(.caption2)
+                                    .foregroundStyle(Color(.colorSecondary))
+                                Spacer(minLength: 4)
+                                Text(GlucoseReportFormatting.percentage(band.percentage))
+                                    .font(band.id == "target" ? .title3.weight(.bold) : .callout.weight(.semibold))
+                                    .foregroundStyle(Color(.colorPrimary))
+                                    .monospacedDigit()
+                            }
+                            .padding(.vertical, 2)
+                            .padding(.horizontal, 6)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(band.color.opacity(0.03 + 0.11 * band.percentage / 100)))
+                        }
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 6) {
+                ForEach(GlucoseReportDayPart.allCases) { part in
+                    let chosen = hourMask != 0 && hourMask & part.hourMask == part.hourMask
+                    let partRanges = GlucoseReportHourRanges.combined(hourlyRanges, mask: part.hourMask)
+                    Button {
+                        hourMask = GlucoseReportDayPart.toggled(part, in: hourMask)
+                    } label: {
+                        VStack(spacing: 2) {
+                            Image(systemName: symbol(for: part))
+                                .font(.caption)
+                            Text(title(for: part))
+                                .font(.caption2)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                            Text(partRanges.distribution.map { GlucoseReportFormatting.percentage($0.target) } ?? "–")
+                                .font(.caption.weight(.semibold))
+                                .monospacedDigit()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 8)
+                            .fill(GlucoseReportColors.target.opacity(chosen ? 0.35 : 0.10)))
+                        .overlay(RoundedRectangle(cornerRadius: 8)
+                            .stroke(chosen ? GlucoseReportColors.target : Color.clear, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color(.colorPrimary))
+                    .accessibilityAddTraits(chosen ? .isSelected : [])
+                }
+            }
+        }
+    }
+
+    private func format(_ mgDl: Double) -> String {
+        usesMgDl ? String(Int(mgDl)) : String(format: "%.1f", mgDl / 18.0182)
+    }
+
+    private func symbol(for part: GlucoseReportDayPart) -> String {
+        switch part {
+        case .night: return "moon.zzz.fill"
+        case .morning: return "sunrise.fill"
+        case .afternoon: return "sun.max.fill"
+        case .evening: return "sunset.fill"
+        }
+    }
+
+    private func title(for part: GlucoseReportDayPart) -> String {
+        switch part {
+        case .night: return Texts_Common.statisticsNight
+        case .morning: return Texts_Common.statisticsMorning
+        case .afternoon: return Texts_Common.statisticsAfternoon
+        case .evening: return Texts_Common.statisticsEvening
+        }
     }
 }
 

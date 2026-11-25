@@ -717,6 +717,32 @@ struct GlucoseChartView: View {
         }
     }
 
+    /// JugglucoNG's uncertainty ribbon: a faint band with a slightly stronger edge, under the readings.
+    @ChartContentBuilder
+    private func uncertaintyMarks(domain: ClosedRange<Double>) -> some ChartContent {
+        let runs = GlucoseChartExperimentalPlots.uncertaintyRuns(experimentalPlotData.uncertainty, readingDates: bgReadingDates)
+        ForEach(runs) { run in
+            ForEach(run.points) { point in
+                AreaMark(x: .value("Time", point.date),
+                         yStart: .value("Lower", min(max(point.lower, domain.lowerBound), domain.upperBound)),
+                         yEnd: .value("Upper", min(max(point.upper, domain.lowerBound), domain.upperBound)),
+                         series: .value("Series", "uncertainty-\(run.id)"))
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(ConstantsGlucoseChartSwiftUI.experimentalUncertaintyFillColor)
+            }
+            ForEach(["lower", "upper"], id: \.self) { edge in
+                ForEach(run.points) { point in
+                    LineMark(x: .value("Time", point.date),
+                             y: .value("BG", min(max(edge == "lower" ? point.lower : point.upper, domain.lowerBound), domain.upperBound)),
+                             series: .value("Series", "uncertainty-\(run.id)-\(edge)"))
+                        .interpolationMethod(.monotone)
+                        .lineStyle(StrokeStyle(lineWidth: 0.75))
+                        .foregroundStyle(ConstantsGlucoseChartSwiftUI.experimentalUncertaintyEdgeColor)
+                }
+            }
+        }
+    }
+
     /// Glucose as a line in the reading's range colour. A run changes colour where the readings do
     /// and is broken where readings are more than JugglucoNG's 17-minute gap apart.
     @ChartContentBuilder
@@ -977,6 +1003,11 @@ struct GlucoseChartView: View {
                         .foregroundStyle(pointColor)
                     }
                 }
+            }
+
+            // Experimental uncertainty ribbon (Sibionics Adaptive V2), under the readings.
+            if usesMainChartYAxisContext, !experimentalPlotData.uncertainty.isEmpty {
+                uncertaintyMarks(domain: domain)
             }
 
             // Main glucose points, or the experimental connected line (main chart, widgets,
@@ -1683,6 +1714,42 @@ struct GlucoseChartExperimentalPlots {
         let points: [LinePoint]
     }
 
+    /// JugglucoNG `GlucoseUncertainty` around one reading, in mg/dL.
+    struct UncertaintyPoint: Identifiable, Equatable {
+        let date: Date
+        let lower: Double
+        let upper: Double
+        var id: TimeInterval { date.timeIntervalSince1970 }
+    }
+
+    struct UncertaintyRun: Identifiable {
+        let id: Int
+        let points: [UncertaintyPoint]
+    }
+
+    /// JugglucoNG `UncertaintyBands.runs`: a missing interval or a gap breaks the band, and a lone
+    /// interval is not drawn.
+    static func uncertaintyRuns(_ points: [UncertaintyPoint], readingDates: [Date]) -> [UncertaintyRun] {
+        var runs: [UncertaintyRun] = []
+        var current: [UncertaintyPoint] = []
+        let byDate = Dictionary(points.map { ($0.date, $0) }, uniquingKeysWith: { _, newer in newer })
+        func close() {
+            if current.count >= 2 { runs.append(UncertaintyRun(id: runs.count, points: current)) }
+            current = []
+        }
+        for date in readingDates.sorted() {
+            guard let point = byDate[date],
+                  point.lower.isFinite, point.upper.isFinite, point.lower > 0, point.upper >= point.lower else {
+                close()
+                continue
+            }
+            if let last = current.last, date.timeIntervalSince(last.date) > lineGapThreshold { close() }
+            current.append(point)
+        }
+        close()
+        return runs
+    }
+
     /// Markers of one kind closer than this many points are drawn as one.
     static let markerGroupingWidth: Double = 16
 
@@ -1715,6 +1782,8 @@ struct GlucoseChartExperimentalPlots {
     static let lineGapThreshold: TimeInterval = 17 * 60
 
     var prediction: [PredictionPoint] = []
+    /// Intervals of the readings that have one (Sibionics Adaptive V2); drawn on the main chart only.
+    var uncertainty: [UncertaintyPoint] = []
     var insulin: [InsulinLayer] = []
     /// JugglucoNG dose hint for the current state (see `DoseHintCalculator`), when enabled.
     struct DoseHint: Equatable {

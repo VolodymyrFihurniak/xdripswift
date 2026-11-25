@@ -13,6 +13,7 @@
 //
 
 import Foundation
+import CoreBluetooth
 import CoreData
 import SwiftUI
 
@@ -110,6 +111,7 @@ extension UserDefaults {
     private enum ExperimentalKey {
         static let chartStyle = "experimentalGlucoseChartStyle"
         static let chartCursor = "experimentalChartCursorEnabled"
+        static let uncertaintyRibbon = "experimentalUncertaintyRibbonEnabled"
         static let predictionEnabled = "experimentalPredictionEnabled"
         static let predictionHorizon = "experimentalPredictionHorizonMinutes"
         static let predictionMomentum = "experimentalPredictionTrendMomentum"
@@ -124,6 +126,9 @@ extension UserDefaults {
         static let snoozeEndsWhenResolved = "experimentalSnoozeEndsWhenResolved"
         static let trendAlertOncePerEpisode = "experimentalTrendAlertOncePerEpisode"
         static let trendAlertEpisodes = "experimentalTrendAlertEpisodes"
+        static let deltaRunCount = "experimentalDeltaRunCount"
+        static let sameDirectionMinutes = "experimentalSameDirectionSuppressionMinutes"
+        static let sameDirectionLastFired = "experimentalSameDirectionLastFired"
         static let predictionCarbRatio = "experimentalPredictionCarbRatio"
         static let predictionSensitivity = "experimentalPredictionInsulinSensitivityMgDl"
         static let predictionAbsorption = "experimentalPredictionCarbAbsorption"
@@ -142,6 +147,13 @@ extension UserDefaults {
     var experimentalChartCursorEnabled: Bool {
         get { object(forKey: ExperimentalKey.chartCursor) as? Bool ?? true }
         set { set(newValue, forKey: ExperimentalKey.chartCursor) }
+    }
+
+    /// JugglucoNG's uncertainty ribbon (`glucose_uncertainty_ribbon`, on by default there too): only
+    /// readings of an estimator with an interval (Sibionics Adaptive V2) have one.
+    var experimentalUncertaintyRibbonEnabled: Bool {
+        get { object(forKey: ExperimentalKey.uncertaintyRibbon) as? Bool ?? true }
+        set { set(newValue, forKey: ExperimentalKey.uncertaintyRibbon) }
     }
 
     /// Off by default here: JugglucoNG enables it, but in xDrip it is an experimental feature.
@@ -215,6 +227,26 @@ extension UserDefaults {
     }
 
     /// Raw values of the trend alarm kinds whose episode is running.
+    /// JugglucoNG / GDH fast change: Fast Drop and Fast Rise need this many 5-minute intervals in a
+    /// row past their threshold. 0 keeps xDrip's own two-reading rule. Off by default.
+    var experimentalDeltaRunCount: Int {
+        get { min(max(integer(forKey: ExperimentalKey.deltaRunCount), 0), 6) }
+        set { set(min(max(newValue, 0), 6), forKey: ExperimentalKey.deltaRunCount) }
+    }
+
+    /// JugglucoNG same-direction suppression window in minutes (0 off): after Fast Drop or the
+    /// predicted low has been acknowledged, the other one stays quiet this long.
+    var experimentalSameDirectionSuppressionMinutes: Int {
+        get { min(max(integer(forKey: ExperimentalKey.sameDirectionMinutes), 0), 30) }
+        set { set(min(max(newValue, 0), 30), forKey: ExperimentalKey.sameDirectionMinutes) }
+    }
+
+    /// Last firing per direction: ["falling": [kind raw value, epoch seconds]].
+    var experimentalSameDirectionLastFired: [String: [Double]] {
+        get { (dictionary(forKey: ExperimentalKey.sameDirectionLastFired) as? [String: [Double]]) ?? [:] }
+        set { set(newValue, forKey: ExperimentalKey.sameDirectionLastFired) }
+    }
+
     var experimentalTrendAlertEpisodes: Set<Int> {
         get { Set((array(forKey: ExperimentalKey.trendAlertEpisodes) as? [Int]) ?? []) }
         set { set(Array(newValue).sorted(), forKey: ExperimentalKey.trendAlertEpisodes) }
@@ -1645,6 +1677,44 @@ enum PredictionAccuracy {
     }
 }
 
+/// JugglucoNG `PredictionInspectorScreen`: one recorded forecast at a time over the readings that
+/// followed it — what it said, and what happened.
+enum PredictionInspector {
+    struct Moment: Hashable {
+        let origin: Date
+        let originMgDl: Double
+        var standard: [Int: Double]?
+        var adaptive: [Int: Double]?
+    }
+
+    enum Outcome: Equatable {
+        case pending
+        case missing
+        case actual(Double)
+    }
+
+    /// The standard and adaptive forecast of one reading together, newest first.
+    static func moments(_ records: [RecordedForecast]) -> [Moment] {
+        var byOrigin: [Int: Moment] = [:]
+        for record in records {
+            let key = Int(record.origin.timeIntervalSince1970.rounded())
+            var moment = byOrigin[key] ?? Moment(origin: record.origin, originMgDl: record.originMgDl)
+            if record.isAdaptive { moment.adaptive = record.predicted } else { moment.standard = record.predicted }
+            byOrigin[key] = moment
+        }
+        return byOrigin.values.sorted { $0.origin > $1.origin }
+    }
+
+    /// What happened `horizon` minutes after `origin`, scored as `PredictionAccuracy.report` does.
+    static func outcome(origin: Date, horizon: Int, readings: [(date: Date, mgDl: Double)], maximumGap: TimeInterval,
+                        now: Date = Date()) -> Outcome {
+        let target = origin.addingTimeInterval(TimeInterval(horizon * 60))
+        if let actual = PredictionAccuracy.actual(at: target, readings: readings, maximumGap: maximumGap) { return .actual(actual) }
+        let latest = readings.last?.date ?? .distantPast
+        return target > latest && target > now.addingTimeInterval(-PredictionAccuracy.arrivalAllowance) ? .pending : .missing
+    }
+}
+
 /// Records one forecast every five minutes while "Record accuracy" is on, keeping 14 days in a
 /// file in Application Support.
 enum PredictionAccuracyRecorder {
@@ -1910,6 +1980,7 @@ enum ExperimentalChartInputs {
     static func settingsSignature(defaults: UserDefaults = .standard) -> String {
         let model = ExperimentalPredictionModel(defaults: defaults)
         return [defaults.experimentalGlucoseChartStyle.rawValue.description, defaults.experimentalPredictionEnabled.description,
+                defaults.experimentalUncertaintyRibbonEnabled.description,
                 defaults.experimentalInsulinsEnabled.description, model.horizonMinutes.description, model.trendMomentum.description,
                 model.carbRatio.description, model.insulinSensitivityMgDl.description, model.carbAbsorption.description,
                 model.bolusInsulin.rawValue, model.basalInsulin.rawValue, defaults.bloodGlucoseUnitIsMgDl.description,
@@ -1970,6 +2041,11 @@ enum ExperimentalChartInputs {
                       defaults: UserDefaults = .standard, now: Date = Date()) async -> GlucoseChartExperimentalPlots {
         var plots = GlucoseChartExperimentalPlots()
         plots.drawsGlucoseAsLine = defaults.experimentalGlucoseChartStyle == .line
+        if defaults.experimentalUncertaintyRibbonEnabled {
+            plots.uncertainty = GlucoseUncertaintyStore.ribbon(
+                entries: GlucoseUncertaintyStore.entries(from: dataStart.addingTimeInterval(-60), to: dataEnd.addingTimeInterval(60)),
+                readingDates: chartState.bgReadingDates, readingValues: chartState.bgReadingValues)
+        }
         let model = ExperimentalPredictionModel(defaults: defaults)
         let atPresent = chartState.endDate.timeIntervalSince(now) > -ConstantsGlucoseChartSwiftUI.experimentalPredictionPresentTolerance
         let wantsPrediction = defaults.experimentalPredictionEnabled && atPresent
@@ -2042,5 +2118,1085 @@ enum ExperimentalChartInputs {
                 .map { onBoard($0) }
         }
         return plots
+    }
+}
+
+// MARK: - Quiet window
+
+/// JugglucoNG's quiet window: a temporary, self-ending reduction of alarm *output* for the cinema
+/// or a lecture. Evaluation, thresholds and snoozes run as if there were no window; only sound (and
+/// in notification-only mode vibration) is taken away. It always ends (at most 24 hours, checked
+/// against the clock on every read), and an alarm that stays silenced for the breakthrough time
+/// sounds anyway: a low always, every alarm or the very high only by choice.
+enum ExperimentalQuietWindow {
+    enum Mode: Int, CaseIterable { case vibrateOnly = 0, notificationOnly = 1 }
+    enum Scope: Int, CaseIterable { case all = 0, veryHighOnly = 1 }
+    enum Delivery: Equatable {
+        case normal, vibrateOnly, silent
+        var allowsSound: Bool { self == .normal }
+        var allowsVibration: Bool { self != .silent }
+    }
+
+    static let maximumMinutes = 24 * 60
+    static let presetMinutes = [30, 60, 120, 180]
+    static let breakthroughChoices = [5, 10, 15, 20, 30]
+    static let defaultBreakthroughMinutes = 10
+    /// A silenced delivery this long after the previous one of the same alarm starts a new episode.
+    static let silencedEpisodeStale: TimeInterval = 30 * 60
+
+    private static let untilKey = "experimentalQuietWindowUntil"
+    private static let modeKey = "experimentalQuietWindowMode"
+    private static let scopeKey = "experimentalQuietWindowScope"
+    private static let breakthroughKey = "experimentalQuietWindowBreakthroughMinutes"
+    private static let silencedKey = "experimentalQuietWindowSilenced"
+
+    /// The end of the running window, nil when none runs (an end the clock has passed is cleared).
+    static func until(now: Date = Date(), defaults: UserDefaults = .standard) -> Date? {
+        guard let until = defaults.object(forKey: untilKey) as? Date else { return nil }
+        guard until > now else {
+            end(defaults: defaults)
+            return nil
+        }
+        return until
+    }
+
+    @discardableResult
+    static func start(minutes: Int, now: Date = Date(), defaults: UserDefaults = .standard) -> Date {
+        let until = now.addingTimeInterval(TimeInterval(min(max(minutes, 1), maximumMinutes) * 60))
+        defaults.set(until, forKey: untilKey)
+        defaults.removeObject(forKey: silencedKey)
+        return until
+    }
+
+    static func end(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: untilKey)
+        defaults.removeObject(forKey: silencedKey)
+    }
+
+    static func mode(defaults: UserDefaults = .standard) -> Mode { Mode(rawValue: defaults.integer(forKey: modeKey)) ?? .vibrateOnly }
+    static func setMode(_ mode: Mode, defaults: UserDefaults = .standard) { defaults.set(mode.rawValue, forKey: modeKey) }
+    static func scope(defaults: UserDefaults = .standard) -> Scope { Scope(rawValue: defaults.integer(forKey: scopeKey)) ?? .all }
+    static func setScope(_ scope: Scope, defaults: UserDefaults = .standard) { defaults.set(scope.rawValue, forKey: scopeKey) }
+
+    static func breakthroughMinutes(defaults: UserDefaults = .standard) -> Int {
+        let stored = defaults.integer(forKey: breakthroughKey)
+        return (5...30).contains(stored) ? stored : defaultBreakthroughMinutes
+    }
+
+    static func setBreakthroughMinutes(_ minutes: Int, defaults: UserDefaults = .standard) {
+        defaults.set((5...30).contains(minutes) ? minutes : defaultBreakthroughMinutes, forKey: breakthroughKey)
+    }
+
+    /// What an alarm that is silenced since `silencedSince` may do at `now`.
+    static func decide(kind: AlertKind, mode: Mode, scope: Scope, breakthroughMinutes: Int,
+                       silencedSince: Date, now: Date) -> Delivery {
+        let hypo = kind == .low || kind == .verylow
+        let mayBreakThrough = hypo || scope == .all || kind == .veryhigh
+        if mayBreakThrough, now.timeIntervalSince(silencedSince) >= TimeInterval(breakthroughMinutes * 60) { return .normal }
+        return mode == .notificationOnly ? .silent : .vibrateOnly
+    }
+
+    /// The delivery for an alarm being raised at `date`, remembering when its silenced episode began.
+    static func delivery(for kind: AlertKind, at date: Date, now: Date = Date(), defaults: UserDefaults = .standard) -> Delivery {
+        guard let until = until(now: now, defaults: defaults), date < until else { return .normal }
+        var silenced = (defaults.dictionary(forKey: silencedKey) as? [String: [Double]]) ?? [:]
+        let key = String(kind.rawValue)
+        var since = date
+        if let entry = silenced[key], entry.count == 2,
+           date.timeIntervalSince1970 - entry[1] <= silencedEpisodeStale {
+            since = Date(timeIntervalSince1970: entry[0])
+        }
+        let delivery = decide(kind: kind, mode: mode(defaults: defaults), scope: scope(defaults: defaults),
+                              breakthroughMinutes: breakthroughMinutes(defaults: defaults), silencedSince: since, now: date)
+        silenced[key] = [since.timeIntervalSince1970, date.timeIntervalSince1970]
+        defaults.set(silenced, forKey: silencedKey)
+        return delivery
+    }
+}
+
+// MARK: - Uncertainty ribbon
+
+/// JugglucoNG `GlucoseUncertainty` for the readings of an estimator that says how sure it is
+/// (Sibionics Adaptive V2): the 90 % interval around each value, kept 36 hours in Application
+/// Support. Display only — readings, alarms and uploads never see it.
+enum GlucoseUncertaintyStore {
+    struct Entry: Codable, Equatable {
+        let date: Date
+        /// The value the interval was computed around; the chart shifts the interval to the reading drawn.
+        let mgDl: Double
+        let lower: Double
+        let upper: Double
+
+        var isUsable: Bool { lower.isFinite && upper.isFinite && lower > 0 && upper >= lower }
+    }
+
+    static let keptFor: TimeInterval = 36 * 60 * 60
+    private static let queue = DispatchQueue(label: "glucose.uncertainty", qos: .utility)
+    private static var cache: [Entry]?
+
+    static var fileURL: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("experimental-glucose-uncertainty.json")
+    }
+
+    /// Entries oldest first, one per moment (a newer entry for the same second replaces the older one).
+    static func merged(_ existing: [Entry], adding new: [Entry], now: Date) -> [Entry] {
+        var byDate: [TimeInterval: Entry] = [:]
+        for entry in existing + new where entry.isUsable && now.timeIntervalSince(entry.date) <= keptFor {
+            byDate[entry.date.timeIntervalSince1970.rounded()] = entry
+        }
+        return byDate.values.sorted { $0.date < $1.date }
+    }
+
+    static func record(_ entries: [Entry], now: Date = Date()) {
+        guard !entries.isEmpty else { return }
+        queue.async {
+            let updated = merged(loadLocked(), adding: entries, now: now)
+            cache = updated
+            guard let url = fileURL else { return }
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? JSONEncoder().encode(updated).write(to: url, options: .atomic)
+        }
+    }
+
+    static func entries(from start: Date, to end: Date) -> [Entry] {
+        queue.sync { loadLocked().filter { $0.date >= start && $0.date <= end } }
+    }
+
+    static func clear() {
+        queue.sync {
+            cache = []
+            if let url = fileURL { try? FileManager.default.removeItem(at: url) }
+        }
+    }
+
+    private static func loadLocked() -> [Entry] {
+        if let cache { return cache }
+        guard let url = fileURL, let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([Entry].self, from: data) else { return [] }
+        cache = decoded
+        return decoded
+    }
+
+    /// The ribbon around the readings drawn: each stored interval keeps its width and follows its
+    /// reading (JugglucoNG `GlucoseUncertainty.shifted`, so calibration moves it with the line).
+    /// A reading without an interval within 30 seconds leaves a hole.
+    static func ribbon(entries: [Entry], readingDates: [Date], readingValues: [Double]) -> [GlucoseChartExperimentalPlots.UncertaintyPoint] {
+        guard !entries.isEmpty else { return [] }
+        let sorted = entries.sorted { $0.date < $1.date }
+        var result: [GlucoseChartExperimentalPlots.UncertaintyPoint] = []
+        for (date, value) in zip(readingDates, readingValues) where value > 0 {
+            var low = 0, high = sorted.count
+            while low < high {
+                let middle = (low + high) / 2
+                if sorted[middle].date < date { low = middle + 1 } else { high = middle }
+            }
+            let candidates = [low - 1, low].filter { sorted.indices.contains($0) }
+            guard let nearest = candidates.min(by: { abs(sorted[$0].date.timeIntervalSince(date)) < abs(sorted[$1].date.timeIntervalSince(date)) }),
+                  abs(sorted[nearest].date.timeIntervalSince(date)) <= 30 else { continue }
+            let entry = sorted[nearest]
+            let shift = value - entry.mgDl
+            result.append(GlucoseChartExperimentalPlots.UncertaintyPoint(date: date, lower: entry.lower + shift, upper: entry.upper + shift))
+        }
+        return result.sorted { $0.date < $1.date }
+    }
+}
+
+// MARK: - Amount assist
+
+/// JugglucoNG `JournalAmountAssist`: where the treatment editor's steppers start and how far they
+/// move, read only from what the person typed themselves. It estimates nothing and changes no
+/// setting; it repeats the person's own logging back to them.
+enum TreatmentAmountAssist {
+    struct Habit: Equatable {
+        /// What one press of the stepper adds.
+        let step: Double
+        /// What is usually logged around this time of day; nil until the log can say.
+        let usual: Double?
+    }
+
+    struct Entry {
+        let date: Date
+        let amount: Double
+    }
+
+    static let defaultInsulinStep = 0.5
+    static let defaultCarbStep = 5.0
+    /// Coarsest first: the first one that fits the log wins.
+    static let insulinSteps = [1, 0.5, 0.25, 0.1]
+    static let carbSteps = [15.0, 10, 5]
+
+    static let habitWindow: TimeInterval = 60 * 24 * 60 * 60
+    private static let stepMinimumSamples = 8
+    private static let stepMinimumShare = 0.85
+    private static let gridTolerance = 1e-3
+    private static let timeOfDayWindowMinutes = 120
+    private static let usualMinimumAtThisTime = 3
+    private static let usualMinimumOverall = 5
+    static let mealWindow: TimeInterval = 90 * 60
+    /// A dose this long before food is a pre-bolus for it, not an earlier meal's dose.
+    static let preBolus: TimeInterval = 30 * 60
+
+    static func insulinHabit(_ entries: [Entry], at date: Date, calendar: Calendar = .current) -> Habit {
+        habit(entries, steps: insulinSteps, defaultStep: defaultInsulinStep, at: date, calendar: calendar)
+    }
+
+    static func carbHabit(_ entries: [Entry], at date: Date, calendar: Calendar = .current) -> Habit {
+        habit(entries, steps: carbSteps, defaultStep: defaultCarbStep, at: date, calendar: calendar)
+    }
+
+    /// Carbs from the last 90 minutes with no dose after them (any dose, however small, so a split
+    /// bolus reads as covered); nil when there are none.
+    static func uncoveredCarbs(carbs: [Entry], doses: [Entry], at date: Date) -> Double? {
+        let lastDose = doses.filter { $0.date <= date && $0.amount > 0 }.map(\.date).max()
+        let meals = carbs.filter { entry in
+            entry.amount > 0 && entry.date >= date.addingTimeInterval(-mealWindow) && entry.date <= date
+                && (lastDose.map { entry.date > $0.addingTimeInterval(preBolus) } ?? true)
+        }
+        return meals.isEmpty ? nil : meals.reduce(0) { $0 + $1.amount }
+    }
+
+    /// One press away from `current`, landing on the step's grid: with 1 U steps, 2.5 goes to 3
+    /// and 2. Never below zero.
+    static func stepped(_ current: Double, direction: Int, step: Double) -> Double {
+        let position = current / step
+        let nearest = position.rounded()
+        let next: Double
+        if abs(position - nearest) < gridTolerance {
+            next = nearest + Double(direction)
+        } else {
+            next = direction > 0 ? position.rounded(.up) : position.rounded(.down)
+        }
+        return max(0, next * step)
+    }
+
+    private static func habit(_ entries: [Entry], steps: [Double], defaultStep: Double, at date: Date, calendar: Calendar) -> Habit {
+        let typed = entries.filter {
+            $0.amount.isFinite && $0.amount > 0 && $0.date <= date && $0.date >= date.addingTimeInterval(-habitWindow)
+        }
+        let step = learnedStep(typed.map(\.amount), steps: steps, defaultStep: defaultStep)
+        return Habit(step: step, usual: usualAmount(typed, step: step, at: date, calendar: calendar))
+    }
+
+    private static func learnedStep(_ amounts: [Double], steps: [Double], defaultStep: Double) -> Double {
+        guard amounts.count >= stepMinimumSamples else { return defaultStep }
+        return steps.first { step in
+            Double(amounts.filter { onGrid($0, step: step) }.count) >= Double(amounts.count) * stepMinimumShare
+        } ?? defaultStep
+    }
+
+    private static func onGrid(_ amount: Double, step: Double) -> Bool {
+        let position = amount / step
+        return abs(position - position.rounded()) < gridTolerance
+    }
+
+    /// The amount logged most often around this time of day, or across the whole log when this
+    /// time of day has too few entries. With nothing repeated, the middle of the log.
+    private static func usualAmount(_ entries: [Entry], step: Double, at date: Date, calendar: Calendar) -> Double? {
+        let minute = minuteOfDay(date, calendar: calendar)
+        let atThisTime = entries.filter { timeOfDayDistance(minuteOfDay($0.date, calendar: calendar), minute) <= timeOfDayWindowMinutes }
+        let pool: [Entry]
+        if atThisTime.count >= usualMinimumAtThisTime {
+            pool = atThisTime
+        } else if entries.count >= usualMinimumOverall {
+            pool = entries
+        } else {
+            return nil
+        }
+        // Kotlin roundToInt rounds half up (towards positive infinity).
+        let byAmount = Dictionary(grouping: pool) { Int(($0.amount / step + 0.5).rounded(.down)) }
+        guard let best = byAmount.max(by: { lhs, rhs in
+            if lhs.value.count != rhs.value.count { return lhs.value.count < rhs.value.count }
+            return (lhs.value.map(\.date).max() ?? .distantPast) < (rhs.value.map(\.date).max() ?? .distantPast)
+        }) else { return nil }
+        let position: Int
+        if best.value.count >= 2 {
+            position = best.key
+        } else {
+            let keys = byAmount.keys.sorted()
+            position = keys[(keys.count - 1) / 2]
+        }
+        return max(Double(position) * step, step)
+    }
+
+    private static func minuteOfDay(_ date: Date, calendar: Calendar) -> Int {
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+    }
+
+    private static func timeOfDayDistance(_ first: Int, _ second: Int) -> Int {
+        let distance = abs(first - second)
+        return min(distance, 24 * 60 - distance)
+    }
+}
+
+// MARK: - Bluetooth glucose meters
+
+/// A finger-stick reading a meter sent: its record number on the meter, when, and mg/dL.
+struct GlucoseMeterRecord: Equatable {
+    let sequence: Int
+    let date: Date
+    let mgDl: Double
+}
+
+/// The Bluetooth SIG Glucose Profile (service 0x1808), as JugglucoNG `GlucoseMeterGatt` reads it:
+/// Glucose Measurement 0x2A18 notifications answer a Record Access Control Point 0x2A52 request.
+enum GlucoseMeterGATT {
+    static let service = CBUUID(string: "1808")
+    static let measurement = CBUUID(string: "2A18")
+    static let context = CBUUID(string: "2A34")
+    static let recordAccess = CBUUID(string: "2A52")
+    static let mgDlPerMmol = 18.0182
+
+    enum RecordAccessResult: Equatable {
+        case success
+        case noRecords
+        case failed(Int)
+    }
+
+    /// IEEE-11073 16-bit SFLOAT; nil for NaN, NRes, ±infinity and reserved values.
+    static func sfloat(_ raw: UInt16) -> Double? {
+        guard ![0x07FF, 0x0800, 0x07FE, 0x0802, 0x0801].contains(raw) else { return nil }
+        var mantissa = Int(raw & 0x0FFF)
+        if mantissa >= 0x0800 { mantissa -= 0x1000 }
+        var exponent = Int(raw >> 12)
+        if exponent >= 0x8 { exponent -= 0x10 }
+        return Double(mantissa) * pow(10, Double(exponent))
+    }
+
+    /// One Glucose Measurement, in the meter's local time (the phone's time zone); nil for a control
+    /// solution, a record without a concentration, or one that cannot be read.
+    static func parseMeasurement(_ data: Data, timeZone: TimeZone = .current) -> GlucoseMeterRecord? {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 10 else { return nil }
+        let flags = bytes[0]
+        let sequence = Int(bytes[1]) | Int(bytes[2]) << 8
+        var components = DateComponents()
+        components.year = Int(bytes[3]) | Int(bytes[4]) << 8
+        components.month = Int(bytes[5])
+        components.day = Int(bytes[6])
+        components.hour = Int(bytes[7])
+        components.minute = Int(bytes[8])
+        components.second = Int(bytes[9])
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        guard (2000...2100).contains(components.year ?? 0), var date = calendar.date(from: components) else { return nil }
+        var offset = 10
+        if flags & 0x01 != 0 {
+            guard bytes.count >= offset + 2 else { return nil }
+            let minutes = Int(Int16(bitPattern: UInt16(bytes[offset]) | UInt16(bytes[offset + 1]) << 8))
+            date = date.addingTimeInterval(TimeInterval(minutes * 60))
+            offset += 2
+        }
+        guard flags & 0x02 != 0, bytes.count >= offset + 3,
+              let value = sfloat(UInt16(bytes[offset]) | UInt16(bytes[offset + 1]) << 8) else { return nil }
+        // Type in the low nibble: 0x0A is control solution.
+        if bytes[offset + 2] & 0x0F == 0x0A { return nil }
+        let mgDl = flags & 0x04 != 0 ? value * 1000 * mgDlPerMmol : value * 100_000
+        guard mgDl.isFinite, (10...700).contains(mgDl) else { return nil }
+        return GlucoseMeterRecord(sequence: sequence, date: date, mgDl: mgDl)
+    }
+
+    /// Report stored records: all, or those from `sequence` on.
+    static func reportRecords(from sequence: Int?) -> Data {
+        guard let sequence else { return Data([0x01, 0x01]) }
+        return Data([0x01, 0x03, 0x01, UInt8(sequence & 0xFF), UInt8((sequence >> 8) & 0xFF)])
+    }
+
+    /// The meter's answer to a request (op code 0x06); nil for anything else.
+    static func recordAccessResult(_ data: Data) -> RecordAccessResult? {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 4, bytes[0] == 0x06 else { return nil }
+        switch bytes[3] {
+        case 0x01: return .success
+        case 0x06: return .noRecords
+        default: return .failed(Int(bytes[3]))
+        }
+    }
+}
+
+/// CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF), as JugglucoNG `Crc16CcittFalse`.
+enum CRC16CCITTFalse {
+    static func checksum(_ bytes: [UInt8]) -> UInt16 {
+        var crc: UInt16 = 0xFFFF
+        for byte in bytes {
+            crc ^= UInt16(byte) << 8
+            for _ in 0..<8 { crc = crc & 0x8000 != 0 ? (crc << 1) ^ 0x1021 : crc << 1 }
+        }
+        return crc
+    }
+
+    /// The last two bytes are the little-endian CRC of the rest.
+    static func validates(_ bytes: [UInt8]) -> Bool {
+        guard bytes.count >= 3 else { return false }
+        let expected = checksum(Array(bytes.dropLast(2)))
+        return expected == UInt16(bytes[bytes.count - 2]) | UInt16(bytes[bytes.count - 1]) << 8
+    }
+}
+
+/// JugglucoNG `VerioSession`: the OneTouch Verio (Flex/Reflect) vendor protocol. One command at a
+/// time, every data answer acked with 0x81; meter time, record counter, number of records, then
+/// records from the newest down to what is already stored (at most 15 per connection).
+struct VerioMeterSession {
+    static let service = CBUUID(string: "AF9DF7A1-E595-11E3-96B4-0002A5D5C51B")
+    static let write = CBUUID(string: "AF9DF7A2-E595-11E3-96B4-0002A5D5C51B")
+    static let notify = CBUUID(string: "AF9DF7A3-E595-11E3-96B4-0002A5D5C51B")
+    /// Meter timestamps count seconds from this offset.
+    static let timeOffset: Int64 = 946_684_799
+    static let maximumBackfillRecords = 15
+
+    private enum Stage { case idle, time, recordCounter, recordCount, records, done }
+
+    private var outbox: [Data] = []
+    private(set) var readings: [GlucoseMeterRecord] = []
+    private var stage = Stage.idle
+    private(set) var isFailed = false
+    private var meterTimeOffset: TimeInterval = 0
+    private var haveMeterTime = false
+    private var highestRecordNumber = -1
+    private var numberOfRecords = -1
+    private var requestedRecord = -1
+    private var nextRecordToRequest = -1
+    private var recordsRequested = 0
+    private var walkFloor = 0
+    /// Records the walk has had an answer for, whatever they held.
+    private(set) var walkedRecords = Set<Int>()
+
+    var isDone: Bool { stage == .done }
+    /// The walk went down to what was already stored (or its 15-record limit) without failing.
+    var completedWalk: Bool { stage == .done && !isFailed }
+
+    mutating func begin() {
+        self = VerioMeterSession()
+        stage = .time
+        outbox.append(Self.command(0x20, 0x02))
+    }
+
+    mutating func take() -> Data? { outbox.isEmpty ? nil : outbox.removeFirst() }
+    mutating func putBack(_ command: Data) { outbox.insert(command, at: 0) }
+
+    mutating func takeReadings() -> [GlucoseMeterRecord] {
+        defer { readings = [] }
+        return readings
+    }
+
+    /// Frames a payload: 0x01 | 0x02 size 0x00 0x03 payload 0x03 crc16-LE.
+    static func command(_ payload: UInt8...) -> Data {
+        var frame: [UInt8] = [0x02, UInt8(payload.count + 7), 0x00, 0x03] + payload + [0x03]
+        let crc = CRC16CCITTFalse.checksum(frame)
+        frame += [UInt8(crc & 0xFF), UInt8(crc >> 8)]
+        return Data([0x01] + frame)
+    }
+
+    /// - Parameter alreadyHave: the highest record already stored; the walk stops there.
+    mutating func onNotification(_ data: Data, alreadyHave: Int, now: Date = Date()) {
+        guard stage != .idle else { return }
+        let message = [UInt8](data)
+        guard !message.isEmpty else { return }
+        if message.count == 1 { return } // the meter's ack of a command
+        guard message.count > 5 else { return reject() }
+        guard Int(message[2]) == message.count - 1 else { return reject() }
+        guard CRC16CCITTFalse.validates(Array(message.dropFirst())) else { return reject() }
+        guard message[5] == 0x06 else { return reject() }
+        handleData(Array(message[6..<(message.count - 3)]), alreadyHave: alreadyHave, now: now)
+        outbox.append(Data([0x81]))
+        if let next = advance() { outbox.append(next) }
+    }
+
+    private mutating func reject() {
+        outbox.append(Data([0x81]))
+        stage = .done
+        isFailed = true
+    }
+
+    private static func uint32(_ bytes: [UInt8], _ offset: Int) -> UInt32 {
+        UInt32(bytes[offset]) | UInt32(bytes[offset + 1]) << 8 | UInt32(bytes[offset + 2]) << 16 | UInt32(bytes[offset + 3]) << 24
+    }
+
+    private mutating func handleData(_ result: [UInt8], alreadyHave: Int, now: Date) {
+        switch stage {
+        case .time:
+            guard result.count == 4 else { return }
+            let meterTime = TimeInterval(Int64(Int32(bitPattern: Self.uint32(result, 0))) + Self.timeOffset)
+            meterTimeOffset = now.timeIntervalSince1970 - meterTime
+            haveMeterTime = true
+        case .recordCounter:
+            guard result.count == 4 else { return }
+            highestRecordNumber = Int(Int32(bitPattern: Self.uint32(result, 0)))
+        case .recordCount:
+            guard result.count == 2 else { return }
+            numberOfRecords = Int(result[0]) | Int(result[1]) << 8
+            startRecordRequests(alreadyHave: alreadyHave)
+        case .records:
+            let record = requestedRecord
+            defer {
+                // The walk moves on whatever the record says, or one bad record is asked for forever.
+                nextRecordToRequest = record - 1
+                recordsRequested += 1
+                if record > 0 { walkedRecords.insert(record) }
+            }
+            guard record > 0, result.count >= 11, haveMeterTime else { return }
+            let mgDl = Int(result[4]) | Int(result[5]) << 8
+            guard (20...700).contains(mgDl) else { return }
+            let seconds = TimeInterval(Int64(Self.uint32(result, 0)) + Self.timeOffset) + meterTimeOffset
+            readings.append(GlucoseMeterRecord(sequence: record, date: Date(timeIntervalSince1970: seconds), mgDl: Double(mgDl)))
+        case .idle, .done:
+            break
+        }
+    }
+
+    private mutating func startRecordRequests(alreadyHave: Int) {
+        guard highestRecordNumber >= 0, numberOfRecords >= 0, numberOfRecords > 0 else {
+            nextRecordToRequest = 0
+            return
+        }
+        let oldest = max(highestRecordNumber - numberOfRecords, 0)
+        walkFloor = max(oldest, alreadyHave)
+        nextRecordToRequest = highestRecordNumber
+        recordsRequested = 0
+    }
+
+    private mutating func advance() -> Data? {
+        switch stage {
+        case .time: stage = .recordCounter
+        case .recordCounter: stage = .recordCount
+        case .recordCount: stage = .records
+        default: break
+        }
+        switch stage {
+        case .recordCounter: return Self.command(0x0A, 0x02, 0x06)
+        case .recordCount: return Self.command(0x27, 0x00)
+        case .records:
+            guard nextRecordToRequest > walkFloor, recordsRequested < Self.maximumBackfillRecords else {
+                stage = .done
+                return nil
+            }
+            requestedRecord = nextRecordToRequest
+            return Self.command(0xB3, UInt8(requestedRecord & 0xFF), UInt8((requestedRecord >> 8) & 0xFF))
+        default:
+            return nil
+        }
+    }
+}
+
+/// JugglucoNG `SatelliteMeterProtocol`: the ELTA Satellite (Сателлит+) meter over the Nordic UART
+/// service, ASCII commands one at a time: PIN, clock (UTC), then records `rd.000`… until an empty slot.
+enum SatelliteMeterProtocol {
+    static let service = CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
+    static let rx = CBUUID(string: "6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
+    static let tx = CBUUID(string: "6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
+    static let maximumBackfillRecords = 10
+    static let emptySlot = "rd000000000000000000"
+    /// The meter reports capillary values; JugglucoNG converts them to plasma.
+    static let capillaryToPlasma = 1.12
+
+    /// A three-digit PIN as typed, or the PIN derived from the code printed on the meter
+    /// (D or E and at least seven digits).
+    static func resolvePin(_ input: String?) -> String? {
+        let value = (input ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.count == 3, value.allSatisfy(\.isASCII), value.allSatisfy(\.isNumber) { return value }
+        guard let first = value.uppercased().first, first == "D" || first == "E" else { return nil }
+        let digits = value.dropFirst()
+        guard digits.count >= 7, digits.allSatisfy({ $0.isASCII && $0.isNumber }), let number = UInt64(digits.suffix(6)) else { return nil }
+        let scrambled = (number &* 599_681_139 &+ 123) & 0xFFFF_FFFF
+        return String(format: "%03d", Int(scrambled % 1000))
+    }
+
+    static func pinCommand(_ pin: String) -> Data { Data("pin.\(pin)".utf8) }
+
+    static func setTimeCommand(_ date: Date) -> Data {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        return Data(String(format: "settime.%02d%02d%02d%02d%02d%02d", (parts.year ?? 0) % 100, parts.month ?? 0, parts.day ?? 0,
+                           parts.hour ?? 0, parts.minute ?? 0, parts.second ?? 0).utf8)
+    }
+
+    static func recordCommand(_ index: Int) -> Data { Data(String(format: "rd.%03d", min(max(index, 0), 999)).utf8) }
+
+    static func decode(_ data: Data) -> String {
+        (String(data: data, encoding: .ascii) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// `rd` + yyMMddHHmmss (UTC) + three digits + glucose in tenths of mmol/L (capillary).
+    static func parseRecord(_ response: String, index: Int) -> GlucoseMeterRecord? {
+        let text = Array(response.lowercased())
+        guard text.count == 20, text[0] == "r", text[1] == "d", text[2...].allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        func number(_ range: Range<Int>) -> Int { Int(String(text[range])) ?? -1 }
+        var components = DateComponents()
+        components.year = 2000 + number(2..<4)
+        components.month = number(4..<6)
+        components.day = number(6..<8)
+        components.hour = number(8..<10)
+        components.minute = number(10..<12)
+        components.second = number(12..<14)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        guard components.isValidDate(in: calendar), let date = calendar.date(from: components) else { return nil }
+        let tenths = (Double(number(17..<20)) * capillaryToPlasma * GlucoseMeterGATT.mgDlPerMmol).rounded()
+        guard (200...7000).contains(tenths) else { return nil }
+        return GlucoseMeterRecord(sequence: index, date: date, mgDl: tenths / 10)
+    }
+}
+
+/// JugglucoNG `SatelliteMeterSession`: authentication, clock sync and up to ten records.
+struct SatelliteMeterSession {
+    enum Update: Equatable {
+        case send(Data)
+        case complete
+        case failed(String)
+    }
+
+    private enum Stage { case ready, awaitingPin, awaitingTimeAck, awaitingRecord, complete }
+
+    let pin: String
+    let now: Date
+    private var stage = Stage.ready
+    private var recordIndex = 0
+    private(set) var readings: [GlucoseMeterRecord] = []
+
+    init(pin: String, now: Date = Date()) {
+        self.pin = pin
+        self.now = now
+    }
+
+    mutating func notificationsEnabled() -> Update {
+        guard stage == .ready else { return fail("Satellite session already started") }
+        stage = .awaitingPin
+        return .send(SatelliteMeterProtocol.pinCommand(pin))
+    }
+
+    mutating func onNotification(_ data: Data) -> Update {
+        let response = SatelliteMeterProtocol.decode(data)
+        switch stage {
+        case .awaitingPin:
+            guard response.lowercased() == "pin.ok" else { return fail(ExperimentalTexts.text("meter.pinRejected", "The meter refused the code.")) }
+            stage = .awaitingTimeAck
+            return .send(SatelliteMeterProtocol.setTimeCommand(now))
+        case .awaitingTimeAck:
+            stage = .awaitingRecord
+            recordIndex = 0
+            return .send(SatelliteMeterProtocol.recordCommand(0))
+        case .awaitingRecord:
+            if response.lowercased() == SatelliteMeterProtocol.emptySlot { return finish() }
+            guard let reading = SatelliteMeterProtocol.parseRecord(response, index: recordIndex) else {
+                return fail("Malformed Satellite record")
+            }
+            guard reading.date <= now.addingTimeInterval(24 * 60 * 60) else { return fail("Satellite record timestamp is in the future") }
+            readings.append(reading)
+            recordIndex += 1
+            return recordIndex >= SatelliteMeterProtocol.maximumBackfillRecords ? finish() : .send(SatelliteMeterProtocol.recordCommand(recordIndex))
+        case .ready:
+            return fail("Satellite notification before authentication")
+        case .complete:
+            return .complete
+        }
+    }
+
+    private mutating func finish() -> Update {
+        stage = .complete
+        return .complete
+    }
+
+    private mutating func fail(_ message: String) -> Update {
+        stage = .complete
+        return .failed(message)
+    }
+}
+
+/// The paired meter and how far its records have been read (UserDefaults).
+enum GlucoseMeterStore {
+    enum Kind: String, Codable { case gatt, verio, satellite }
+
+    struct Meter: Codable, Equatable {
+        let identifier: UUID
+        let name: String
+        let kind: Kind
+        /// Highest record number read (Satellite numbers its records from the newest, so not there).
+        var lastSequence: Int?
+        var lastSync: Date?
+        /// Satellite: the PIN, from the code printed on the meter.
+        var pin: String?
+    }
+
+    private static let key = "experimentalGlucoseMeter"
+
+    /// The record cursor after a read. A completed read moves it to the newest record read; an
+    /// interrupted one only as far as records were read without a gap above the old cursor, since a
+    /// Verio walks newest first and the records below what arrived were never read. Without an old
+    /// cursor an interrupted read leaves none, so the next read starts from the beginning again.
+    static func nextCursor(previous: Int?, read: Set<Int>, completed: Bool) -> Int? {
+        guard let newest = read.max() else { return previous }
+        if completed { return max(previous ?? 0, newest) }
+        guard var cursor = previous else { return nil }
+        while read.contains(cursor + 1) { cursor += 1 }
+        return cursor
+    }
+
+    static func meter(defaults: UserDefaults = .standard) -> Meter? {
+        defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(Meter.self, from: $0) }
+    }
+
+    static func save(_ meter: Meter?, defaults: UserDefaults = .standard) {
+        if let meter, let data = try? JSONEncoder().encode(meter) { defaults.set(data, forKey: key) } else { defaults.removeObject(forKey: key) }
+    }
+}
+
+/// Stores meter readings as BG check treatments, skipping any already logged within a minute
+/// with the same value.
+enum GlucoseMeterImport {
+    static func newRecords(_ records: [GlucoseMeterRecord], existing: [(date: Date, mgDl: Double)]) -> [GlucoseMeterRecord] {
+        var seen = existing
+        var result: [GlucoseMeterRecord] = []
+        for record in records.sorted(by: { $0.date < $1.date }) {
+            let duplicate = seen.contains { abs($0.date.timeIntervalSince(record.date)) <= 60 && abs($0.mgDl - record.mgDl) < 1 }
+            guard !duplicate else { continue }
+            result.append(record)
+            seen.append((record.date, record.mgDl))
+        }
+        return result
+    }
+
+    @discardableResult
+    static func save(_ records: [GlucoseMeterRecord], meterName: String, coreDataManager: CoreDataManager) -> Int {
+        guard let earliest = records.map(\.date).min() else { return 0 }
+        let context = coreDataManager.mainManagedObjectContext
+        let existing = TreatmentEntryAccessor(coreDataManager: coreDataManager)
+            .getLatestTreatments(limit: nil, fromDate: earliest.addingTimeInterval(-120))
+            .filter { $0.treatmentType == .BgCheck && !$0.treatmentdeleted }
+            .map { (date: $0.date, mgDl: $0.value) }
+        let fresh = newRecords(records, existing: existing)
+        for record in fresh {
+            _ = TreatmentEntry(date: record.date, value: record.mgDl, treatmentType: .BgCheck, nightscoutEventType: nil,
+                               enteredBy: meterName, notes: nil, nsManagedObjectContext: context)
+        }
+        if !fresh.isEmpty { coreDataManager.saveChanges() }
+        return fresh.count
+    }
+}
+
+/// Finds, pairs and reads a Bluetooth glucose meter with its own CoreBluetooth central, separate
+/// from xDrip's CGM connections (JugglucoNG `MeterScanner` + `GlucoseMeterGatt`).
+@MainActor
+final class GlucoseMeterLink: NSObject, ObservableObject {
+    struct Found: Identifiable, Equatable {
+        let id: UUID
+        let name: String
+        let kind: GlucoseMeterStore.Kind
+    }
+
+    enum State: Equatable {
+        case idle
+        case scanning
+        case reading(String)
+        case finished(imported: Int)
+        case failed(String)
+    }
+
+    static let shared = GlucoseMeterLink()
+    static let readTimeout: TimeInterval = 45
+
+    @Published private(set) var found: [Found] = []
+    @Published private(set) var state = State.idle
+
+    private var central: CBCentralManager?
+    private var peripheral: CBPeripheral?
+    private var meter: GlucoseMeterStore.Meter?
+    private var pendingAction: (() -> Void)?
+    private var records: [GlucoseMeterRecord] = []
+    private var verio = VerioMeterSession()
+    private var verioWrite: CBCharacteristic?
+    private var satellite: SatelliteMeterSession?
+    private var satelliteWrite: CBCharacteristic?
+    /// The meter said it has sent every record asked for (Record Access Control Point).
+    private var gattCompleted = false
+    private var timeoutGeneration = 0
+    private var coreDataManager: CoreDataManager? { TherapyMetricsManager.shared.configuredCoreDataManager }
+
+    private func withCentral(_ action: @escaping () -> Void) {
+        if let central, central.state == .poweredOn {
+            action()
+        } else {
+            pendingAction = action
+            if central == nil { central = CBCentralManager(delegate: self, queue: nil) }
+        }
+    }
+
+    func startScan() {
+        found = []
+        state = .scanning
+        withCentral { [weak self] in
+            self?.central?.scanForPeripherals(withServices: [GlucoseMeterGATT.service, VerioMeterSession.service, SatelliteMeterProtocol.service])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+                guard let self, self.state == .scanning else { return }
+                self.central?.stopScan()
+                self.state = .idle
+            }
+        }
+    }
+
+    func stopScan() {
+        central?.stopScan()
+        if state == .scanning { state = .idle }
+    }
+
+    /// Pairs `meter` (iOS asks for its PIN when the meter needs one) and reads it. A Satellite needs
+    /// the code printed on it (`pin`).
+    func pair(_ found: Found, pin: String? = nil) {
+        GlucoseMeterStore.save(GlucoseMeterStore.Meter(identifier: found.id, name: found.name, kind: found.kind, pin: pin))
+        sync()
+    }
+
+    /// On returning to the app: reads the paired meter once it has not been read for 30 minutes.
+    func syncIfDue(now: Date = Date()) {
+        guard let saved = GlucoseMeterStore.meter(), state != .scanning else { return }
+        if case .reading = state { return }
+        guard saved.lastSync.map({ now.timeIntervalSince($0) >= 30 * 60 }) ?? true else { return }
+        sync()
+    }
+
+    func forget() {
+        disconnect()
+        GlucoseMeterStore.save(nil)
+        state = .idle
+    }
+
+    /// Reads the paired meter's new records. The meter must be on (most switch their Bluetooth on
+    /// for a while after a measurement).
+    func sync() {
+        guard let saved = GlucoseMeterStore.meter() else { return }
+        central?.stopScan()
+        meter = saved
+        records = []
+        gattCompleted = false
+        verio = VerioMeterSession()
+        state = .reading(saved.name)
+        withCentral { [weak self] in
+            guard let self, let central = self.central,
+                  let peripheral = central.retrievePeripherals(withIdentifiers: [saved.identifier]).first else {
+                self?.finish(error: ExperimentalTexts.text("meter.notFound", "The meter was not found. Switch it on and try again."))
+                return
+            }
+            self.peripheral = peripheral
+            peripheral.delegate = self
+            central.connect(peripheral)
+            self.timeoutGeneration += 1
+            let generation = self.timeoutGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.readTimeout) { [weak self] in
+                guard let self, self.timeoutGeneration == generation, case .reading = self.state else { return }
+                // Keep what arrived before the meter went quiet.
+                self.finish(error: self.records.isEmpty
+                            ? ExperimentalTexts.text("meter.timeout", "The meter did not answer. Switch it on, keep it close and try again.")
+                            : nil)
+            }
+        }
+    }
+
+    private func disconnect() {
+        if let peripheral { central?.cancelPeripheralConnection(peripheral) }
+        peripheral = nil
+        verioWrite = nil
+        satelliteWrite = nil
+        satellite = nil
+    }
+
+    private func finish(error: String? = nil) {
+        timeoutGeneration += 1
+        disconnect()
+        var imported = 0
+        if var saved = meter, let coreDataManager {
+            imported = GlucoseMeterImport.save(records, meterName: saved.name, coreDataManager: coreDataManager)
+            switch saved.kind {
+            case .gatt:
+                saved.lastSequence = GlucoseMeterStore.nextCursor(previous: saved.lastSequence, read: Set(records.map(\.sequence)),
+                                                                  completed: gattCompleted)
+            case .verio:
+                saved.lastSequence = GlucoseMeterStore.nextCursor(previous: saved.lastSequence, read: verio.walkedRecords,
+                                                                  completed: verio.completedWalk)
+            case .satellite:
+                break
+            }
+            if error == nil || !records.isEmpty { saved.lastSync = Date() }
+            GlucoseMeterStore.save(saved)
+            meter = saved
+        }
+        records = []
+        state = error.map { .failed($0) } ?? .finished(imported: imported)
+    }
+
+    private func handleSatellite(_ update: SatelliteMeterSession.Update) {
+        switch update {
+        case .send(let command):
+            if let peripheral, let satelliteWrite {
+                peripheral.writeValue(command, for: satelliteWrite,
+                                      type: satelliteWrite.properties.contains(.write) ? .withResponse : .withoutResponse)
+            }
+        case .complete:
+            records += satellite?.readings ?? []
+            finish()
+        case .failed(let message):
+            records += satellite?.readings ?? []
+            finish(error: message)
+        }
+    }
+
+    private func writeNextVerioCommand() {
+        guard let peripheral, let verioWrite, let command = verio.take() else {
+            if verio.isDone { finish() }
+            return
+        }
+        peripheral.writeValue(command, for: verioWrite, type: .withResponse)
+    }
+}
+
+extension GlucoseMeterLink: CBCentralManagerDelegate {
+    nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        MainActor.assumeIsolated {
+            guard central.state == .poweredOn, let action = pendingAction else {
+                if central.state == .unauthorized || central.state == .poweredOff {
+                    state = .failed(ExperimentalTexts.text("meter.bluetoothOff", "Bluetooth is off or not allowed for xDrip."))
+                }
+                return
+            }
+            pendingAction = nil
+            action()
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral,
+                                    advertisementData: [String: Any], rssi RSSI: NSNumber) {
+        let services = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
+        let name = peripheral.name ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String
+            ?? ExperimentalTexts.text("meter.unnamed", "Glucose meter")
+        let identifier = peripheral.identifier
+        MainActor.assumeIsolated {
+            let kind: GlucoseMeterStore.Kind = services.contains(VerioMeterSession.service) ? .verio
+                : services.contains(SatelliteMeterProtocol.service) ? .satellite : .gatt
+            guard !found.contains(where: { $0.id == identifier }) else { return }
+            found.append(Found(id: identifier, name: name, kind: kind))
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        MainActor.assumeIsolated {
+            peripheral.discoverServices([GlucoseMeterGATT.service, VerioMeterSession.service, SatelliteMeterProtocol.service])
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        MainActor.assumeIsolated {
+            finish(error: error?.localizedDescription ?? ExperimentalTexts.text("meter.timeout", "The meter did not answer. Switch it on, keep it close and try again."))
+        }
+    }
+
+    nonisolated func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        MainActor.assumeIsolated {
+            guard case .reading = state else { return }
+            // Many meters hang up once they have sent everything.
+            finish(error: records.isEmpty && error != nil ? error?.localizedDescription : nil)
+        }
+    }
+}
+
+extension GlucoseMeterLink: CBPeripheralDelegate {
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        MainActor.assumeIsolated {
+            for service in peripheral.services ?? []
+            where [GlucoseMeterGATT.service, VerioMeterSession.service, SatelliteMeterProtocol.service].contains(service.uuid) {
+                peripheral.discoverCharacteristics(nil, for: service)
+            }
+        }
+    }
+
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        MainActor.assumeIsolated {
+            let characteristics = service.characteristics ?? []
+            if service.uuid == SatelliteMeterProtocol.service {
+                satelliteWrite = characteristics.first { $0.uuid == SatelliteMeterProtocol.rx }
+                if let notify = characteristics.first(where: { $0.uuid == SatelliteMeterProtocol.tx }) {
+                    peripheral.setNotifyValue(true, for: notify)
+                }
+            } else if service.uuid == VerioMeterSession.service {
+                verioWrite = characteristics.first { $0.uuid == VerioMeterSession.write }
+                if let notify = characteristics.first(where: { $0.uuid == VerioMeterSession.notify }) {
+                    peripheral.setNotifyValue(true, for: notify)
+                }
+            } else {
+                // Measurements first, then the access point whose indication starts the request.
+                for uuid in [GlucoseMeterGATT.measurement, GlucoseMeterGATT.context, GlucoseMeterGATT.recordAccess] {
+                    if let characteristic = characteristics.first(where: { $0.uuid == uuid }) {
+                        peripheral.setNotifyValue(true, for: characteristic)
+                    }
+                }
+            }
+        }
+    }
+
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+        MainActor.assumeIsolated {
+            if let error {
+                finish(error: error.localizedDescription)
+                return
+            }
+            switch characteristic.uuid {
+            case GlucoseMeterGATT.recordAccess:
+                let next = (meter?.lastSequence).map { $0 + 1 }
+                peripheral.writeValue(GlucoseMeterGATT.reportRecords(from: next), for: characteristic, type: .withResponse)
+            case VerioMeterSession.notify:
+                verio.begin()
+                writeNextVerioCommand()
+            case SatelliteMeterProtocol.tx:
+                guard let pin = SatelliteMeterProtocol.resolvePin(meter?.pin) else {
+                    finish(error: ExperimentalTexts.text("meter.pinRejected", "The meter refused the code."))
+                    return
+                }
+                var session = SatelliteMeterSession(pin: pin)
+                let update = session.notificationsEnabled()
+                satellite = session
+                handleSatellite(update)
+            default:
+                break
+            }
+        }
+    }
+
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        MainActor.assumeIsolated {
+            if let error {
+                finish(error: error.localizedDescription)
+                return
+            }
+            if characteristic.uuid == VerioMeterSession.write { writeNextVerioCommand() }
+        }
+    }
+
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        let value = characteristic.value ?? Data()
+        let uuid = characteristic.uuid
+        MainActor.assumeIsolated {
+            switch uuid {
+            case GlucoseMeterGATT.measurement:
+                if let record = GlucoseMeterGATT.parseMeasurement(value) { records.append(record) }
+            case GlucoseMeterGATT.recordAccess:
+                switch GlucoseMeterGATT.recordAccessResult(value) {
+                case .success, .noRecords:
+                    gattCompleted = true
+                    finish()
+                case .failed(let code): finish(error: String(format: ExperimentalTexts.text("meter.refused", "The meter refused the request (code %ld)."), code))
+                case nil: break
+                }
+            case SatelliteMeterProtocol.tx:
+                guard var session = satellite else { return }
+                let update = session.onNotification(value)
+                satellite = session
+                handleSatellite(update)
+            case VerioMeterSession.notify:
+                verio.onNotification(value, alreadyHave: meter?.lastSequence ?? 0)
+                records += verio.takeReadings()
+                writeNextVerioCommand()
+            default:
+                break
+            }
+        }
     }
 }

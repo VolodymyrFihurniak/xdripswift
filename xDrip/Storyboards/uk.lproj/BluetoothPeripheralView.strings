@@ -299,6 +299,9 @@
 "sibionics2.calibrationWeightingStable" = "Стабільні";
 "sibionics2.autoResetTitle" = "Автоматичне скидання датчика";
 "sibionics2.resetTitle" = "Скинути датчик";
+"sibionics2.resetReminderTitle" = "Незабаром знадобиться скидання Sibionics 2";
+"sibionics2.resetReminderText" = "Датчик досягне часу скидання приблизно через %d год. Скиньте його вчасно, щоб він продовжив працювати.";
+"sibionics2.resetReminderPostpone" = "Відкласти на 2 години";
 "sibionics2.resetConfirmTitle" = "Скинути датчик?";
 "sibionics2.resetConfirmMessage" = "Датчику буде надіслано команду скидання. Продовжуйте, лише якщо справді хочете почати новий сеанс датчика.";
 
@@ -354,7 +357,19 @@
 "sibionics.logCopy" = "Скопіювати журнал";
 "sibionics.logCopied" = "Скопійовано";
 "sibionics.logEmpty" = "Подій ще немає";
+"sibionics.gs3SensorLifeDetail" = "14 днів, автоматично продовжено до 15 д 12 год";
+"sibionics.gs3Title" = "Датчик GS3";
 "sibionics.glucoseModelTitle" = "Модель глюкози";
 "sibionics.glucoseModelStock" = "Стандартна (типово)";
 "sibionics.glucoseModelAdaptiveV2" = "Adaptive V2 (експериментальна)";
-"sibionics.glucoseModelFooter" = "Стандартна — алгоритм виробника. Adaptive V2 — експериментальний оцінювач із JugglucoNG: він працює з каліброваним сигналом датчика до згладжування виробника, швидше реагує на зміни й менш плавний. Якщо для хвилини оцінки немає, показується стандартне значення. Зміна моделі перераховує історію датчика. Перш ніж покладатися на неї, порівняйте з глюкометром.";
+"sibionics.glucoseModelAdaptiveV1" = "Adaptive V1 (експериментальна)";
+"sibionics.glucoseModelBalanced" = "Збалансована (експериментальна)";
+"sibionics.glucoseModelResponsive" = "Чутлива (експериментальна)";
+"sibionics.glucoseModelFooter" = "Стандартна — алгоритм виробника. Збалансована (із JugglucoNG) згладжує дрібні кроки стандартного значення по 0,1 ммоль/л і одразу йде за ним при справжній зміні, розвороті чи низькій глюкозі. Чутлива (із JugglucoNG) відстежує глюкозу та швидкість її зміни й трохи випереджає тренд, не відходячи далеко від стандартного значення. Adaptive V1 (із JugglucoNG) стежить за хімічним сигналом датчика за двома моделями руху й повертається до стандартного значення, щойно підстав відходити від нього стає менше; перші дві години показує стандартне значення. Adaptive V2 — експериментальний оцінювач із JugglucoNG: він працює з каліброваним сигналом датчика до згладжування виробника, швидше реагує на зміни й менш плавний. Якщо для хвилини оцінки немає, показується стандартне значення. Зміна моделі перераховує історію датчика. Перш ніж покладатися на неї, порівняйте з глюкометром.";
+"sibionics.lastLinkProblem" = "Остання проблема зв’язку";
+"sibionics.noLinkProblem" = "Немає від останнього показника";
+"sibionics.problemLinkLost" = "Зв’язок втрачено";
+"sibionics.problemNoReadings" = "Немає показників під час з’єднання";
+"sibionics.problemNotResponding" = "Сенсор не відповідає";
+"sibionics.problemAddressRefused" = "Сенсор відхилив усі адреси";
+"sibionics.problemAuthentication" = "Автентифікація не вдалася";

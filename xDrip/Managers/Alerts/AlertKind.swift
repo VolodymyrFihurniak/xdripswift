@@ -368,7 +368,18 @@ public enum AlertKind: Int, CaseIterable {
     ///     - alertbody : AlertBody, AlertTitle and delay are used if an alert needs to be raised for the notification.
     ///     - alerttitle : AlertBody, AlertTitle and delay are used if an alert needs to be raised for the notification.
     ///     - delayInSeconds : If delayInSeconds not nil and > 0 or if delayInSeconds is nil, then the alert will be a future planned Alert. This will only be applicable to missed reading alerts.
-    func alertNeeded(currentAlertEntry: AlertEntry, nextAlertEntry: AlertEntry?, lastBgReading: BgReading?, _ lastButOneBgReading: BgReading?, lastCalibration: Calibration?, transmitterBatteryInfo: TransmitterBatteryInfo?, deviceStatus: NotLoopingDeviceStatus? = nil, forecast: [GlucosePredictionPoint]? = nil) -> (alertNeeded: Bool, alertBody: String?, alertTitle: String?, delayInSeconds: Int?) {
+    /// - parameter recentReadings: oldest first, for the experimental GDH fast-change rule; nil keeps
+    ///   xDrip's two-reading rule for Fast Drop and Fast Rise.
+    func alertNeeded(currentAlertEntry: AlertEntry, nextAlertEntry: AlertEntry?, lastBgReading: BgReading?, _ lastButOneBgReading: BgReading?, lastCalibration: Calibration?, transmitterBatteryInfo: TransmitterBatteryInfo?, deviceStatus: NotLoopingDeviceStatus? = nil, forecast: [GlucosePredictionPoint]? = nil, recentReadings: [(date: Date, mgDl: Double)]? = nil) -> (alertNeeded: Bool, alertBody: String?, alertTitle: String?, delayInSeconds: Int?) {
+        if (self == .fastdrop || self == .fastrise), let recentReadings, let lastBgReading {
+            guard currentAlertEntry.alertType.enabled, lastBgReading.finalValue > 0 else { return (false, nil, nil, nil) }
+            let falling = self == .fastdrop
+            let run = GDHDeltaRun.runLength(recentReadings, thresholdMgDl: Double(currentAlertEntry.value), falling: falling)
+            let border = Double(currentAlertEntry.triggerValue)
+            let pastBorder = falling ? lastBgReading.finalValue < border : lastBgReading.finalValue > border
+            guard run >= UserDefaults.standard.experimentalDeltaRunCount, pastBorder else { return (false, nil, nil, nil) }
+            return (true, createAlertBodyForBgReadingAlerts(bgReading: lastBgReading, alertKind: self), createAlertTitleForBgReadingAlerts(alertKind: self), nil)
+        }
         // Not all input parameters in the closure are needed for every type of alert. - this is to make it generic
         
         let isMgDl = UserDefaults.standard.bloodGlucoseUnitIsMgDl
@@ -877,4 +888,86 @@ private func createAlertBodyForBgReadingAlerts(bgReading: BgReading, alertKind: 
     }
     
     return returnValue
+}
+
+/// JugglucoNG's GDH-style fast change (`DeltaAlarmState`), replayed over recent readings instead
+/// of kept as state, so a restart cannot lose or inflate it. The 5-minute delta is measured
+/// against the newest reading at least 4.5 minutes older and scaled to 5 minutes, so "10 mg/dL
+/// per 5 min" means the same on a 1-minute sensor and a 5-minute one. A run counts consecutive
+/// non-overlapping 5-minute intervals past the threshold; a change in the other direction or a
+/// gap breaks it at once.
+enum GDHDeltaRun {
+    static let window: TimeInterval = 5 * 60
+    static let minimumGap: TimeInterval = 4.5 * 60
+    static let maximumGap: TimeInterval = 20 * 60
+    /// Readings kept for the replay: enough for six intervals plus the walk back.
+    static let history: TimeInterval = 45 * 60
+
+    /// Change per 5 minutes between two readings; nil when they are under half a window or more
+    /// than 20 minutes apart.
+    static func delta(newDate: Date, newValue: Double, previousDate: Date, previousValue: Double) -> Double? {
+        let gap = newDate.timeIntervalSince(previousDate)
+        guard gap >= window / 2, gap <= maximumGap else { return nil }
+        return (newValue - previousValue) * window / gap
+    }
+
+    /// The length of the run that is still standing at the newest reading. `readings` oldest first.
+    static func runLength(_ readings: [(date: Date, mgDl: Double)], thresholdMgDl: Double, falling: Bool) -> Int {
+        guard thresholdMgDl > 0 else { return 0 }
+        var history: [(date: Date, mgDl: Double)] = []
+        var count = 0
+        var lastCheckpoint: Date?
+        for reading in readings where reading.mgDl > 0 {
+            let previous = history.last { reading.date.timeIntervalSince($0.date) >= minimumGap }
+            let change = previous.flatMap { delta(newDate: reading.date, newValue: reading.mgDl, previousDate: $0.date, previousValue: $0.mgDl) }
+            history.append(reading)
+            guard let change else {
+                count = 0
+                lastCheckpoint = nil
+                continue
+            }
+            let steep = falling ? change <= -thresholdMgDl : change >= thresholdMgDl
+            if count == 0 {
+                if steep {
+                    count = 1
+                    lastCheckpoint = reading.date
+                }
+                continue
+            }
+            let reversed = falling ? change > 0 : change < 0
+            if reversed {
+                count = 0
+                lastCheckpoint = nil
+            } else if let checkpoint = lastCheckpoint, reading.date.timeIntervalSince(checkpoint) >= window {
+                if steep {
+                    count += 1
+                    lastCheckpoint = reading.date
+                } else {
+                    count = 0
+                    lastCheckpoint = nil
+                }
+            }
+        }
+        return count
+    }
+}
+
+/// JugglucoNG's same-direction suppression: Fast Drop and the predicted low state one observation
+/// twice. Once one has fired and been acknowledged (snoozed), the other stays quiet for the window.
+enum SameDirectionAlertRule {
+    static func direction(of kind: AlertKind) -> String? {
+        switch kind {
+        case .fastdrop, .predictedLow: return "falling"
+        case .fastrise: return "rising"
+        default: return nil
+        }
+    }
+
+    /// Whether `kind` is kept quiet by the last firing of its direction.
+    static func blocks(kind: AlertKind, lastFired: (kind: AlertKind, at: Date)?, lastAcknowledged: Bool,
+                       now: Date, windowMinutes: Int) -> Bool {
+        guard windowMinutes > 0, let lastFired, direction(of: kind) != nil,
+              direction(of: lastFired.kind) == direction(of: kind), lastFired.kind != kind, lastAcknowledged else { return false }
+        return now.timeIntervalSince(lastFired.at) < TimeInterval(windowMinutes * 60)
+    }
 }

@@ -272,3 +272,79 @@ final class GMIStatisticsTests: XCTestCase {
         }
     }
 }
+
+/// JugglucoNG's range flow by hour and its day-part strip.
+final class GlucoseReportDayPartTests: XCTestCase {
+    func testHourlyRangesUseTheConsensusLimitsAndCombineByHours() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        let midnight = Date(timeIntervalSince1970: 1_800_000_000 - 1_800_000_000 % 86_400)
+        func at(_ hour: Double) -> Date { midnight.addingTimeInterval(hour * 3600) }
+        let samples: [(date: Date, mgDl: Double)] = [
+            (at(1), 50), (at(1.5), 54), (at(2), 70), (at(7), 180), (at(7.2), 181),
+            (at(13), 250), (at(13.5), 251), (at(19), 120)
+        ]
+        let hours = GlucoseReportHourRanges.make(samples: samples, calendar: calendar)
+        XCTAssertEqual(hours.count, 24)
+        XCTAssertEqual(hours[1], GlucoseReportHourRanges(veryLow: 1, low: 1))
+        XCTAssertEqual(hours[2], GlucoseReportHourRanges(target: 1))
+        XCTAssertEqual(hours[7], GlucoseReportHourRanges(target: 1, high: 1))
+        XCTAssertEqual(hours[13], GlucoseReportHourRanges(high: 1, veryHigh: 1))
+
+        let night = GlucoseReportHourRanges.combined(hours, mask: GlucoseReportDayPart.night.hourMask)
+        XCTAssertEqual(night, GlucoseReportHourRanges(veryLow: 1, low: 1, target: 1))
+        XCTAssertEqual(GlucoseReportHourRanges.combined(hours, mask: 0).total, 8)
+        let distribution = try XCTUnwrap(night.distribution)
+        XCTAssertEqual(distribution.target, 100.0 / 3, accuracy: 1e-9)
+        XCTAssertNil(GlucoseReportHourRanges().distribution)
+    }
+
+    func testDayPartsToggleAndAllFourMeanTheWholeDay() {
+        XCTAssertEqual(GlucoseReportDayPart.morning.hourMask, 0b111111 << 6)
+        var mask = GlucoseReportDayPart.toggled(.night, in: 0)
+        XCTAssertEqual(mask, 0b111111)
+        mask = GlucoseReportDayPart.toggled(.evening, in: mask)
+        XCTAssertEqual(mask, 0b111111 | 0b111111 << 18)
+        mask = GlucoseReportDayPart.toggled(.night, in: mask)
+        XCTAssertEqual(mask, 0b111111 << 18)
+        mask = GlucoseReportDayPart.toggled(.night, in: mask)
+        mask = GlucoseReportDayPart.toggled(.morning, in: mask)
+        XCTAssertEqual(GlucoseReportDayPart.toggled(.afternoon, in: mask), 0)
+    }
+}
+
+/// JugglucoNG `ScheduledBackupPolicy` retention; expectations from a Python port.
+final class AutomaticBackupTests: XCTestCase {
+    func testFileNamesCarryTheirUTCTime() throws {
+        let date = Date(timeIntervalSince1970: 1_800_000_123)
+        let name = AutomaticBackup.fileName(for: date)
+        XCTAssertTrue(name.hasPrefix("xDrip_AutoBackup_") && name.hasSuffix("Z.xdripbackup"))
+        XCTAssertEqual(AutomaticBackup.timestamp(fromFileName: name), date)
+        XCTAssertNil(AutomaticBackup.timestamp(fromFileName: "xDrip_2027-01-01_0300.xdripbackup"))
+    }
+
+    func testRetentionKeepsSevenDaysFourWeeksAndSixMonths() throws {
+        let utc = try XCTUnwrap(TimeZone(identifier: "UTC"))
+        // 2027-01-31 03:00 UTC (a Sunday) and the 59 days before it, plus a second backup that day.
+        let newest = Date(timeIntervalSince1970: 1_801_364_400)
+        var names = (0..<60).map { AutomaticBackup.fileName(for: newest.addingTimeInterval(TimeInterval(-$0 * 86_400))) }
+        names.append(AutomaticBackup.fileName(for: newest.addingTimeInterval(-2 * 3600)))
+        names.append("notes.txt")
+        let deleted = AutomaticBackup.filesToDelete(names, timeZone: utc)
+        XCTAssertEqual(deleted.count, 50)
+        XCTAssertFalse(deleted.contains("notes.txt"))
+        let kept = Set(names).subtracting(deleted).subtracting(["notes.txt"])
+        XCTAssertEqual(kept, Set([
+            "2026-12-31", "2027-01-10", "2027-01-17", "2027-01-24", "2027-01-25", "2027-01-26",
+            "2027-01-27", "2027-01-28", "2027-01-29", "2027-01-30", "2027-01-31"
+        ].map { "xDrip_AutoBackup_\($0)_03-00-00Z.xdripbackup" }))
+    }
+
+    func testAnomaliesNeedLessThanHalfOfThePreviousBackup() {
+        let previous = AutomaticBackup.Metrics(byteSize: 1000, bgReadings: 100, treatments: 10)
+        XCTAssertTrue(AutomaticBackup.anomalies(previous: nil, current: previous).isEmpty)
+        XCTAssertTrue(AutomaticBackup.anomalies(previous: previous, current: AutomaticBackup.Metrics(byteSize: 500, bgReadings: 50, treatments: 5)).isEmpty)
+        let shrunk = AutomaticBackup.anomalies(previous: previous, current: AutomaticBackup.Metrics(byteSize: 499, bgReadings: 49, treatments: 5))
+        XCTAssertEqual(shrunk.map(\.what), ["size", "bgReadings"])
+    }
+}

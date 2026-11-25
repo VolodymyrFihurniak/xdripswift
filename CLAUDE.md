@@ -67,6 +67,9 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
   S1 = label short code → `deriveShortCode(BLE name)` → family fallback
   (EU `YMWD016F` 1.58, Hematonix `YEZ1450H` 1.47, Chinese `GEPD802J` 1.27) → 1.27.
   GS1 label scanning (`SibionicsSensorLabel`) follows JugglucoNG `SibionicsRegistry`.
+- **GS3** (JugglucoNG `Variant.GS3`): a Sibionics 1 with the device-screen toggle "GS3 sensor"
+  (`Sibionics2Configuration.isGS3`, fixes the protocol to V120). V120 with the EU/Sijoy session key, the
+  V115G algorithm, fallback `YEZ1450H` (`Sibionics1Family.gs3`), lifetime 14 d + 36 h, name "Sibionics GS3".
 - **Lifetime / warm-up**: S1 = JugglucoNG `EXTENDED_CHINESE_LIFETIME_MS` (572 h − 19 min,
   `Sibionics1SensorProfile`), label 14 days; S2 = 23 days. `sensorWarmupDurationInMinutes()` is 0
   (JugglucoNG has no Sibionics warm-up; xDrip's 45-min default hid a new sensor's readings).
@@ -76,13 +79,32 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
 - **Manual sensitivity** (`Sibionics2Configuration.manualSensitivity`, 0.8–2.5) wins over probe code,
   label and name; changing it replays history like a new label code.
 - **Glucose model** (`Sibionics2GlucoseModel`, per sensor, `Sibionics2Configuration.glucoseModel`):
-  stock (default) or JugglucoNG Adaptive V2. The estimator is vendored Kotlin in
+  stock (default), JugglucoNG Adaptive V1 (raw 2; vendored Kotlin `SibionicsAdaptiveAlgorithm.kt` behind
+  `SibionicsAdaptiveV1Facade`, fed the stock value and the core's `latestChemicalSignal`, snapshot version 6,
+  JVM test checks it byte for byte against the unchanged JugglucoNG file in `jvmTest/.../reference`),
+  JugglucoNG Balanced (raw 4) / Responsive (raw 6) — Swift ports
+  `SibionicsBalancedTracker` / `SibionicsResponsiveEstimator` fed the stock value, no anchors (as in
+  JugglucoNG), snapshot versions 4 / 5, tests use vectors from the Kotlin originals on the JVM — or
+  JugglucoNG Adaptive V2 (raw 8). The estimator is vendored Kotlin in
   `Sibionics2Core/.../adaptive2` behind `SibionicsAdaptiveV2Facade`; the stock facade feeds it its
   `latestSensorObservation` (`processAdaptiveV2`). A usable estimate replaces the stock value, which
-  stays the fallback. Processor snapshot version 3 = version 2 + estimator state; the other
+  stays the fallback, at full precision (JugglucoNG e64e3fd3e; only display rounds). Its 90 % interval
+  (`Sibionics2ProcessedGlucose.lowerMgDl/upperMgDl`) goes to `GlucoseUncertaintyStore` (36 h JSON) and
+  is drawn as JugglucoNG's uncertainty ribbon on the Home chart (`experimentalUncertaintyRibbonEnabled`). Processor snapshot version 3 = version 2 + estimator state; the other
   model's snapshot is refused, so changing the model replays history.
+- **Source journal** (`SibionicsSourceJournal`, end of `Sibionics2ReadingBatchProcessor.swift`, JugglucoNG
+  `SibionicsSampleJournal` record layout SJR1 + CRC-32): every received raw minute per sensor in Application
+  Support/sibionics-source, new session = new journal. `probeCodeDidChange` (sensitivity, model, GS3) replays
+  the contiguous journal locally a day per step (`replayFromJournal`), then asks the sensor for newer minutes.
+  Backups carry the journals (`BackupPayload.sibionicsSourceJournals`), restored by merge, phone wins.
+- **Last link problem** (`Sibionics2DeviceStatus.lastLinkProblem`, JugglucoNG "Last BLE status"): set by
+  `noteLinkProblem` on lost links, refusals, stalls and auth failures, cleared by a reading; shown on the
+  device screen. Home says "no signal" after 3 min for 1-minute sensors (`RootHomeSensorReach`).
 - **Reset**: manual for all variants (S2 encrypted `0x10`, EU/Hematonix `24 E7 6F 34`,
   Chinese `AA 55 10 F1`); automatic only for Sibionics 2. The post-reset session probe is one-shot.
+  `Sibionics2ResetReminder` (JugglucoNG `SibionicsResetReminder`, S2 only): scheduled UNNotification 4 h
+  before day 22, repeats every 2 h, actions reset / postpone 2 h (`resetPostponedUntil` holds only the
+  comfortable reset), handled in `RootApplicationCoordinator`.
 - **Calibration** (`xDrip/Calibration/Sibionics2Calibrator.swift`): xDrip+ or JugglucoNG
   `CalibrationMath` (weighted OLS default, median slope, robust, elastic, ensemble) with
   Fresh/Balanced/Stable weighting, evaluated in the user's display unit. Mode raw value 1 must stay
@@ -108,7 +130,7 @@ watch and notification extensions. A treatment's insulin is named in its `notes`
 (`InsulinProfile.matching(notes:)`); every per-dose choice must round-trip through its
 `shortName`. All off by default; IOB/COB is untouched. Also: `AlertKind.predictedLow` (raw 16),
 prediction periods/body weight/protein-fat/intensity (notes tokens `P:20 F:15`, `intensity:light`),
-accuracy recorder (Application Support JSON, 14 days), Nightscout devicestatus forecast
+accuracy recorder (Application Support JSON, 14 days; `PredictionInspector` + `ExperimentalPredictionInspectorView` = JugglucoNG prediction inspector), Nightscout devicestatus forecast
 (`openaps.suggested.predBGs.IOB`, only when no AID status is followed), and
 `ExperimentalCompanionForecast` for widgets, Live Activity and watch (optional fields).
 The line style reaches widgets/Live Activity/watch through optional `experimentalGlucoseLine`
@@ -122,7 +144,10 @@ Adaptive prediction (`xDrip/Managers/Therapy/AdaptiveGlucoseForecast.swift`): Ju
 `BgReading` dictionaries; alerts and Nightscout stay on the standard forecast.
 Power saving (`ExperimentalPowerSaving`, mode Off/On/Automatic, never while charging) throttles the
 "every reading" uploads, Live Activity/widget refresh (`allowsRefresh`, urgent out of range), the
-Home chart minute redraw and the adaptive refit — never readings or alarms. Basal injections
+Home chart minute redraw and the adaptive refit — never readings or alarms. Alarms (`AlertKind.swift`/`AlertManager`):
+`GDHDeltaRun` (JugglucoNG GDH delta alarm, replayed statelessly over 45 min of readings, change scaled
+to 5 min), `SameDirectionAlertRule` (Fast Drop ↔ predicted low after a snooze) and
+`ExperimentalQuietWindow` (sound/vibration held back, lows always break through) — all off by default. Basal injections
 (Nightscout event type Note) always count in `ExperimentalTreatment.fetch`.
 
 Food library (`xDrip/SwiftUIViews/Treatments/FoodLibrary.swift`, button in the carbs treatment
@@ -130,10 +155,19 @@ editor, no setting): JugglucoNG staples embedded as a `key|carbs|protein|fat|por
 custom foods and recents as UserDefaults JSON, Open Food Facts search/barcode (network only on
 request). It fills the editor's carbs/protein/fat; the meal itself is not stored.
 
+Amount assist (`TreatmentAmountAssist`, JugglucoNG `JournalAmountAssist`, no setting): stepper step and
+usual amount in `TreatmentEditorViewModel` from xDrip-typed entries (`enteredBy` nil or the app name).
+
+Glucose meters (`GlucoseMeterGATT`, `VerioMeterSession`, `GlucoseMeterLink` in ExperimentalTherapy.swift,
+`GlucoseMeterSettingsView`): own CBCentralManager, readings saved as BgCheck treatments
+(`GlucoseMeterImport`), paired meter in UserDefaults `experimentalGlucoseMeter`; Satellite = `SatelliteMeterProtocol`/`SatelliteMeterSession`.
+
 Insulin pens (`xDrip/Managers/Therapy/InsulinPenReader.swift`): Swift port of JugglucoNG
 `NovoPen/opennov` (NFC Type 4 `PenT4` → `PenPHD` record → IEEE 11073 `PenMessage`/`PenMachine`,
 run by `PenSession` over a `PenTransport`), `PenDoseParser`, `InsulinPenStore` (UserDefaults JSON,
-cursor = newest reviewed pen counter) and `InsulinPenImport`. CoreNFC needs the NDEF AID
+cursor = newest reviewed pen counter) and `InsulinPenImport`. `PenManualMergePlanner` (JugglucoNG): a dose
+that confirms a hand-written insulin entry (same insulin, amount, ≤ 15 min, in order) moves that entry to the
+pen's time instead of adding it twice; imported doses carry `enteredBy` "Insulin pen". CoreNFC needs the NDEF AID
 `D2760000850101` in Info.plist `...iso7816.select-identifiers`. Tested only against the
 `SimulatedPen` in the tests (verified with a Python port) — never against a real pen.
 
@@ -144,6 +178,21 @@ Libre 2 / 2 Plus EU `A1 1B`+`PreLibre2.usefulFunction(uid, 0x1B, 0x1B6A)`. Sent 
 FRAM header crc is valid and the state is not-yet-started; success = state re-read as starting/ready.
 Gen2 (patch info byte 2 low nibble ≥ 9), US 14-day and Pro are refused (JugglucoNG uses Abbott's library
 for them); Libre 3 has its own upstream setup. Never tried on a real sensor.
+
+Libre 2 link (`CGMLibre2Transmitter`, after JugglucoNG #773 and 3e7789f9e): a connected link without a
+complete frame for 150 s is hung up and reconnected 5 s later (an immediate reconnect after the app's
+own hangup is never logged in); every link ends with a `Libre 2 link ended:` trace line
+(`Libre2LinkSummary`: reason, duration, frames, last frame age).
+
+Statistics → CGM data: "Time in ranges by time of day" (JugglucoNG `StatsRangeFlow` + day-part strip):
+`GlucoseReportAnalytics.hourlyRanges` (24 × five bands, `GlucoseReportHourRanges`), blocks
+`GlucoseReportDayPart` combine by hour mask, none = whole day.
+
+Automatic backup (`AutomaticBackup` in `Utilities/Backup/BackupService.swift`, JugglucoNG
+`ScheduledBackupPolicy`; Settings → Data management toggle, off by default): at most once per 20 h on
+launch (+60 s) or foreground, settings + readings + treatments without accounts to
+Documents/Automatic backups (visible in Files), kept 7 days / 4 ISO weeks / 6 months, notification when
+it shrinks below half of the previous one.
 
 ## Localisation
 
@@ -157,9 +206,8 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 
 ## Not ported (yet)
 
-JugglucoNG alternative glucose models Balanced, Responsive and Adaptive V1 (Adaptive V2 is ported), GS3 variant,
-Sibionics reset reminder and raw source-journal backup/recovery; of the NovoPen import, the
-unattended background read and the merge with hand-written entries.
+NovoPen unattended background read: iOS opens an NFC session only on the user's tap (no background
+ISO 7816 reading), so a pen is always read from the Insulin pens screen.
 
 ## Git
 

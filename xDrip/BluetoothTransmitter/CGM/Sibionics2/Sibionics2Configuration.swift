@@ -1,5 +1,6 @@
 import CoreBluetooth
 import Foundation
+import UserNotifications
 
 enum Sibionics2Time {
     static let secondsPerMinute: TimeInterval = 60
@@ -24,6 +25,9 @@ enum Sibionics1SensorProfile {
     static let officialLifeInDays: Double = 14
     static let extendedLife: TimeInterval = 572 * Sibionics2Time.secondsPerHour - 19 * Sibionics2Time.secondsPerMinute
     static let extendedLifeInDays: Double = extendedLife / Sibionics2Time.secondsPerDay
+    /// JugglucoNG `GS3_EXPECTED_LIFETIME_MS`: 14 days + 36 hours.
+    static let gs3Life: TimeInterval = 14 * Sibionics2Time.secondsPerDay + 36 * Sibionics2Time.secondsPerHour
+    static let gs3LifeInDays: Double = gs3Life / Sibionics2Time.secondsPerDay
 }
 
 /// Valid ranges for decoded V120 readings before they enter the correction algorithm.
@@ -151,6 +155,24 @@ enum Sibionics2DeviceStatus {
         guard (0...100).contains(percentage) else { return }
         userDefaults.set(percentage, forKey: key("battery", identifier))
         userDefaults.set(date, forKey: key("batteryReadAt", identifier))
+    }
+
+    /// The last link problem (JugglucoNG "Last BLE status"): kept until a reading arrives, so the
+    /// device screen says why readings stopped instead of only "Disconnected".
+    static func setLastLinkProblem(_ text: String?, at date: Date = Date(), for identifier: String, userDefaults: UserDefaults = .standard) {
+        if let text {
+            userDefaults.set(text, forKey: key("lastLinkProblem", identifier))
+            userDefaults.set(date, forKey: key("lastLinkProblemAt", identifier))
+        } else {
+            userDefaults.removeObject(forKey: key("lastLinkProblem", identifier))
+            userDefaults.removeObject(forKey: key("lastLinkProblemAt", identifier))
+        }
+    }
+
+    static func lastLinkProblem(for identifier: String, userDefaults: UserDefaults = .standard) -> (text: String, date: Date)? {
+        guard let text = userDefaults.string(forKey: key("lastLinkProblem", identifier)),
+              let date = userDefaults.object(forKey: key("lastLinkProblemAt", identifier)) as? Date else { return nil }
+        return (text, date)
     }
 
     static func battery(for identifier: String, userDefaults: UserDefaults = .standard) -> (percentage: Int, readAt: Date)? {
@@ -705,7 +727,8 @@ enum Sibionics2AutoResetPolicy {
         sensorStartDate: Date?,
         enabled: Bool,
         previous: Sibionics2AutoResetReading?,
-        latest: Sibionics2AutoResetReading?
+        latest: Sibionics2AutoResetReading?,
+        postponedUntil: Date? = nil
     ) -> Sibionics2AutoResetDecision {
         guard let sensorStartDate,
               sensorStartDate.timeIntervalSince1970.isFinite,
@@ -716,6 +739,10 @@ enum Sibionics2AutoResetPolicy {
         let age = now.timeIntervalSince(sensorStartDate)
         if age >= expectedSensorLife - preExpiryGuard {
             return Sibionics2AutoResetDecision(resetNow: true, forced: true)
+        }
+        // JugglucoNG SibionicsResetPolicy: "Postpone 2 hours" holds the comfortable reset, never the forced one.
+        if let postponedUntil, postponedUntil > now {
+            return Sibionics2AutoResetDecision(resetNow: false, forced: false)
         }
         guard enabled,
               age >= normalResetAge,
@@ -858,8 +885,20 @@ enum Sibionics2Configuration {
     static func sibionics1Family(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics1Family {
         Sibionics1Family.resolve(
             protocolMode: protocolMode(for: identifier, userDefaults: userDefaults),
-            keyGroup: confirmedKeyGroup(for: identifier, userDefaults: userDefaults)
+            keyGroup: confirmedKeyGroup(for: identifier, userDefaults: userDefaults),
+            isGS3: isGS3(for: identifier, userDefaults: userDefaults)
         )
+    }
+
+    /// The Sibionics 1 sensor is a GS3 (JugglucoNG Variant.GS3), chosen on the device screen.
+    static func isGS3(for identifier: String, userDefaults: UserDefaults = .standard) -> Bool {
+        bool("gs3", identifier: identifier, defaultValue: false, userDefaults: userDefaults)
+    }
+
+    /// A GS3 speaks V120 only, so its protocol is fixed; switching back lets the sensor be probed again.
+    static func setGS3(_ isGS3: Bool, for identifier: String, userDefaults: UserDefaults = .standard) {
+        setBool(isGS3, name: "gs3", identifier: identifier, userDefaults: userDefaults)
+        setProtocolMode(isGS3 ? .v120 : nil, for: identifier, userDefaults: userDefaults)
     }
 
     static func calibrationWeighting(for identifier: String, userDefaults: UserDefaults = .standard) -> Sibionics2CalibrationWeighting {
@@ -986,6 +1025,28 @@ enum Sibionics2Configuration {
         return Sibionics2AutoResetReading(glucoseMgDl: value, timeStamp: Date(timeIntervalSince1970: timestamp))
     }
 
+    /// "Postpone 2 hours" from the reset reminder: no comfortable automatic reset before this.
+    static func resetPostponedUntil(for identifier: String, userDefaults: UserDefaults = .standard) -> Date? {
+        guard let key = key("resetPostponedUntil", identifier: identifier) else { return nil }
+        return userDefaults.object(forKey: key) as? Date
+    }
+
+    static func setResetPostponedUntil(_ date: Date?, for identifier: String, userDefaults: UserDefaults = .standard) {
+        guard let key = key("resetPostponedUntil", identifier: identifier) else { return }
+        if let date { userDefaults.set(date, forKey: key) } else { userDefaults.removeObject(forKey: key) }
+    }
+
+    /// When the reset reminder last scheduled (or showed) its notification.
+    static func resetReminderScheduledFor(for identifier: String, userDefaults: UserDefaults = .standard) -> Date? {
+        guard let key = key("resetReminderScheduledFor", identifier: identifier) else { return nil }
+        return userDefaults.object(forKey: key) as? Date
+    }
+
+    static func setResetReminderScheduledFor(_ date: Date?, for identifier: String, userDefaults: UserDefaults = .standard) {
+        guard let key = key("resetReminderScheduledFor", identifier: identifier) else { return }
+        if let date { userDefaults.set(date, forKey: key) } else { userDefaults.removeObject(forKey: key) }
+    }
+
     private static func bool(_ name: String, identifier: String, defaultValue: Bool, userDefaults: UserDefaults) -> Bool {
         guard let key = key(name, identifier: identifier) else { return defaultValue }
         return userDefaults.object(forKey: key) == nil ? defaultValue : userDefaults.bool(forKey: key)
@@ -1019,5 +1080,113 @@ enum Sibionics2Configuration {
 private extension Double {
     func clamped(to range: ClosedRange<Double>) -> Double {
         min(max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+
+/// JugglucoNG `SibionicsResetReminder` for Sibionics 2: a notification four hours before the reset
+/// point (22 days), repeated no sooner than every 2 hours while the sensor still runs its session,
+/// with "Reset sensor" and "Postpone 2 hours". The postponement holds only the comfortable
+/// automatic reset; the forced one before the sensor ends still happens. iOS delivers a scheduled
+/// notification while the app is suspended, so the reminder needs no running timer.
+enum Sibionics2ResetReminder {
+    static let categoryIdentifier = "sibionics2.resetReminder"
+    static let resetActionIdentifier = "sibionics2.resetReminder.resetNow"
+    static let postponeActionIdentifier = "sibionics2.resetReminder.postpone"
+    static let notificationPrefix = "sibionics2.resetReminder."
+    static let addressUserInfoKey = "sibionics2Address"
+    static let repeatInterval: TimeInterval = 2 * 60 * 60
+    static let postponeInterval: TimeInterval = 2 * 60 * 60
+
+    static func reminderAt(sensorStartDate: Date) -> Date {
+        sensorStartDate.addingTimeInterval(Sibionics2AutoResetPolicy.normalResetAge)
+    }
+
+    static func dueAt(sensorStartDate: Date) -> Date {
+        sensorStartDate.addingTimeInterval(Sibionics2AutoResetPolicy.scheduledResetAge)
+    }
+
+    static func hardDeadline(sensorStartDate: Date) -> Date {
+        sensorStartDate.addingTimeInterval(Sibionics2AutoResetPolicy.expectedSensorLife - Sibionics2AutoResetPolicy.preExpiryGuard)
+    }
+
+    /// When the next reminder should show; nil once the forced reset is due.
+    static func nextReminderDate(sensorStartDate: Date, now: Date, postponedUntil: Date?, lastScheduledFor: Date?) -> Date? {
+        var fire = reminderAt(sensorStartDate: sensorStartDate)
+        if let postponedUntil, postponedUntil > fire { fire = postponedUntil }
+        // A reminder that has already shown repeats no sooner than two hours later.
+        if let lastScheduledFor, lastScheduledFor <= now, lastScheduledFor >= reminderAt(sensorStartDate: sensorStartDate) {
+            fire = max(fire, lastScheduledFor.addingTimeInterval(repeatInterval))
+        }
+        return fire < hardDeadline(sensorStartDate: sensorStartDate) ? fire : nil
+    }
+
+    /// JugglucoNG's text: hours to the reset point, or to the forced reset once that has passed.
+    static func hoursLeft(sensorStartDate: Date, at date: Date) -> Int {
+        let due = dueAt(sensorStartDate: sensorStartDate)
+        let deadline = due > date ? due : hardDeadline(sensorStartDate: sensorStartDate)
+        return Int((max(0, deadline.timeIntervalSince(date)) / 3600).rounded(.up))
+    }
+
+    static func postponedUntil(sensorStartDate: Date, now: Date) -> Date {
+        min(now.addingTimeInterval(postponeInterval), max(now, hardDeadline(sensorStartDate: sensorStartDate)))
+    }
+
+    static func notificationIdentifier(for address: String) -> String {
+        notificationPrefix + address.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    /// Schedules (or moves) the reminder of the sensor at `address`.
+    static func schedule(for address: String, sensorStartDate: Date, now: Date = Date(), userDefaults: UserDefaults = .standard) {
+        let lastScheduledFor = Sibionics2Configuration.resetReminderScheduledFor(for: address, userDefaults: userDefaults)
+        guard let fire = nextReminderDate(sensorStartDate: sensorStartDate, now: now,
+                                          postponedUntil: Sibionics2Configuration.resetPostponedUntil(for: address, userDefaults: userDefaults),
+                                          lastScheduledFor: lastScheduledFor) else {
+            cancel(for: address, userDefaults: userDefaults, keepsHistory: true)
+            return
+        }
+        guard fire != lastScheduledFor else { return }
+        Sibionics2Configuration.setResetReminderScheduledFor(fire, for: address, userDefaults: userDefaults)
+
+        let content = UNMutableNotificationContent()
+        content.title = Texts_BluetoothPeripheralView.sibionics2ResetReminderTitle
+        content.body = String(format: Texts_BluetoothPeripheralView.sibionics2ResetReminderText,
+                              hoursLeft(sensorStartDate: sensorStartDate, at: fire))
+        content.sound = .default
+        content.categoryIdentifier = categoryIdentifier
+        content.userInfo = [addressUserInfoKey: address]
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, fire.timeIntervalSince(now)), repeats: false)
+        let center = UNUserNotificationCenter.current()
+        registerCategory(center: center)
+        center.add(UNNotificationRequest(identifier: notificationIdentifier(for: address), content: content, trigger: trigger),
+                   withCompletionHandler: nil)
+    }
+
+    /// Removes the reminder; after a reset (`keepsHistory` false) the postponement goes too.
+    static func cancel(for address: String, userDefaults: UserDefaults = .standard, keepsHistory: Bool = false) {
+        let identifier = notificationIdentifier(for: address)
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        center.removeDeliveredNotifications(withIdentifiers: [identifier])
+        guard !keepsHistory else { return }
+        Sibionics2Configuration.setResetReminderScheduledFor(nil, for: address, userDefaults: userDefaults)
+        Sibionics2Configuration.setResetPostponedUntil(nil, for: address, userDefaults: userDefaults)
+    }
+
+    private static func registerCategory(center: UNUserNotificationCenter) {
+        center.getNotificationCategories { existing in
+            guard !existing.contains(where: { $0.identifier == categoryIdentifier }) else { return }
+            var categories = existing
+            categories.insert(UNNotificationCategory(
+                identifier: categoryIdentifier,
+                actions: [
+                    UNNotificationAction(identifier: resetActionIdentifier, title: Texts_BluetoothPeripheralView.sibionics2ResetTitle,
+                                         options: [.destructive]),
+                    UNNotificationAction(identifier: postponeActionIdentifier,
+                                         title: Texts_BluetoothPeripheralView.sibionics2ResetReminderPostpone, options: [])
+                ],
+                intentIdentifiers: [], options: []))
+            center.setNotificationCategories(categories)
+        }
     }
 }

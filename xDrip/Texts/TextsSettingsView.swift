@@ -1390,6 +1390,11 @@ class Texts_SettingsView {
 
     // MARK: - Backup and Restore
 
+    static let automaticBackup = NSLocalizedString("settingsviews_automaticBackup", tableName: filename, bundle: Bundle.main, value: "Automatic daily backup", comment: "Data management: automatic backup toggle")
+    static let automaticBackupLast = NSLocalizedString("settingsviews_automaticBackupLast", tableName: filename, bundle: Bundle.main, value: "Last: %@", comment: "Data management: time of the last automatic backup")
+    static let automaticBackupNever = NSLocalizedString("settingsviews_automaticBackupNever", tableName: filename, bundle: Bundle.main, value: "None yet", comment: "Data management: no automatic backup yet")
+    static let automaticBackupShrankTitle = NSLocalizedString("settingsviews_automaticBackupShrankTitle", tableName: filename, bundle: Bundle.main, value: "Automatic backup is much smaller", comment: "Notification when the automatic backup shrank")
+    static let automaticBackupShrankBody = NSLocalizedString("settingsviews_automaticBackupShrankBody", tableName: filename, bundle: Bundle.main, value: "Glucose readings: %d → %d, treatments: %d → %d. Earlier backups are kept in Files → xDrip → Automatic backups.", comment: "Notification body when the automatic backup shrank, %d = counts")
     static let backupCreate = NSLocalizedString("settingsviews_backupCreate", tableName: filename, bundle: Bundle.main, value: "Create Backup", comment: "backup, create backup screen title")
     static let backupRestore = NSLocalizedString("settingsviews_backupRestore", tableName: filename, bundle: Bundle.main, value: "Restore Backup", comment: "backup, restore backup screen title and action")
     static let backupCreated = NSLocalizedString("settingsviews_backupCreated", tableName: filename, bundle: Bundle.main, value: "Backup Successfully Created", comment: "backup, successful creation banner")

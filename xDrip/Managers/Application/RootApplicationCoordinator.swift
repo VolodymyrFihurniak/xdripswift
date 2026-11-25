@@ -306,6 +306,11 @@ import AppIntents
             
             self.setupApplicationData()
 
+            // A minute after launch, so the backup does not compete with the first readings.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
+                if let coreDataManager = self.coreDataManager { AutomaticBackup.runIfDue(coreDataManager: coreDataManager) }
+            }
+
             if let coreDataManager = self.coreDataManager,
                let statisticsManager = self.statisticsManager,
                let bgReadingsAccessor = self.bgReadingsAccessor,
@@ -600,6 +605,8 @@ import AppIntents
             
             // Schedule a call to updateLabelsAndChart when the app comes to the foreground, with a delay of 0.5 seconds. Because the application state is not immediately to .active, as a result, updates may not happen - especially the synctreatments may not happen because this may depend on the application state - by making a call just half a second later, when the status is surely = .active, the UI updates will be done correctly.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if let coreDataManager = self.coreDataManager { AutomaticBackup.runIfDue(coreDataManager: coreDataManager) }
+                GlucoseMeterLink.shared.syncIfDue()
                 self.repairStoredSibionicsReadings()
                 self.updateLabelsAndChart(overrideApplicationState: true)
                 self.updateMiniChart()
@@ -3450,7 +3457,8 @@ extension RootApplicationCoordinator: @preconcurrency UNUserNotificationCenterDe
             // so actually the app was in the foreground, at the  moment the Transmitter Class called the cgmTransmitterNeedsPairing function, there's no need to show the notification, we can immediately call back the cgmTransmitter initiatePairing function
             completionHandler([])
             bluetoothPeripheralManager?.initiatePairing()
-        } else if notification.request.identifier.hasPrefix(SensorExpiryReminderManager.notificationPrefix) {
+        } else if notification.request.identifier.hasPrefix(SensorExpiryReminderManager.notificationPrefix)
+                    || notification.request.identifier.hasPrefix(Sibionics2ResetReminder.notificationPrefix) {
             completionHandler([.banner, .list, .sound])
         } else if notification.request.identifier.hasPrefix(SensorHealthIssueManager.notificationIdentifierPrefix) {
             let isTerminal = notification.request.content.userInfo[SensorHealthIssueManager.notificationIsTerminalUserInfoKey] as? Bool == true
@@ -3494,6 +3502,8 @@ extension RootApplicationCoordinator: @preconcurrency UNUserNotificationCenterDe
             let identifier = response.notification.request.identifier
             center.removePendingNotificationRequests(withIdentifiers: [identifier])
             center.removeDeliveredNotifications(withIdentifiers: [identifier])
+        } else if response.notification.request.identifier.hasPrefix(Sibionics2ResetReminder.notificationPrefix) {
+            handleSibionics2ResetReminder(response)
         } else if response.notification.request.identifier.hasPrefix(SensorHealthIssueManager.notificationIdentifierPrefix) {
             let notificationIdentifier = response.notification.request.identifier
             let isTerminal = response.notification.request.content.userInfo[SensorHealthIssueManager.notificationIsTerminalUserInfoKey] as? Bool == true
@@ -3519,6 +3529,30 @@ extension RootApplicationCoordinator: @preconcurrency UNUserNotificationCenterDe
             } else {
                 // it as also not an alert notification that the user clicked, there might come in other types of notifications in the future
             }
+        }
+    }
+}
+
+extension RootApplicationCoordinator {
+    /// JugglucoNG's reset reminder actions: reset the sensor now, or postpone the reset two hours.
+    fileprivate func handleSibionics2ResetReminder(_ response: UNNotificationResponse) {
+        guard let address = response.notification.request.content.userInfo[Sibionics2ResetReminder.addressUserInfoKey] as? String else { return }
+        let transmitter = bluetoothPeripheralManager?.getBluetoothTransmitters()
+            .compactMap { $0 as? CGMSibionics2Transmitter }
+            .first { $0.deviceAddress?.caseInsensitiveCompare(address) == .orderedSame }
+        switch response.actionIdentifier {
+        case Sibionics2ResetReminder.resetActionIdentifier:
+            trace("Sibionics 2 reset requested from the reset reminder", log: log, category: ConstantsLog.categoryRootView, type: .info)
+            if let transmitter {
+                transmitter.requestSensorReset(for: address)
+            } else {
+                // Sent once the sensor connects again.
+                Sibionics2Configuration.requestReset(for: address)
+            }
+        case Sibionics2ResetReminder.postponeActionIdentifier:
+            transmitter?.postponeSensorReset(for: address)
+        default:
+            break
         }
     }
 }

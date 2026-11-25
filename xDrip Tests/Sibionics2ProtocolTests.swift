@@ -733,6 +733,43 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertTrue(forcedWhenDisabled.forced)
     }
 
+    func testResetReminderFollowsJugglucoResetPolicy() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func hours(_ value: Double) -> Date { start.addingTimeInterval(value * 3600) }
+        // Reset point 22 days (528 h), reminder 4 h before it, forced reset 4 h before 23 days (548 h).
+        XCTAssertEqual(Sibionics2ResetReminder.reminderAt(sensorStartDate: start), hours(524))
+        XCTAssertEqual(Sibionics2ResetReminder.hardDeadline(sensorStartDate: start), hours(548))
+        XCTAssertEqual(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: start, postponedUntil: nil, lastScheduledFor: nil), hours(524))
+        XCTAssertEqual(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: hours(525), postponedUntil: hours(530),
+                                                                lastScheduledFor: hours(525)), hours(530))
+        // Shown at 524 h: repeats at 526 h; still pending: stays.
+        XCTAssertEqual(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: hours(525), postponedUntil: nil,
+                                                                lastScheduledFor: hours(524)), hours(526))
+        XCTAssertEqual(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: hours(523), postponedUntil: nil,
+                                                                lastScheduledFor: hours(524)), hours(524))
+        // A reminder of the previous sensor does not count; none once the forced reset is due.
+        XCTAssertEqual(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: hours(1), postponedUntil: nil,
+                                                                lastScheduledFor: hours(-10)), hours(524))
+        XCTAssertNil(Sibionics2ResetReminder.nextReminderDate(sensorStartDate: start, now: hours(547.5), postponedUntil: nil,
+                                                              lastScheduledFor: hours(547)))
+
+        XCTAssertEqual(Sibionics2ResetReminder.hoursLeft(sensorStartDate: start, at: hours(524)), 4)
+        XCTAssertEqual(Sibionics2ResetReminder.hoursLeft(sensorStartDate: start, at: hours(524.5)), 4)
+        XCTAssertEqual(Sibionics2ResetReminder.hoursLeft(sensorStartDate: start, at: hours(529)), 19)
+        XCTAssertEqual(Sibionics2ResetReminder.postponedUntil(sensorStartDate: start, now: hours(530)), hours(532))
+        XCTAssertEqual(Sibionics2ResetReminder.postponedUntil(sensorStartDate: start, now: hours(547)), hours(548))
+
+        // Postponing holds the comfortable reset, never the forced one.
+        let latest = Sibionics2AutoResetReading(glucoseMgDl: 120, timeStamp: hours(530))
+        let previous = Sibionics2AutoResetReading(glucoseMgDl: 119, timeStamp: hours(530).addingTimeInterval(-60))
+        XCTAssertTrue(Sibionics2AutoResetPolicy.evaluate(now: hours(530), sensorStartDate: start, enabled: true,
+                                                         previous: previous, latest: latest).resetNow)
+        XCTAssertFalse(Sibionics2AutoResetPolicy.evaluate(now: hours(530), sensorStartDate: start, enabled: true,
+                                                          previous: previous, latest: latest, postponedUntil: hours(531)).resetNow)
+        XCTAssertTrue(Sibionics2AutoResetPolicy.evaluate(now: hours(548), sensorStartDate: start, enabled: true,
+                                                         previous: nil, latest: nil, postponedUntil: hours(549)).forced)
+    }
+
     func testSibionics1LifetimeIsJugglucoExtendedSessionAndVariantNamesTheSensor() {
         // JugglucoNG EXTENDED_CHINESE_LIFETIME_MS = 572 h - 19 min.
         XCTAssertEqual(Sibionics1SensorProfile.extendedLife, 2_058_060, accuracy: 0.001)
@@ -746,5 +783,110 @@ final class Sibionics2ProtocolTests: XCTestCase {
             .sibionics1
         )
         XCTAssertEqual(TroubleshootingLogSource(directTransmitterType: .sibionics2), .sibionics2)
+    }
+}
+
+final class SensorReachAndLinkProblemTests: XCTestCase {
+    func testOneMinuteSensorsAreMissedSoonerThanFiveMinuteOnes() {
+        XCTAssertEqual(RootHomeSensorReach.thresholdMinutes(for: .sibionics2), 3)
+        XCTAssertEqual(RootHomeSensorReach.thresholdMinutes(for: .Libre2), 3)
+        XCTAssertEqual(RootHomeSensorReach.thresholdMinutes(for: .Libre3), 3)
+        XCTAssertEqual(RootHomeSensorReach.thresholdMinutes(for: .dexcom), 11)
+        XCTAssertEqual(RootHomeSensorReach.thresholdMinutes(for: nil), 11)
+        XCTAssertFalse(RootHomeSensorReach.isOutOfReach(minutesSinceReading: 2.9, transmitterType: .sibionics2))
+        XCTAssertTrue(RootHomeSensorReach.isOutOfReach(minutesSinceReading: 3, transmitterType: .sibionics2))
+        XCTAssertFalse(RootHomeSensorReach.isOutOfReach(minutesSinceReading: 6, transmitterType: .dexcom))
+        XCTAssertTrue(RootHomeSensorReach.isOutOfReach(minutesSinceReading: 11, transmitterType: .dexcom))
+    }
+
+    func testLastLinkProblemIsKeptUntilCleared() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "SensorReachAndLinkProblemTests"))
+        defaults.removePersistentDomain(forName: "SensorReachAndLinkProblemTests")
+        let address = "AFD9F321-3746-861B-192E-F5C10FD5F853"
+        XCTAssertNil(Sibionics2DeviceStatus.lastLinkProblem(for: address, userDefaults: defaults))
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        Sibionics2DeviceStatus.setLastLinkProblem("Link lost", at: date, for: address, userDefaults: defaults)
+        let stored = try XCTUnwrap(Sibionics2DeviceStatus.lastLinkProblem(for: address.lowercased(), userDefaults: defaults))
+        XCTAssertEqual(stored.text, "Link lost")
+        XCTAssertEqual(stored.date, date)
+        Sibionics2DeviceStatus.setLastLinkProblem(nil, for: address, userDefaults: defaults)
+        XCTAssertNil(Sibionics2DeviceStatus.lastLinkProblem(for: address, userDefaults: defaults))
+    }
+}
+
+/// JugglucoNG `SibionicsConstants.Variant.GS3`.
+final class SibionicsGS3Tests: XCTestCase {
+    func testGS3IsItsOwnFamilyWithTheHematonixFallbackAndFifteenAndAHalfDays() throws {
+        XCTAssertEqual(Sibionics1Family.resolve(protocolMode: .v120, keyGroup: .sijoy, isGS3: true), .gs3)
+        XCTAssertEqual(Sibionics1Family.resolve(protocolMode: .v120, keyGroup: .sijoy), .eu)
+        XCTAssertEqual(Sibionics1Family.gs3.fallbackShortCode, "YEZ1450H")
+        // GS3_EXPECTED_LIFETIME_MS = 14 days + 36 hours.
+        XCTAssertEqual(Sibionics1SensorProfile.gs3Life, 1_339_200, accuracy: 0.001)
+        XCTAssertEqual(Sibionics1SensorProfile.gs3LifeInDays, 15.5, accuracy: 1e-9)
+
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "SibionicsGS3Tests"))
+        defaults.removePersistentDomain(forName: "SibionicsGS3Tests")
+        let address = "11111111-2222-3333-4444-555555555555"
+        XCTAssertFalse(Sibionics2Configuration.isGS3(for: address, userDefaults: defaults))
+        Sibionics2Configuration.setGS3(true, for: address, userDefaults: defaults)
+        XCTAssertTrue(Sibionics2Configuration.isGS3(for: address, userDefaults: defaults))
+        XCTAssertEqual(Sibionics2Configuration.protocolMode(for: address, userDefaults: defaults), .v120)
+        XCTAssertEqual(Sibionics2Configuration.sibionics1Family(for: address, userDefaults: defaults), .gs3)
+        Sibionics2Configuration.setGS3(false, for: address, userDefaults: defaults)
+        XCTAssertNil(Sibionics2Configuration.protocolMode(for: address, userDefaults: defaults))
+        defaults.removePersistentDomain(forName: "SibionicsGS3Tests")
+    }
+}
+
+/// JugglucoNG `SibionicsSampleJournal` record layout; bytes and CRC-32 from a Python port
+/// (`struct.pack('>IIIqfffI', ...)`, `zlib.crc32`).
+final class SibionicsSourceJournalTests: XCTestCase {
+    private let sample = SibionicsSourceJournal.Sample(index: 42, timestampMs: 1_800_000_000_000, rawMmol: 7.5,
+                                                       temperatureC: 34.25, impedance: 1200, variantId: 2)
+
+    private func hex(_ string: String) -> Data {
+        Data(stride(from: 0, to: string.count, by: 2).map {
+            UInt8(string[string.index(string.startIndex, offsetBy: $0)..<string.index(string.startIndex, offsetBy: $0 + 2)], radix: 16)!
+        })
+    }
+
+    func testRecordMatchesJugglucoNGBytes() {
+        XCTAssertEqual(SibionicsSourceJournal.crc32(Array("123456789".utf8)), 0xCBF4_3926)
+        let expected = hex("534a5231000000010000002a000001a3185c500040f00000420900004496000000000002" + "341c31c1")
+        XCTAssertEqual(SibionicsSourceJournal.encode(sample), expected)
+        XCTAssertEqual(SibionicsSourceJournal.decode(expected), [sample])
+    }
+
+    func testDecodingStopsAtADamagedRecordAndLaterRecordsWin() {
+        let changed = SibionicsSourceJournal.Sample(index: 42, timestampMs: 1_800_000_000_000, rawMmol: 7.6,
+                                                    temperatureC: 34.25, impedance: 1200, variantId: 2)
+        var data = SibionicsSourceJournal.encode(sample) + SibionicsSourceJournal.encode(changed)
+        XCTAssertEqual(SibionicsSourceJournal.decode(data), [changed])
+        data.append(Data(repeating: 0, count: 39))
+        XCTAssertEqual(SibionicsSourceJournal.decode(data), [changed])
+        var damaged = SibionicsSourceJournal.encode(sample)
+        damaged[10] ^= 0xFF
+        XCTAssertTrue(SibionicsSourceJournal.decode(damaged).isEmpty)
+    }
+
+    func testChangesKeepTheFirstTimeAndSkipRepeats() {
+        let later = SibionicsSourceJournal.Sample(index: 42, timestampMs: 1_800_000_060_000, rawMmol: 7.5,
+                                                  temperatureC: 34.25, impedance: 1200, variantId: 2)
+        XCTAssertTrue(SibionicsSourceJournal.changes([later], existing: [42: sample]).isEmpty)
+        let other = SibionicsSourceJournal.Sample(index: 42, timestampMs: 1_800_000_060_000, rawMmol: 8,
+                                                  temperatureC: 34.25, impedance: 1200, variantId: 2)
+        XCTAssertEqual(SibionicsSourceJournal.changes([other], existing: [42: sample]).map(\.timestampMs), [1_800_000_000_000])
+    }
+
+    func testContiguousRunStopsAtTheFirstGap() {
+        func at(_ index: Int) -> SibionicsSourceJournal.Sample {
+            SibionicsSourceJournal.Sample(index: index, timestampMs: 1_800_000_000_000 + Int64(index) * 60_000, rawMmol: 7,
+                                          temperatureC: 34, impedance: 1000, variantId: 2)
+        }
+        XCTAssertEqual(SibionicsSourceJournal.contiguousRun([at(3), at(1), at(2), at(5)]).map(\.index), [1, 2, 3])
+        let reading = SibionicsSourceJournal.reading(from: at(2))
+        XCTAssertEqual(reading.index, 2)
+        XCTAssertEqual(reading.eventTime, Date(timeIntervalSince1970: 1_800_000_120))
+        XCTAssertEqual(reading.reindex, 1)
     }
 }

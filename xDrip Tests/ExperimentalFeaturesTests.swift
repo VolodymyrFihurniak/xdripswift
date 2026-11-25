@@ -1433,3 +1433,420 @@ final class InsulinPenReaderTests: XCTestCase {
         XCTAssertEqual(InsulinPenStore.pens(defaults: defaults).map(\.serial), ["ZZZ"])
     }
 }
+
+// MARK: - Fast change over 5-minute intervals, same-direction rule, quiet window
+
+/// Run lengths were computed with a Python port of `GDHDeltaRun` (JugglucoNG DeltaAlarmState).
+final class AlertDeltaRunAndQuietWindowTests: XCTestCase {
+
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func readings(every seconds: TimeInterval, _ values: [Double]) -> [(date: Date, mgDl: Double)] {
+        values.enumerated().map { (date: start.addingTimeInterval(TimeInterval($0.offset) * seconds), mgDl: $0.element) }
+    }
+
+    func testDeltaIsScaledToFiveMinutesAndRejectsShortAndLongGaps() {
+        XCTAssertEqual(GDHDeltaRun.delta(newDate: start.addingTimeInterval(600), newValue: 190,
+                                         previousDate: start, previousValue: 200) ?? 0, -5, accuracy: 1e-9)
+        XCTAssertNil(GDHDeltaRun.delta(newDate: start.addingTimeInterval(100), newValue: 190, previousDate: start, previousValue: 200))
+        XCTAssertNil(GDHDeltaRun.delta(newDate: start.addingTimeInterval(1300), newValue: 190, previousDate: start, previousValue: 200))
+    }
+
+    func testOneMinuteSensorCountsFiveMinuteIntervals() {
+        // 2 mg/dL a minute for 16 minutes: 10 mg/dL per 5 minutes, three full intervals.
+        let falling = readings(every: 60, (0...16).map { 200 - 2 * Double($0) })
+        XCTAssertEqual(GDHDeltaRun.runLength(falling, thresholdMgDl: 9, falling: true), 3)
+        XCTAssertEqual(GDHDeltaRun.runLength(falling, thresholdMgDl: 11, falling: true), 0)
+        XCTAssertEqual(GDHDeltaRun.runLength(falling, thresholdMgDl: 9, falling: false), 0)
+    }
+
+    func testFiveMinuteSensorRunResetsOnReversalGapAndSlowInterval() {
+        XCTAssertEqual(GDHDeltaRun.runLength(readings(every: 300, [200, 188, 176, 164, 152]), thresholdMgDl: 10, falling: true), 4)
+        XCTAssertEqual(GDHDeltaRun.runLength(readings(every: 300, [200, 188, 176, 164, 152]), thresholdMgDl: 13, falling: true), 0)
+        XCTAssertEqual(GDHDeltaRun.runLength(readings(every: 300, [200, 188, 176, 164, 152, 155]), thresholdMgDl: 10, falling: true), 0)
+        XCTAssertEqual(GDHDeltaRun.runLength(readings(every: 300, [200, 188, 176, 174, 162]), thresholdMgDl: 10, falling: true), 1)
+        let gap: [(date: Date, mgDl: Double)] = [(start, 200), (start.addingTimeInterval(300), 188), (start.addingTimeInterval(600), 176),
+                                                 (start.addingTimeInterval(2100), 164), (start.addingTimeInterval(2400), 152)]
+        XCTAssertEqual(GDHDeltaRun.runLength(gap, thresholdMgDl: 10, falling: true), 1)
+    }
+
+    func testSameDirectionRuleNeedsAnAcknowledgedOtherAlarmOfTheSameDirection() {
+        let fired = (kind: AlertKind.predictedLow, at: start)
+        let now = start.addingTimeInterval(9 * 60)
+        XCTAssertTrue(SameDirectionAlertRule.blocks(kind: .fastdrop, lastFired: fired, lastAcknowledged: true, now: now, windowMinutes: 10))
+        XCTAssertFalse(SameDirectionAlertRule.blocks(kind: .fastdrop, lastFired: fired, lastAcknowledged: false, now: now, windowMinutes: 10))
+        XCTAssertFalse(SameDirectionAlertRule.blocks(kind: .fastdrop, lastFired: fired, lastAcknowledged: true,
+                                                     now: start.addingTimeInterval(10 * 60), windowMinutes: 10))
+        XCTAssertFalse(SameDirectionAlertRule.blocks(kind: .fastrise, lastFired: fired, lastAcknowledged: true, now: now, windowMinutes: 10))
+        XCTAssertFalse(SameDirectionAlertRule.blocks(kind: .predictedLow, lastFired: fired, lastAcknowledged: true, now: now, windowMinutes: 10))
+        XCTAssertFalse(SameDirectionAlertRule.blocks(kind: .fastdrop, lastFired: fired, lastAcknowledged: true, now: now, windowMinutes: 0))
+    }
+
+    func testQuietWindowDecision() {
+        let later = start.addingTimeInterval(10 * 60)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .high, mode: .vibrateOnly, scope: .all, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: start.addingTimeInterval(60)), .vibrateOnly)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .high, mode: .notificationOnly, scope: .all, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: start.addingTimeInterval(60)), .silent)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .high, mode: .vibrateOnly, scope: .all, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: later), .normal)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .high, mode: .vibrateOnly, scope: .veryHighOnly, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: later), .vibrateOnly)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .veryhigh, mode: .vibrateOnly, scope: .veryHighOnly, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: later), .normal)
+        XCTAssertEqual(ExperimentalQuietWindow.decide(kind: .low, mode: .notificationOnly, scope: .veryHighOnly, breakthroughMinutes: 10,
+                                                      silencedSince: start, now: later), .normal)
+    }
+
+    func testQuietWindowRemembersTheSilencedEpisodeAndEnds() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "ExperimentalQuietWindowTests"))
+        defaults.removePersistentDomain(forName: "ExperimentalQuietWindowTests")
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .high, at: start, now: start, defaults: defaults), .normal)
+
+        let until = ExperimentalQuietWindow.start(minutes: 60, now: start, defaults: defaults)
+        XCTAssertEqual(until, start.addingTimeInterval(3600))
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .high, at: start, now: start, defaults: defaults), .vibrateOnly)
+        let fiveLater = start.addingTimeInterval(5 * 60)
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .high, at: fiveLater, now: fiveLater, defaults: defaults), .vibrateOnly)
+        let tenLater = start.addingTimeInterval(10 * 60)
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .high, at: tenLater, now: tenLater, defaults: defaults), .normal)
+        // Another alarm has its own episode.
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .fastrise, at: tenLater, now: tenLater, defaults: defaults), .vibrateOnly)
+
+        let afterEnd = start.addingTimeInterval(3601)
+        XCTAssertNil(ExperimentalQuietWindow.until(now: afterEnd, defaults: defaults))
+        XCTAssertEqual(ExperimentalQuietWindow.delivery(for: .high, at: afterEnd, now: afterEnd, defaults: defaults), .normal)
+
+        XCTAssertEqual(ExperimentalQuietWindow.start(minutes: 10_000, now: start, defaults: defaults), start.addingTimeInterval(24 * 3600))
+        ExperimentalQuietWindow.end(defaults: defaults)
+        XCTAssertNil(ExperimentalQuietWindow.until(now: start, defaults: defaults))
+        defaults.removePersistentDomain(forName: "ExperimentalQuietWindowTests")
+    }
+}
+
+// MARK: - Uncertainty ribbon
+
+final class GlucoseUncertaintyRibbonTests: XCTestCase {
+
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func testMergeKeepsUsableRecentEntriesOnePerMoment() {
+        let old = GlucoseUncertaintyStore.Entry(date: start.addingTimeInterval(-37 * 3600), mgDl: 100, lower: 90, upper: 110)
+        let first = GlucoseUncertaintyStore.Entry(date: start, mgDl: 100, lower: 90, upper: 110)
+        let replaced = GlucoseUncertaintyStore.Entry(date: start, mgDl: 102, lower: 95, upper: 109)
+        let unusable = GlucoseUncertaintyStore.Entry(date: start.addingTimeInterval(60), mgDl: 100, lower: 110, upper: 90)
+        let merged = GlucoseUncertaintyStore.merged([old, first], adding: [replaced, unusable], now: start)
+        XCTAssertEqual(merged, [replaced])
+    }
+
+    func testRibbonFollowsTheReadingDrawnAndLeavesHoles() {
+        let entries = [GlucoseUncertaintyStore.Entry(date: start, mgDl: 100, lower: 92, upper: 111),
+                       GlucoseUncertaintyStore.Entry(date: start.addingTimeInterval(60), mgDl: 104, lower: 96, upper: 115)]
+        // The second reading is calibrated 6 mg/dL higher and 20 s off; the third has no interval.
+        let dates = [start, start.addingTimeInterval(80), start.addingTimeInterval(180)]
+        let ribbon = GlucoseUncertaintyStore.ribbon(entries: entries, readingDates: dates, readingValues: [100, 110, 112])
+        XCTAssertEqual(ribbon, [GlucoseChartExperimentalPlots.UncertaintyPoint(date: start, lower: 92, upper: 111),
+                                GlucoseChartExperimentalPlots.UncertaintyPoint(date: start.addingTimeInterval(80), lower: 102, upper: 121)])
+    }
+
+    func testRunsBreakAtMissingIntervalsAndGapsAndDropLonePoints() {
+        func point(_ minute: Int) -> GlucoseChartExperimentalPlots.UncertaintyPoint {
+            GlucoseChartExperimentalPlots.UncertaintyPoint(date: start.addingTimeInterval(TimeInterval(minute * 60)), lower: 90, upper: 110)
+        }
+        let dates = [0, 1, 2, 3, 4, 5, 30, 31, 50].map { start.addingTimeInterval(TimeInterval($0 * 60)) }
+        // Minutes 2 and 5 have no interval, 30–31 follow a 26-minute gap, 50 stands alone after a 19-minute one.
+        let runs = GlucoseChartExperimentalPlots.uncertaintyRuns([0, 1, 3, 4, 30, 31, 50].map(point), readingDates: dates)
+        XCTAssertEqual(runs.map { $0.points.map { Int($0.date.timeIntervalSince(start) / 60) } }, [[0, 1], [3, 4], [30, 31]])
+    }
+}
+
+// MARK: - Prediction inspector
+
+final class PredictionInspectorTests: XCTestCase {
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func testMomentsPairStandardAndAdaptiveNewestFirst() {
+        let records = [
+            RecordedForecast(origin: start, originMgDl: 100, predicted: [15: 110]),
+            RecordedForecast(origin: start, originMgDl: 100, predicted: [15: 105], model: RecordedForecast.adaptiveModel),
+            RecordedForecast(origin: start.addingTimeInterval(300), originMgDl: 102, predicted: [15: 112])
+        ]
+        let moments = PredictionInspector.moments(records)
+        XCTAssertEqual(moments.map(\.origin), [start.addingTimeInterval(300), start])
+        XCTAssertEqual(moments[1].standard, [15: 110])
+        XCTAssertEqual(moments[1].adaptive, [15: 105])
+        XCTAssertNil(moments[0].adaptive)
+    }
+
+    func testOutcomeIsActualPendingOrMissing() {
+        // Readings every 5 minutes for 20 minutes, rising 2 a minute.
+        let readings = (0...4).map { (date: start.addingTimeInterval(TimeInterval($0 * 300)), mgDl: 100 + Double($0 * 10)) }
+        let gap = PredictionAccuracy.maximumGap(readings: readings)
+        XCTAssertEqual(PredictionInspector.outcome(origin: start, horizon: 15, readings: readings, maximumGap: gap,
+                                                   now: start.addingTimeInterval(1200)), .actual(130))
+        // 30 minutes: after the newest reading, within the arrival allowance.
+        XCTAssertEqual(PredictionInspector.outcome(origin: start, horizon: 30, readings: readings, maximumGap: gap,
+                                                   now: start.addingTimeInterval(1200)), .pending)
+        // Long past and still without a reading.
+        XCTAssertEqual(PredictionInspector.outcome(origin: start, horizon: 30, readings: readings, maximumGap: gap,
+                                                   now: start.addingTimeInterval(4 * 3600)), .missing)
+    }
+}
+
+// MARK: - Amount assist
+
+/// Expectations from a Python port of JugglucoNG `JournalAmountAssist`.
+final class TreatmentAmountAssistTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+    /// Midnight UTC of a fixed day.
+    private let day = Date(timeIntervalSince1970: 1_800_000_000 - 1_800_000_000 % 86_400)
+
+    /// One entry a day, `days` before `day`, at `minute` past midnight.
+    private func entries(_ amounts: [Double], minute: Int) -> [TreatmentAmountAssist.Entry] {
+        amounts.enumerated().map { offset, amount in
+            TreatmentAmountAssist.Entry(date: day.addingTimeInterval(TimeInterval(-(offset + 1) * 86_400 + minute * 60)), amount: amount)
+        }
+    }
+
+    private func at(_ minute: Int) -> Date { day.addingTimeInterval(TimeInterval(minute * 60)) }
+
+    func testWholeUnitsLearnAOneUnitStepAndTheMostCommonDose() {
+        let habit = TreatmentAmountAssist.insulinHabit(entries([4, 4, 5, 6, 4, 3, 4, 8, 2, 4], minute: 480), at: at(510), calendar: calendar)
+        XCTAssertEqual(habit, TreatmentAmountAssist.Habit(step: 1, usual: 4))
+    }
+
+    func testFewEntriesKeepTheDefaultStepAndNeedEnoughHistory() {
+        XCTAssertEqual(TreatmentAmountAssist.insulinHabit(entries([2.5, 3, 3], minute: 480), at: at(480), calendar: calendar),
+                       TreatmentAmountAssist.Habit(step: 0.5, usual: 3))
+        XCTAssertEqual(TreatmentAmountAssist.insulinHabit(entries([1, 1, 1, 1], minute: 1200), at: at(480), calendar: calendar),
+                       TreatmentAmountAssist.Habit(step: 0.5, usual: nil))
+        // Nothing repeated: the middle of the log.
+        XCTAssertEqual(TreatmentAmountAssist.insulinHabit(entries([2, 4, 6, 8, 10], minute: 1200), at: at(480), calendar: calendar),
+                       TreatmentAmountAssist.Habit(step: 0.5, usual: 6))
+    }
+
+    func testCarbsInTensLearnATenGramStep() {
+        XCTAssertEqual(TreatmentAmountAssist.carbHabit(entries([20, 40, 50, 70, 80, 100, 110, 10], minute: 720), at: at(720), calendar: calendar),
+                       TreatmentAmountAssist.Habit(step: 10, usual: 50))
+    }
+
+    func testSteppingLandsOnTheGrid() {
+        XCTAssertEqual(TreatmentAmountAssist.stepped(2.5, direction: 1, step: 1), 3)
+        XCTAssertEqual(TreatmentAmountAssist.stepped(2.5, direction: -1, step: 1), 2)
+        XCTAssertEqual(TreatmentAmountAssist.stepped(3, direction: 1, step: 1), 4)
+        XCTAssertEqual(TreatmentAmountAssist.stepped(0, direction: -1, step: 0.5), 0)
+        XCTAssertEqual(TreatmentAmountAssist.stepped(2, direction: 1, step: 0.5), 2.5)
+    }
+
+    func testUncoveredCarbsIgnoreMealsADoseAlreadyAnswered() {
+        let now = at(720)
+        func minutesAgo(_ minutes: Double, _ amount: Double) -> TreatmentAmountAssist.Entry {
+            TreatmentAmountAssist.Entry(date: now.addingTimeInterval(-minutes * 60), amount: amount)
+        }
+        let carbs = [minutesAgo(60, 40), minutesAgo(20, 10)]
+        XCTAssertEqual(TreatmentAmountAssist.uncoveredCarbs(carbs: carbs, doses: [minutesAgo(100, 3)], at: now), 50)
+        // A dose 70 minutes ago covers food up to 30 minutes after it.
+        XCTAssertEqual(TreatmentAmountAssist.uncoveredCarbs(carbs: carbs, doses: [minutesAgo(70, 3)], at: now), 10)
+        XCTAssertNil(TreatmentAmountAssist.uncoveredCarbs(carbs: carbs, doses: [minutesAgo(10, 0.5)], at: now))
+    }
+}
+
+// MARK: - Bluetooth glucose meters
+
+/// Byte vectors built by hand from the Bluetooth SIG Glucose Profile and JugglucoNG `VerioSession`;
+/// CRC and frames checked with a Python port.
+final class GlucoseMeterProtocolTests: XCTestCase {
+    private let utc = TimeZone(identifier: "UTC")!
+
+    func testSFloatAndSpecialValues() {
+        XCTAssertEqual(try XCTUnwrap(GlucoseMeterGATT.sfloat(0xB078)), 0.0012, accuracy: 1e-12)
+        XCTAssertEqual(GlucoseMeterGATT.sfloat(0x0FFF), -1)
+        XCTAssertNil(GlucoseMeterGATT.sfloat(0x07FF))
+        XCTAssertNil(GlucoseMeterGATT.sfloat(0x0800))
+    }
+
+    func testMeasurementInKilogramsPerLitreWithTimeOffset() throws {
+        // flags: time offset + concentration (kg/L); sequence 7; 2026-11-25 08:30:00; +60 min; 120 mg/dL; finger blood.
+        let data = Data([0x03, 0x07, 0x00, 0xEA, 0x07, 11, 25, 8, 30, 0, 0x3C, 0x00, 0x78, 0xB0, 0x11])
+        let record = try XCTUnwrap(GlucoseMeterGATT.parseMeasurement(data, timeZone: utc))
+        XCTAssertEqual(record.sequence, 7)
+        XCTAssertEqual(record.mgDl, 120, accuracy: 1e-9)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = utc
+        XCTAssertEqual(record.date, calendar.date(from: DateComponents(year: 2026, month: 11, day: 25, hour: 9, minute: 30)))
+    }
+
+    func testMeasurementInMolesPerLitreAndControlSolution() throws {
+        // 6.5 mmol/L = 0.0065 mol/L: mantissa 65, exponent -4.
+        let mmol = Data([0x06, 0x02, 0x00, 0xEA, 0x07, 11, 25, 8, 30, 0, 0x41, 0xC0, 0x11])
+        XCTAssertEqual(try XCTUnwrap(GlucoseMeterGATT.parseMeasurement(mmol, timeZone: utc)).mgDl, 117.1183, accuracy: 1e-6)
+        let control = Data([0x02, 0x03, 0x00, 0xEA, 0x07, 11, 25, 8, 30, 0, 0x78, 0xB0, 0x1A])
+        XCTAssertNil(GlucoseMeterGATT.parseMeasurement(control, timeZone: utc))
+        XCTAssertNil(GlucoseMeterGATT.parseMeasurement(Data([0x00, 0x01, 0x00, 0xEA, 0x07, 11, 25, 8, 30, 0]), timeZone: utc))
+    }
+
+    func testRecordAccessControlPoint() {
+        XCTAssertEqual(GlucoseMeterGATT.reportRecords(from: nil), Data([0x01, 0x01]))
+        XCTAssertEqual(GlucoseMeterGATT.reportRecords(from: 0x0102), Data([0x01, 0x03, 0x01, 0x02, 0x01]))
+        XCTAssertEqual(GlucoseMeterGATT.recordAccessResult(Data([0x06, 0x00, 0x01, 0x01])), .success)
+        XCTAssertEqual(GlucoseMeterGATT.recordAccessResult(Data([0x06, 0x00, 0x01, 0x06])), .noRecords)
+        XCTAssertEqual(GlucoseMeterGATT.recordAccessResult(Data([0x06, 0x00, 0x01, 0x05])), .failed(5))
+        XCTAssertNil(GlucoseMeterGATT.recordAccessResult(Data([0x05, 0x00, 0x02, 0x00])))
+    }
+
+    func testCRCAndVerioFrame() {
+        XCTAssertEqual(CRC16CCITTFalse.checksum(Array("123456789".utf8)), 0x29B1)
+        XCTAssertEqual(VerioMeterSession.command(0x20, 0x02), Data([0x01, 0x02, 0x09, 0x00, 0x03, 0x20, 0x02, 0x03, 0xD4, 0x92]))
+    }
+
+    func testVerioSessionWalksDownToTheStoredRecord() {
+        func le32(_ value: UInt32) -> [UInt8] { [UInt8(value & 0xFF), UInt8(value >> 8 & 0xFF), UInt8(value >> 16 & 0xFF), UInt8(value >> 24)] }
+        func answer(_ payload: [UInt8]) -> Data { VerioMeterSession.command(0x06, payload[0], payload[1], payload[2], payload[3]) }
+        let meterSeconds: UInt32 = 850_000_000
+        // The phone is 60 s ahead of the meter.
+        let now = Date(timeIntervalSince1970: 1_796_684_799 + 60)
+        var session = VerioMeterSession()
+        session.begin()
+        XCTAssertEqual(session.take(), VerioMeterSession.command(0x20, 0x02))
+        session.onNotification(Data([0x81]), alreadyHave: 3, now: now)
+        XCTAssertNil(session.take())
+        session.onNotification(answer(le32(meterSeconds)), alreadyHave: 3, now: now)
+        XCTAssertEqual(session.take(), Data([0x81]))
+        XCTAssertEqual(session.take(), VerioMeterSession.command(0x0A, 0x02, 0x06))
+        session.onNotification(answer(le32(5)), alreadyHave: 3, now: now)
+        _ = session.take()
+        XCTAssertEqual(session.take(), VerioMeterSession.command(0x27, 0x00))
+        // Five records on the meter, three of them already stored: records 5 and 4 are asked for.
+        session.onNotification(VerioMeterSession.command(0x06, 0x05, 0x00), alreadyHave: 3, now: now)
+        _ = session.take()
+        XCTAssertEqual(session.take(), VerioMeterSession.command(0xB3, 0x05, 0x00))
+        let record: [UInt8] = le32(meterSeconds - 600) + [0x78, 0x00] + [0, 0, 0, 0, 0]
+        session.onNotification(Data(VerioMeterSession.command(0x06, record[0], record[1], record[2], record[3], record[4], record[5],
+                                                             record[6], record[7], record[8], record[9], record[10])),
+                               alreadyHave: 3, now: now)
+        _ = session.take()
+        XCTAssertEqual(session.take(), VerioMeterSession.command(0xB3, 0x04, 0x00))
+        XCTAssertEqual(session.takeReadings(),
+                       [GlucoseMeterRecord(sequence: 5, date: Date(timeIntervalSince1970: 1_796_684_799 - 600 + 60), mgDl: 120)])
+        session.onNotification(Data(VerioMeterSession.command(0x06, record[0], record[1], record[2], record[3], 0x64, 0x00,
+                                                             0, 0, 0, 0, 0)), alreadyHave: 3, now: now)
+        XCTAssertEqual(session.take(), Data([0x81]))
+        XCTAssertNil(session.take())
+        XCTAssertTrue(session.isDone)
+        XCTAssertFalse(session.isFailed)
+        XCTAssertEqual(session.takeReadings().map(\.mgDl), [100])
+        XCTAssertTrue(session.completedWalk)
+        XCTAssertEqual(session.walkedRecords, [5, 4])
+    }
+
+    /// Codex review on #16: a read cut short must not move the cursor past records it never read.
+    func testCursorOnlyMovesPastRecordsActuallyRead() {
+        // Completed: to the newest record read.
+        XCTAssertEqual(GlucoseMeterStore.nextCursor(previous: 3, read: [5, 4], completed: true), 5)
+        XCTAssertEqual(GlucoseMeterStore.nextCursor(previous: nil, read: [7, 6], completed: true), 7)
+        XCTAssertEqual(GlucoseMeterStore.nextCursor(previous: 9, read: [], completed: true), 9)
+        // A Verio walk cut short after its newest records: 4 and 5 were never read.
+        XCTAssertEqual(GlucoseMeterStore.nextCursor(previous: 3, read: [8, 7, 6], completed: false), 3)
+        // A Glucose Profile read cut short after its oldest records: as far as they run unbroken.
+        XCTAssertEqual(GlucoseMeterStore.nextCursor(previous: 3, read: [4, 5, 7], completed: false), 5)
+        XCTAssertNil(GlucoseMeterStore.nextCursor(previous: nil, read: [8, 7], completed: false))
+    }
+
+    func testImportSkipsReadingsAlreadyLogged() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let records = [GlucoseMeterRecord(sequence: 1, date: start, mgDl: 120),
+                       GlucoseMeterRecord(sequence: 2, date: start.addingTimeInterval(3600), mgDl: 95)]
+        XCTAssertEqual(GlucoseMeterImport.newRecords(records, existing: [(start.addingTimeInterval(30), 120)]).map(\.sequence), [2])
+        XCTAssertEqual(GlucoseMeterImport.newRecords(records, existing: [(start.addingTimeInterval(30), 140)]).count, 2)
+    }
+}
+
+/// JugglucoNG `SatelliteMeterProtocol`; PIN and values from a Python port.
+final class SatelliteMeterProtocolTests: XCTestCase {
+    func testPinFromPrintedCodeOrTyped() {
+        XCTAssertEqual(SatelliteMeterProtocol.resolvePin("E1234567"), "640")
+        XCTAssertEqual(SatelliteMeterProtocol.resolvePin("d0000001"), "262")
+        XCTAssertEqual(SatelliteMeterProtocol.resolvePin(" 042 "), "042")
+        XCTAssertNil(SatelliteMeterProtocol.resolvePin("E123"))
+        XCTAssertNil(SatelliteMeterProtocol.resolvePin("X1234567"))
+    }
+
+    func testCommandsAndRecords() throws {
+        XCTAssertEqual(SatelliteMeterProtocol.pinCommand("640"), Data("pin.640".utf8))
+        XCTAssertEqual(SatelliteMeterProtocol.recordCommand(7), Data("rd.007".utf8))
+        XCTAssertEqual(SatelliteMeterProtocol.setTimeCommand(Date(timeIntervalSince1970: 1_795_595_415)), Data("settime.261125083015".utf8))
+        // 6.5 mmol/L capillary → 131.2 mg/dL plasma, at 2026-11-25 08:30:15 UTC.
+        let record = try XCTUnwrap(SatelliteMeterProtocol.parseRecord("rd261125083015000065", index: 0))
+        XCTAssertEqual(record.date, Date(timeIntervalSince1970: 1_795_595_415))
+        XCTAssertEqual(record.mgDl, 131.2, accuracy: 1e-9)
+        XCTAssertNil(SatelliteMeterProtocol.parseRecord("rd261325083015000065", index: 0))
+    }
+
+    func testSessionStopsAtTheEmptySlot() {
+        let now = Date(timeIntervalSince1970: 1_795_595_415 + 3600)
+        var session = SatelliteMeterSession(pin: "640", now: now)
+        XCTAssertEqual(session.notificationsEnabled(), .send(Data("pin.640".utf8)))
+        XCTAssertEqual(session.onNotification(Data("pin.ok\r\n".utf8)), .send(SatelliteMeterProtocol.setTimeCommand(now)))
+        XCTAssertEqual(session.onNotification(Data("ok".utf8)), .send(Data("rd.000".utf8)))
+        XCTAssertEqual(session.onNotification(Data("rd261125083015000065".utf8)), .send(Data("rd.001".utf8)))
+        XCTAssertEqual(session.onNotification(Data(SatelliteMeterProtocol.emptySlot.utf8)), .complete)
+        XCTAssertEqual(session.readings.count, 1)
+
+        var refused = SatelliteMeterSession(pin: "111", now: now)
+        _ = refused.notificationsEnabled()
+        if case .failed = refused.onNotification(Data("pin.err".utf8)) {} else { XCTFail("a refused PIN must fail") }
+    }
+}
+
+// MARK: - Insulin pen manual merge
+
+/// The cases of JugglucoNG `PenManualMergeTests`, against the Swift `PenManualMergePlanner`.
+final class PenManualMergeTests: XCTestCase {
+    private let anchor: Int64 = 1_700_000_000
+
+    private func dose(_ relative: Int64, _ units: Double, atMinute: Int64, priming: Bool = false) -> PenDose {
+        PenDose(relativeSeconds: relative, timestampSeconds: anchor + atMinute * 60, tenths: Int((units * 10).rounded()), flags: 0, priming: priming)
+    }
+
+    private func entry(_ id: Int, _ units: Double, atMinute: Int64, insulin: InsulinProfile? = .aspart) -> ManualInsulinEntry {
+        ManualInsulinEntry(id: id, timestampSeconds: anchor + atMinute * 60, units: units, insulin: insulin)
+    }
+
+    private func plan(_ doses: [PenDose], _ entries: [ManualInsulinEntry], penInsulin: InsulinProfile? = .aspart) -> PenManualMergePlanner.Plan {
+        PenManualMergePlanner.plan(doses: doses, entries: entries, penInsulin: penInsulin)
+    }
+
+    func testADoseWrittenDownBeforeInjectingBecomesTheSameEntry() {
+        let result = plan([dose(3600, 4, atMinute: 10)], [entry(42, 4, atMinute: 8)])
+        XCTAssertEqual(result.merges, [PenManualMerge(entryID: 42, doseRelativeSeconds: 3600, timestampSeconds: anchor + 600)])
+        XCTAssertNil(result.alignmentBreak)
+    }
+
+    func testThreeInARowMergeInOrderAndAirShotsDoNotShiftIt() {
+        let result = plan([dose(100, 6, atMinute: 0), dose(150, 1, atMinute: 299, priming: true), dose(200, 4, atMinute: 300),
+                           dose(300, 8, atMinute: 700)],
+                          [entry(1, 6, atMinute: -2), entry(2, 4, atMinute: 297), entry(3, 8, atMinute: 695)])
+        XCTAssertNil(result.alignmentBreak)
+        XCTAssertEqual(result.merges.map(\.entryID), [1, 2, 3])
+        XCTAssertEqual(result.merges.map(\.doseRelativeSeconds), [100, 200, 300])
+    }
+
+    func testAnEntryWithoutADoseStopsTheWalkAndTheRestPairsByTimeAndAmount() {
+        let result = plan([dose(200, 4, atMinute: 300), dose(300, 8, atMinute: 700)],
+                          [entry(1, 6, atMinute: 299), entry(2, 4, atMinute: 302), entry(3, 8, atMinute: 699)])
+        XCTAssertEqual(result.alignmentBreak, 0)
+        XCTAssertEqual(result.merges.map(\.entryID).sorted(), [2, 3])
+        XCTAssertEqual(result.merges.map(\.doseRelativeSeconds).sorted(), [200, 300])
+    }
+
+    func testDisagreeingAmountsDistanceAnotherInsulinOrAnUnknownPenMergeNothing() {
+        XCTAssertTrue(plan([dose(200, 4.5, atMinute: 300)], [entry(2, 4, atMinute: 298)]).merges.isEmpty)
+        XCTAssertTrue(plan([dose(100, 4, atMinute: 0)], [entry(1, 4, atMinute: 20)]).merges.isEmpty)
+        XCTAssertTrue(plan([dose(100, 4, atMinute: 0)], [entry(1, 4, atMinute: 1, insulin: .glargineU100)]).merges.isEmpty)
+        XCTAssertTrue(plan([dose(100, 4, atMinute: 0)], [entry(1, 4, atMinute: 1)], penInsulin: nil).merges.isEmpty)
+    }
+}

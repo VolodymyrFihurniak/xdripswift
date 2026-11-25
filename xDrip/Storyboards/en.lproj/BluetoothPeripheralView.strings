@@ -211,6 +211,9 @@
 "sibionics2.calibrationWeightingStable" = "Stable";
 "sibionics2.autoResetTitle" = "Automatic sensor reset";
 "sibionics2.resetTitle" = "Reset sensor";
+"sibionics2.resetReminderTitle" = "Sibionics 2 reset coming up";
+"sibionics2.resetReminderText" = "The sensor reaches its reset point in about %d hours. Reset it in time to keep it running.";
+"sibionics2.resetReminderPostpone" = "Postpone 2 hours";
 "sibionics2.resetConfirmTitle" = "Reset sensor?";
 "sibionics2.resetConfirmMessage" = "This sends a reset command to the sensor. Continue only if you intend to start a new sensor session.";
 
@@ -253,7 +256,19 @@
 "sibionics.logCopy" = "Copy log";
 "sibionics.logCopied" = "Copied";
 "sibionics.logEmpty" = "No events yet";
+"sibionics.gs3SensorLifeDetail" = "14 days, extended automatically to 15 d 12 h";
+"sibionics.gs3Title" = "GS3 sensor";
 "sibionics.glucoseModelTitle" = "Glucose model";
 "sibionics.glucoseModelStock" = "Stock (default)";
 "sibionics.glucoseModelAdaptiveV2" = "Adaptive V2 (experimental)";
-"sibionics.glucoseModelFooter" = "Stock is the manufacturer's algorithm. Adaptive V2 is an experimental estimator from JugglucoNG: it works from the sensor's calibrated signal before the manufacturer's display filtering, follows changes sooner and is less smooth. A minute it cannot estimate shows the stock value. Changing the model recalculates the sensor's history. Compare with a meter before relying on it.";
+"sibionics.glucoseModelAdaptiveV1" = "Adaptive V1 (experimental)";
+"sibionics.glucoseModelBalanced" = "Balanced (experimental)";
+"sibionics.glucoseModelResponsive" = "Responsive (experimental)";
+"sibionics.glucoseModelFooter" = "Stock is the manufacturer's algorithm. Balanced (from JugglucoNG) smooths the stock value's small 0.1 mmol/L steps and follows it at once on a real change, a turn or a low. Responsive (from JugglucoNG) tracks glucose and its speed and leans a little ahead of a trend, never far from the stock value. Adaptive V1 (from JugglucoNG) follows the sensor's chemical signal with two motion models and returns to the stock value whenever the evidence weakens; it shows the stock value for the first two hours. Adaptive V2 is an experimental estimator from JugglucoNG: it works from the sensor's calibrated signal before the manufacturer's display filtering, follows changes sooner and is less smooth. A minute it cannot estimate shows the stock value. Changing the model recalculates the sensor's history. Compare with a meter before relying on it.";
+"sibionics.lastLinkProblem" = "Last link problem";
+"sibionics.noLinkProblem" = "None since the last reading";
+"sibionics.problemLinkLost" = "Link lost";
+"sibionics.problemNoReadings" = "No readings while connected";
+"sibionics.problemNotResponding" = "Sensor not responding";
+"sibionics.problemAddressRefused" = "Sensor refused every address";
+"sibionics.problemAuthentication" = "Authentication failed";

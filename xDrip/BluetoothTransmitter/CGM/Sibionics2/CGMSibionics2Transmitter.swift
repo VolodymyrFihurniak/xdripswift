@@ -47,6 +47,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private var deviceInformationGeneration = 0
     private var historyRequest = Sibionics2HistoryRequestTracker()
     private var historyRecoveryToken = 0
+    private var journalReplayGeneration = 0
     private var historyWriteFailures = 0
     private var historyRetryScheduled = false
     private var historyReconnectCount = 0
@@ -230,6 +231,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     /// Adds an event to this sensor's connection log (see `Sibionics2ConnectionLog`).
+    /// Remembers why readings stopped, for the device screen; a reading clears it.
+    private func noteLinkProblem(_ text: String) {
+        guard let address = deviceAddress else { return }
+        Sibionics2DeviceStatus.setLastLinkProblem(text, for: address)
+    }
+
     private func logEvent(_ text: String) {
         guard let address = deviceAddress else { return }
         Sibionics2ConnectionLog.add(variant.productName + ": " + text, for: address)
@@ -239,6 +246,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let sessionWasChinese = usesChineseProtocol
         logEvent("disconnected" + (error.map { ": " + $0.localizedDescription } ?? "")
                  + (streamingReady ? "" : " (before streaming)"))
+        if let error { noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemLinkLost + " (" + error.localizedDescription + ")") }
         probeGeneration += 1
         sibionics1Connection = nil
         readingPollGeneration += 1
@@ -577,6 +585,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             self.streamingWatchdogGeneration += 1
             self.autoResetCheckGeneration += 1
             self.resetDisconnectGeneration += 1
+            self.journalReplayGeneration += 1
             self.handshake = nil
             self.batchProcessor = nil
             self.probeReplaySessionStartDate = nil
@@ -614,7 +623,32 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             trace("Sibionics 2 probe code changed; replaying history with decoded factory sensitivity",
                   log: self.transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .info)
-            self.requestNewReading()
+            // JugglucoNG rebuilds from its source journal; the sensor is asked only for what it lacks.
+            let journal = SibionicsSourceJournal.contiguousRun(
+                SibionicsSourceJournal.samples(for: address, sessionStart: self.probeReplaySessionStartDate))
+            self.journalReplayGeneration += 1
+            // A V120 journal must start at the first minute; a Chinese one may start after warm-up.
+            if journal.count > 1, let first = journal.first, first.index <= 1 || self.usesChineseProtocol {
+                self.logEvent("recalculating \(journal.count) minutes from the source journal")
+                self.replayFromJournal(journal.map(SibionicsSourceJournal.reading(from:)), generation: self.journalReplayGeneration)
+            } else {
+                self.requestNewReading()
+            }
+        }
+    }
+
+    /// Feeds journal minutes through the processor a day at a time, then asks the sensor for newer ones.
+    private func replayFromJournal(_ readings: [Sibionics2RawReading], generation: Int) {
+        guard journalReplayGeneration == generation else { return }
+        let chunk = Array(readings.prefix(1440))
+        receiveReadings(chunk, at: Date(), fromJournal: true)
+        let rest = Array(readings.dropFirst(chunk.count))
+        guard !rest.isEmpty else {
+            requestNewReading()
+            return
+        }
+        runOnCentralQueue(after: 0.05) { [weak self] in
+            self?.replayFromJournal(rest, generation: generation)
         }
     }
 
@@ -628,6 +662,23 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                   let currentAddress = self.deviceAddress,
                   currentAddress.caseInsensitiveCompare(address) == .orderedSame else { return }
             self.autoResetCheckGeneration += 1
+            self.scheduleAutoResetCheck(for: currentAddress)
+        }
+    }
+
+    /// "Postpone 2 hours" from the reset reminder: holds the comfortable automatic reset (never the
+    /// forced one) and moves the reminder to the end of the postponement.
+    func postponeSensorReset(for address: String) {
+        runOnCentralQueue { [weak self] in
+            guard let self, self.variant.supportsAutoReset,
+                  let currentAddress = self.deviceAddress,
+                  currentAddress.caseInsensitiveCompare(address) == .orderedSame,
+                  let startDate = self.stateStore.load(for: currentAddress)?.sensorStartDate else { return }
+            let now = Date()
+            Sibionics2Configuration.setResetPostponedUntil(Sibionics2ResetReminder.postponedUntil(sensorStartDate: startDate, now: now),
+                                                           for: currentAddress)
+            Sibionics2Configuration.setResetReminderScheduledFor(now, for: currentAddress)
+            self.logEvent("reset postponed from the reminder")
             self.scheduleAutoResetCheck(for: currentAddress)
         }
     }
@@ -695,16 +746,23 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
     }
     func maxSensorAgeInDays() -> Double? {
-        variant == .sibionics1
+        if isGS3 { return Sibionics1SensorProfile.gs3LifeInDays }
+        return variant == .sibionics1
             ? Sibionics1SensorProfile.extendedLifeInDays
             : Double(Sibionics2SensorProfile.expectedLifeInDays)
+    }
+
+    /// A Sibionics 1 set up as GS3 on the device screen.
+    var isGS3: Bool {
+        guard variant == .sibionics1, let deviceAddress else { return false }
+        return Sibionics2Configuration.isGS3(for: deviceAddress)
     }
 
     /// JugglucoNG shows Sibionics readings from the first minute: the stock algorithm already
     /// handles the start of a session. xDrip's generic 45-minute fallback discarded them.
     func sensorWarmupDurationInMinutes() -> Double? { 0 }
 
-    var productName: String { variant.productName }
+    var productName: String { isGS3 ? "Sibionics GS3" : variant.productName }
 
     /// Sibionics accepts no transmitter-side calibration write. Calibrations live
     /// in xDrip's CGM pipeline, so request fresh data to apply the saved profile.
@@ -757,6 +815,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                   self.streamingReady,
                   self.getConnectionStatus() == .connected else { return }
             self.logEvent("no readings for 3 minutes while streaming; reconnecting")
+            self.noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemNoReadings)
             trace("Sibionics 2 no readings for %{public}@ seconds while streaming; reconnecting",
                   log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
                   Sibionics2ConnectionPolicy.readingsStallTimeout.description)
@@ -783,6 +842,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         }
 
         Sibionics2Configuration.markResetSent(for: address)
+        Sibionics2ResetReminder.cancel(for: address)
         resetSentThisConnection = true
         readingPollGeneration += 1
         resetDisconnectGeneration += 1
@@ -814,6 +874,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let generation = autoResetCheckGeneration
         guard !Sibionics2Configuration.awaitingResetRestart(for: address),
               let startDate = stateStore.load(for: address)?.sensorStartDate else { return }
+        Sibionics2ResetReminder.schedule(for: address, sensorStartDate: startDate)
 
         let age = Date().timeIntervalSince(startDate)
         let autoResetEnabled = Sibionics2Configuration.autoResetEnabled(for: address)
@@ -844,7 +905,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             sensorStartDate: stateStore.load(for: address)?.sensorStartDate,
             enabled: Sibionics2Configuration.autoResetEnabled(for: address),
             previous: Sibionics2Configuration.previousReading(for: address),
-            latest: Sibionics2Configuration.latestReading(for: address)
+            latest: Sibionics2Configuration.latestReading(for: address),
+            postponedUntil: Sibionics2Configuration.resetPostponedUntil(for: address)
         )
         guard decision.resetNow else {
             scheduleAutoResetCheck(for: address)
@@ -902,6 +964,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 // Connected but silent: asking again on this link has not helped, and nothing
                 // else ends such a session. A fresh connection does.
                 self.logEvent("no data page after repeated requests; reconnecting")
+                self.noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemNotResponding)
                 trace("Sibionics 1 gave no data page after %{public}@ requests; reconnecting",
                       log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
                       self.chineseDataRetryCount.description)
@@ -922,6 +985,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         guard Sibionics2AuthenticationAddress.override(for: address) == nil,
               chineseAddressRefusals < candidates.count else {
             logEvent("sensor refused the authentication address")
+            noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemAddressRefused)
             trace("Sibionics 1 refused the authentication address (%{public}@ refusals); no other address to try now",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
                   chineseAddressRefusals.description)
@@ -1008,6 +1072,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 return
             }
             self.logEvent("handshake stalled; reconnecting")
+            self.noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemAuthentication)
             trace("Sibionics 2 handshake stalled: FF31 has not begun streaming",
                   log: self.transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
@@ -1079,6 +1144,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             authenticationKeyGroupIndex = 0
         connectionKeyGroups = []
             logEvent("authentication not answered with any key group")
+            noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemAuthentication)
             trace("Sibionics 2 authentication was not answered with any key group",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
             reconnectAfterStalledHandshake()
@@ -1117,7 +1183,8 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
 
     private func factorySensitivity(for address: String) -> Double {
         let family: Sibionics1Family = usesChineseProtocol ? .chinese : Sibionics1Family.resolve(
-            protocolMode: .v120, keyGroup: Sibionics2Configuration.confirmedKeyGroup(for: address)
+            protocolMode: .v120, keyGroup: Sibionics2Configuration.confirmedKeyGroup(for: address),
+            isGS3: Sibionics2Configuration.isGS3(for: address)
         )
         return Sibionics2FactorySensitivity.effectiveSensitivity(
             advertisedName: advertisedName,
@@ -1151,7 +1218,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             deviceIdentifier: address,
             stateStore: stateStore,
             processor: Sibionics2GlucoseProcessor(sensitivity: sensitivity,
-                stockFamily: variant == .sibionics1 && sibionics1Connection?.mode == .chinese ? .v115g : .v116a,
+                // GS3 runs the V115G algorithm over V120 (JugglucoNG usesV116AAlgorithm is false for it).
+                stockFamily: variant == .sibionics1 && (sibionics1Connection?.mode == .chinese || Sibionics2Configuration.isGS3(for: address))
+                    ? .v115g : .v116a,
                 model: Sibionics2Configuration.glucoseModel(for: address)),
             allowsHistoricalBootstrap: variant == .sibionics1 && sibionics1Connection?.mode == .chinese
         )
@@ -1272,9 +1341,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         disconnect()
     }
 
-    private func receiveReadings(_ readings: [Sibionics2RawReading], at receivedAt: Date) {
+    private func receiveReadings(_ readings: [Sibionics2RawReading], at receivedAt: Date, fromJournal: Bool = false) {
         guard let address = deviceAddress else { return }
-        if !readings.isEmpty {
+        if !readings.isEmpty, !fromJournal {
+            if Sibionics2DeviceStatus.lastLinkProblem(for: address) != nil {
+                Sibionics2DeviceStatus.setLastLinkProblem(nil, for: address)
+            }
             scheduleStreamingWatchdog()
             refreshBatteryLevelIfDue(now: receivedAt)
             // Glucose is flowing: the display-only strings can be asked for now.
@@ -1288,6 +1360,13 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let requiresHistoryReplay = currentProcessor.requiresHistoryReplay
         let currentState = currentProcessor.state
         batchProcessor = currentProcessor
+
+        // JugglucoNG's source journal: keep the raw minutes for a local recalculation and backups.
+        if !fromJournal, let first = readings.min(by: { $0.index < $1.index }) {
+            let inferredStart = first.eventTime.addingTimeInterval(-TimeInterval(first.index) * Sibionics2SensorProfile.sampleInterval)
+            SibionicsSourceJournal.append(readings, sessionStart: currentState?.sensorStartDate ?? inferredStart,
+                                          address: address, variant: variant)
+        }
 
         if requiresHistoryReplay, let sessionStart = currentState?.sensorStartDate {
             trace("Sibionics 2 waiting for missing history from saved cursor",
