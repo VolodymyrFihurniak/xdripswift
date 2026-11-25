@@ -2559,8 +2559,12 @@ struct VerioMeterSession {
     private var nextRecordToRequest = -1
     private var recordsRequested = 0
     private var walkFloor = 0
+    /// Records the walk has had an answer for, whatever they held.
+    private(set) var walkedRecords = Set<Int>()
 
     var isDone: Bool { stage == .done }
+    /// The walk went down to what was already stored (or its 15-record limit) without failing.
+    var completedWalk: Bool { stage == .done && !isFailed }
 
     mutating func begin() {
         self = VerioMeterSession()
@@ -2629,6 +2633,7 @@ struct VerioMeterSession {
                 // The walk moves on whatever the record says, or one bad record is asked for forever.
                 nextRecordToRequest = record - 1
                 recordsRequested += 1
+                if record > 0 { walkedRecords.insert(record) }
             }
             guard record > 0, result.count >= 11, haveMeterTime else { return }
             let mgDl = Int(result[4]) | Int(result[5]) << 8
@@ -2816,6 +2821,18 @@ enum GlucoseMeterStore {
 
     private static let key = "experimentalGlucoseMeter"
 
+    /// The record cursor after a read. A completed read moves it to the newest record read; an
+    /// interrupted one only as far as records were read without a gap above the old cursor, since a
+    /// Verio walks newest first and the records below what arrived were never read. Without an old
+    /// cursor an interrupted read leaves none, so the next read starts from the beginning again.
+    static func nextCursor(previous: Int?, read: Set<Int>, completed: Bool) -> Int? {
+        guard let newest = read.max() else { return previous }
+        if completed { return max(previous ?? 0, newest) }
+        guard var cursor = previous else { return nil }
+        while read.contains(cursor + 1) { cursor += 1 }
+        return cursor
+    }
+
     static func meter(defaults: UserDefaults = .standard) -> Meter? {
         defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(Meter.self, from: $0) }
     }
@@ -2891,6 +2908,8 @@ final class GlucoseMeterLink: NSObject, ObservableObject {
     private var verioWrite: CBCharacteristic?
     private var satellite: SatelliteMeterSession?
     private var satelliteWrite: CBCharacteristic?
+    /// The meter said it has sent every record asked for (Record Access Control Point).
+    private var gattCompleted = false
     private var timeoutGeneration = 0
     private var coreDataManager: CoreDataManager? { TherapyMetricsManager.shared.configuredCoreDataManager }
 
@@ -2949,6 +2968,8 @@ final class GlucoseMeterLink: NSObject, ObservableObject {
         central?.stopScan()
         meter = saved
         records = []
+        gattCompleted = false
+        verio = VerioMeterSession()
         state = .reading(saved.name)
         withCentral { [weak self] in
             guard let self, let central = self.central,
@@ -2985,8 +3006,15 @@ final class GlucoseMeterLink: NSObject, ObservableObject {
         var imported = 0
         if var saved = meter, let coreDataManager {
             imported = GlucoseMeterImport.save(records, meterName: saved.name, coreDataManager: coreDataManager)
-            if saved.kind != .satellite, let highest = records.map(\.sequence).max() {
-                saved.lastSequence = max(saved.lastSequence ?? 0, highest)
+            switch saved.kind {
+            case .gatt:
+                saved.lastSequence = GlucoseMeterStore.nextCursor(previous: saved.lastSequence, read: Set(records.map(\.sequence)),
+                                                                  completed: gattCompleted)
+            case .verio:
+                saved.lastSequence = GlucoseMeterStore.nextCursor(previous: saved.lastSequence, read: verio.walkedRecords,
+                                                                  completed: verio.completedWalk)
+            case .satellite:
+                break
             }
             if error == nil || !records.isEmpty { saved.lastSync = Date() }
             GlucoseMeterStore.save(saved)
@@ -3151,7 +3179,9 @@ extension GlucoseMeterLink: CBPeripheralDelegate {
                 if let record = GlucoseMeterGATT.parseMeasurement(value) { records.append(record) }
             case GlucoseMeterGATT.recordAccess:
                 switch GlucoseMeterGATT.recordAccessResult(value) {
-                case .success, .noRecords: finish()
+                case .success, .noRecords:
+                    gattCompleted = true
+                    finish()
                 case .failed(let code): finish(error: String(format: ExperimentalTexts.text("meter.refused", "The meter refused the request (code %ld)."), code))
                 case nil: break
                 }

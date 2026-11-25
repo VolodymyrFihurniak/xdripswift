@@ -1739,6 +1739,21 @@ final class GlucoseMeterProtocolTests: XCTestCase {
         XCTAssertTrue(session.isDone)
         XCTAssertFalse(session.isFailed)
         XCTAssertEqual(session.takeReadings().map(\.mgDl), [100])
+        XCTAssertTrue(session.completedWalk)
+        XCTAssertEqual(session.walkedRecords, [5, 4])
+    }
+
+    /// Codex review on #16: a read cut short must not move the cursor past records it never read.
+    func testCursorOnlyMovesPastRecordsActuallyRead() {
+        // Completed: to the newest record read.
+        XCTAssertEqual(GlucoseMeterStore.nextCursor(previous: 3, read: [5, 4], completed: true), 5)
+        XCTAssertEqual(GlucoseMeterStore.nextCursor(previous: nil, read: [7, 6], completed: true), 7)
+        XCTAssertEqual(GlucoseMeterStore.nextCursor(previous: 9, read: [], completed: true), 9)
+        // A Verio walk cut short after its newest records: 4 and 5 were never read.
+        XCTAssertEqual(GlucoseMeterStore.nextCursor(previous: 3, read: [8, 7, 6], completed: false), 3)
+        // A Glucose Profile read cut short after its oldest records: as far as they run unbroken.
+        XCTAssertEqual(GlucoseMeterStore.nextCursor(previous: 3, read: [4, 5, 7], completed: false), 5)
+        XCTAssertNil(GlucoseMeterStore.nextCursor(previous: nil, read: [8, 7], completed: false))
     }
 
     func testImportSkipsReadingsAlreadyLogged() {
