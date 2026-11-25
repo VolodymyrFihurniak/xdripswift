@@ -209,10 +209,15 @@ class CGMLibre2Transmitter: BluetoothTransmitter, CGMTransmitter {
             super.reconnectAfterDisconnect(central)
             return
         }
-        runOnCentralQueue(after: Libre2LinkSummary.reconnectDelayAfterOwnHangUp) { [self] in
-            guard getConnectionStatus() != .connected else { return }
-            super.reconnectAfterDisconnect(central)
+        runOnCentralQueue(after: Libre2LinkSummary.reconnectDelayAfterOwnHangUp) { [weak self] in
+            guard let self, self.getConnectionStatus() != .connected else { return }
+            self.reconnectWithBaseBehaviour(central)
         }
+    }
+
+    /// `super` cannot be called from inside an escaping closure, so the delayed reconnect goes through here.
+    private func reconnectWithBaseBehaviour(_ central: CBCentralManager) {
+        super.reconnectAfterDisconnect(central)
     }
 
     /// A Libre 2 sends one complete frame a minute. A link that stays connected without one is
