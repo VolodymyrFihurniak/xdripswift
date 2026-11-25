@@ -76,7 +76,10 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
 - **Manual sensitivity** (`Sibionics2Configuration.manualSensitivity`, 0.8–2.5) wins over probe code,
   label and name; changing it replays history like a new label code.
 - **Glucose model** (`Sibionics2GlucoseModel`, per sensor, `Sibionics2Configuration.glucoseModel`):
-  stock (default) or JugglucoNG Adaptive V2. The estimator is vendored Kotlin in
+  stock (default), JugglucoNG Balanced (raw 4) / Responsive (raw 6) — Swift ports
+  `SibionicsBalancedTracker` / `SibionicsResponsiveEstimator` fed the stock value, no anchors (as in
+  JugglucoNG), snapshot versions 4 / 5, tests use vectors from the Kotlin originals on the JVM — or
+  JugglucoNG Adaptive V2 (raw 8). The estimator is vendored Kotlin in
   `Sibionics2Core/.../adaptive2` behind `SibionicsAdaptiveV2Facade`; the stock facade feeds it its
   `latestSensorObservation` (`processAdaptiveV2`). A usable estimate replaces the stock value, which
   stays the fallback, at full precision (JugglucoNG e64e3fd3e; only display rounds). Its 90 % interval
@@ -173,7 +176,7 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 
 ## Not ported (yet)
 
-JugglucoNG alternative glucose models Balanced, Responsive and Adaptive V1 (Adaptive V2 is ported), GS3 variant
+JugglucoNG alternative glucose model Adaptive V1 (Balanced, Responsive and Adaptive V2 are ported), GS3 variant
 and raw source-journal backup/recovery; of the NovoPen import, the
 unattended background read and the merge with hand-written entries.
 

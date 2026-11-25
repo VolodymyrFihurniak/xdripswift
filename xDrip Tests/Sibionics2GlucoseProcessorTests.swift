@@ -248,6 +248,36 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         XCTAssertGreaterThan(intervals, 0)
     }
 
+    func testBalancedAndResponsiveProcessorsContinueFromTheirSnapshotsOnly() throws {
+        let rows = try startupRows()
+        for model in [Sibionics2GlucoseModel.balanced, .responsive] {
+            var source = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: model)
+            var stock = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+            var values = 0
+            for row in rows.prefix(70) {
+                let tracked = source.process(row.reading(), mode: .replay)?.glucoseMgDl
+                let stockValue = stock.process(row.reading(), mode: .replay)?.glucoseMgDl
+                // The trackers answer exactly the minutes the stock algorithm answers.
+                XCTAssertEqual(tracked == nil, stockValue == nil)
+                if tracked != nil { values += 1 }
+            }
+            XCTAssertGreaterThan(values, 0)
+            let snapshot = source.snapshot()
+            XCTAssertFalse(snapshot.isEmpty)
+            var restored = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: model)
+            XCTAssertTrue(restored.restore(from: snapshot))
+            XCTAssertEqual(restored.snapshot(), snapshot)
+            for row in rows.dropFirst(70) {
+                XCTAssertEqual(restored.process(row.reading(), mode: .live)?.glucoseMgDl,
+                               source.process(row.reading(), mode: .live)?.glucoseMgDl)
+            }
+            var other = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: model == .balanced ? .responsive : .balanced)
+            XCTAssertFalse(other.restore(from: snapshot))
+            var plain = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+            XCTAssertFalse(plain.restore(from: snapshot))
+        }
+    }
+
     func testAdaptiveV2SnapshotContinuesExactlyAndIsNotInterchangeableWithStock() throws {
         let rows = try startupRows()
         var source = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: .adaptiveV2)
@@ -526,5 +556,134 @@ extension Sibionics2GlucoseProcessorTests {
             .glucoseMgDl, 29 * 18, accuracy: 0.0001)
         var invalidSensitivity = Sibionics2GlucoseProcessor(sensitivity: .nan, stockFamily: .v115g)
         XCTAssertNil(invalidSensitivity.process(row.reading(), mode: .live))
+    }
+}
+
+
+// MARK: - JugglucoNG Balanced and Responsive models
+
+/// Expected outputs come from JugglucoNG's own `SibionicsBalancedAlgorithmContext` and
+/// `SibionicsResponsiveAlgorithmContext` run on the JVM with the same inputs (sensitivity 1.27,
+/// one sample a minute): noise around 6, a rise of 0.12 a minute, a 1.2 drop, a fall towards a low,
+/// a temperature jump at minute 40 and an impedance spike at minute 45.
+final class SibionicsCustomModelTests: XCTestCase {
+    private static let inputs: [(stock: Float, raw: Float, temperature: Float, impedance: Float)] = [
+        (5.9, 7.493, 34.0, 1001.0),
+        (6.1, 7.7469997, 34.0, 1002.0),
+        (5.9, 7.543, 34.0, 1003.0),
+        (6.1, 7.7469997, 34.0, 1004.0),
+        (5.9, 7.493, 34.0, 1005.0),
+        (6.1, 7.797, 34.0, 1006.0),
+        (5.9, 7.493, 34.0, 1007.0),
+        (6.1, 7.7469997, 34.0, 1008.0),
+        (5.9, 7.543, 34.0, 1009.0),
+        (6.1, 7.7469997, 34.0, 1010.0),
+        (6.12, 7.7724, 34.0, 1011.0),
+        (6.24, 7.9747996, 34.0, 1012.0),
+        (6.36, 8.0772, 34.0, 1013.0),
+        (6.48, 8.2296, 34.0, 1014.0),
+        (6.6, 8.432, 34.0, 1015.0),
+        (6.72, 8.5344, 34.0, 1016.0),
+        (6.84, 8.6868, 34.0, 1017.0),
+        (6.96, 8.8892, 34.0, 1018.0),
+        (7.08, 8.9916, 34.0, 1019.0),
+        (7.2, 9.144, 34.0, 1020.0),
+        (7.3199997, 9.346399, 34.0, 1021.0),
+        (7.44, 9.4488, 34.0, 1022.0),
+        (7.56, 9.6012, 34.0, 1023.0),
+        (7.68, 9.803599, 34.0, 1024.0),
+        (7.8, 9.906, 34.0, 1025.0),
+        (7.92, 10.0584, 34.0, 1026.0),
+        (8.04, 10.2608, 34.0, 1027.0),
+        (8.16, 10.363199, 34.0, 1028.0),
+        (8.28, 10.515599, 34.0, 1029.0),
+        (8.4, 10.717999, 34.0, 1030.0),
+        (7.2, 9.144, 34.0, 1031.0),
+        (7.1, 9.017, 34.0, 1032.0),
+        (7.0, 8.94, 34.0, 1033.0),
+        (6.9, 8.763, 34.0, 1034.0),
+        (6.8, 8.636, 34.0, 1035.0),
+        (6.7000003, 8.559, 34.0, 1036.0),
+        (6.6000004, 8.382, 34.0, 1037.0),
+        (6.5000005, 8.255, 34.0, 1038.0),
+        (6.4000006, 8.178, 34.0, 1039.0),
+        (6.3000007, 8.001, 37.5, 1040.0),
+        (6.200001, 7.874001, 34.0, 1041.0),
+        (6.100001, 7.7970014, 34.0, 1042.0),
+        (6.000001, 7.6200013, 34.0, 1043.0),
+        (5.900001, 7.493001, 34.0, 1044.0),
+        (5.800001, 7.4160013, 34.0, 2000.0),
+        (5.7000012, 7.2390013, 34.0, 1046.0),
+        (5.6000013, 7.1120014, 34.0, 1047.0),
+        (5.5000014, 7.0350018, 34.0, 1048.0),
+        (5.4000015, 6.8580017, 34.0, 1049.0),
+        (5.3000016, 6.731002, 34.0, 1050.0),
+        (5.2000017, 6.654002, 34.0, 1051.0),
+        (5.100002, 6.477002, 34.0, 1052.0),
+        (5.000002, 6.3500023, 34.0, 1053.0),
+        (4.900002, 6.2730026, 34.0, 1054.0),
+        (4.800002, 6.0960026, 34.0, 1055.0),
+        (4.700002, 5.9690027, 34.0, 1056.0),
+        (4.6000023, 5.892003, 34.0, 1057.0),
+        (4.5000024, 5.715003, 34.0, 1058.0),
+        (4.4000025, 5.588003, 34.0, 1059.0),
+        (4.3000026, 5.5110035, 34.0, 1060.0)
+    ]
+    private static let balanced: [Float] = [
+            5.9, 6.1, 5.9, 6.1, 5.9, 6.0, 6.0, 6.0, 5.9, 6.0, 6.1, 6.2, 6.3, 6.4, 6.5,
+            6.6, 6.8, 6.9, 7.0, 7.1, 7.3, 7.4, 7.5, 7.6, 7.8, 7.9, 8.0, 8.1, 8.2, 8.4,
+            7.2, 7.2, 7.1, 7.0, 6.9, 6.8, 6.7, 6.6, 6.5, 6.3, 6.2, 6.2, 6.1, 6.0, 5.8,
+            5.8, 5.7, 5.6, 5.5, 5.4, 5.3, 5.2, 5.1, 5.0, 4.9, 4.8, 4.7, 4.6, 4.4, 4.3
+    ]
+    private static let responsive: [Float] = [
+            5.9, 6.1, 6.0, 6.1, 5.9, 6.1, 5.9, 6.1, 5.9, 6.1, 6.1, 6.3, 6.4, 6.5, 6.6,
+            6.8, 6.9, 7.0, 7.1, 7.2, 7.4, 7.5, 7.6, 7.7, 7.8, 8.0, 8.1, 8.2, 8.3, 8.4,
+            7.3, 7.0, 6.9, 6.8, 6.7, 6.7, 6.6, 6.5, 6.4, 6.3, 6.2, 6.1, 6.0, 5.9, 5.8,
+            5.7, 5.6, 5.5, 5.4, 5.3, 5.2, 5.1, 5.0, 4.9, 4.8, 4.7, 4.6, 4.5, 4.4, 4.3
+    ]
+
+    private func time(_ index: Int) -> Int64 { 1_800_000_000_000 + Int64(index) * 60_000 }
+
+    func testBalancedMatchesJugglucoNG() {
+        var tracker = SibionicsBalancedTracker(sensitivity: 1.27)
+        for (offset, input) in Self.inputs.enumerated() {
+            let value = tracker.process(stockMmol: input.stock, rawMmol: input.raw, temperatureC: input.temperature,
+                                        impedance: input.impedance, index: offset + 1, eventTimeMs: time(offset + 1))
+            XCTAssertEqual(value, Self.balanced[offset], accuracy: 0.0001, "minute \(offset + 1)")
+        }
+    }
+
+    func testResponsiveMatchesJugglucoNG() {
+        var estimator = SibionicsResponsiveEstimator(sensitivity: 1.27)
+        for (offset, input) in Self.inputs.enumerated() {
+            let value = estimator.process(stockMmol: input.stock, rawMmol: input.raw, temperatureC: input.temperature,
+                                          impedance: input.impedance, index: offset + 1, eventTimeMs: time(offset + 1))
+            XCTAssertEqual(value, Self.responsive[offset], accuracy: 0.0001, "minute \(offset + 1)")
+        }
+    }
+
+    func testSnapshotsContinueExactlyAndRefuseAnotherSensitivity() throws {
+        var balanced = SibionicsBalancedTracker(sensitivity: 1.27)
+        var responsive = SibionicsResponsiveEstimator(sensitivity: 1.27)
+        for (offset, input) in Self.inputs.prefix(35).enumerated() {
+            _ = balanced.process(stockMmol: input.stock, rawMmol: input.raw, temperatureC: input.temperature,
+                                 impedance: input.impedance, index: offset + 1, eventTimeMs: time(offset + 1))
+            _ = responsive.process(stockMmol: input.stock, rawMmol: input.raw, temperatureC: input.temperature,
+                                   impedance: input.impedance, index: offset + 1, eventTimeMs: time(offset + 1))
+        }
+        var restoredBalanced = try XCTUnwrap(SibionicsBalancedTracker.restored(from: balanced.snapshot(), sensitivity: 1.27))
+        var restoredResponsive = try XCTUnwrap(SibionicsResponsiveEstimator.restored(from: responsive.snapshot(), sensitivity: 1.27))
+        XCTAssertNil(SibionicsBalancedTracker.restored(from: balanced.snapshot(), sensitivity: 1.44))
+        XCTAssertNil(SibionicsResponsiveEstimator.restored(from: responsive.snapshot(), sensitivity: 1.44))
+        XCTAssertNil(SibionicsResponsiveEstimator.restored(from: balanced.snapshot(), sensitivity: 1.27))
+        for offset in 35..<Self.inputs.count {
+            let input = Self.inputs[offset]
+            XCTAssertEqual(restoredBalanced.process(stockMmol: input.stock, rawMmol: input.raw, temperatureC: input.temperature,
+                                                    impedance: input.impedance, index: offset + 1, eventTimeMs: time(offset + 1)),
+                           Self.balanced[offset], accuracy: 0.0001)
+            XCTAssertEqual(restoredResponsive.process(stockMmol: input.stock, rawMmol: input.raw, temperatureC: input.temperature,
+                                                      impedance: input.impedance, index: offset + 1, eventTimeMs: time(offset + 1)),
+                           Self.responsive[offset], accuracy: 0.0001)
+        }
     }
 }

@@ -16,6 +16,10 @@ enum Sibionics2StockFamily {
 enum Sibionics2GlucoseModel: Int, CaseIterable {
     /// The manufacturer's algorithm (V116A or V115G).
     case stock = 0
+    /// JugglucoNG's Balanced tracker: the stock value with small quantisation noise smoothed.
+    case balanced = 4
+    /// JugglucoNG's Responsive estimator: a glucose/velocity estimate with a small trend lead.
+    case responsive = 6
     /// JugglucoNG's Adaptive V2: a probabilistic estimator fed by the stock core's
     /// sensor-state-calibrated signal instead of its filtered display value.
     case adaptiveV2 = 8
@@ -23,6 +27,8 @@ enum Sibionics2GlucoseModel: Int, CaseIterable {
     var title: String {
         switch self {
         case .stock: return Texts_BluetoothPeripheralView.sibionicsGlucoseModelStock
+        case .balanced: return Texts_BluetoothPeripheralView.sibionicsGlucoseModelBalanced
+        case .responsive: return Texts_BluetoothPeripheralView.sibionicsGlucoseModelResponsive
         case .adaptiveV2: return Texts_BluetoothPeripheralView.sibionicsGlucoseModelAdaptiveV2
         }
     }
@@ -69,9 +75,18 @@ struct Sibionics2GlucoseProcessor {
     private var snapshotMagic: [UInt8] {
         stockFamily == .v115g ? [0x53, 0x31, 0x47, 0x50] : [0x53, 0x32, 0x47, 0x50] // S1GP / S2GP
     }
-    /// Version 2 is the stock layout; version 3 appends the Adaptive V2 state. A snapshot of
-    /// the other model is refused, which replays history with the selected one.
-    private var snapshotVersion: UInt16 { model == .adaptiveV2 ? 3 : 2 }
+    /// Version 2 is the stock layout; versions 3, 4 and 5 append the Adaptive V2, Balanced and
+    /// Responsive state. A snapshot of another model is refused, which replays history with the
+    /// selected one.
+    private var snapshotVersion: UInt16 {
+        switch model {
+        case .stock: return 2
+        case .adaptiveV2: return 3
+        case .balanced: return 4
+        case .responsive: return 5
+        }
+    }
+    private static let maximumTrackerSnapshotLength = 256
     private static let maximumCoreHexLength = 16_384
     private static let coreSnapshotChunkByteCount = 256
     private static let mmolToMgDlConversionFactor = 18.0
@@ -104,6 +119,8 @@ struct Sibionics2GlucoseProcessor {
     private var liveDeltaMmol: Float?
     private var replayDeltaMmol: Float?
     private var lastIndex: Int?
+    private var balanced: SibionicsBalancedTracker?
+    private var responsive: SibionicsResponsiveEstimator?
 
     init(sensitivity: Double, stockFamily: Sibionics2StockFamily = .v116a, model: Sibionics2GlucoseModel = .stock) {
         let valid = Sibionics2FactorySensitivity.isSupported(sensitivity)
@@ -115,6 +132,8 @@ struct Sibionics2GlucoseProcessor {
             sensitivity: valid ? Float(sensitivity) : Float(Sibionics2FactorySensitivity.defaultSensitivity),
             stockFamily: stockFamily, model: model
         )
+        self.balanced = model == .balanced ? SibionicsBalancedTracker(sensitivity: Float(sensitivity)) : nil
+        self.responsive = model == .responsive ? SibionicsResponsiveEstimator(sensitivity: Float(sensitivity)) : nil
     }
 
     mutating func process(
@@ -157,7 +176,24 @@ struct Sibionics2GlucoseProcessor {
             }
         }
         let stockMmol = stockDisplayMmol(candidate: candidate, raw: raw, mode: mode)
-        guard let displayMmol = adaptiveMmol ?? stockMmol else { return nil }
+        // JugglucoNG feeds Balanced and Responsive the stock value (no calibration anchors) and shows
+        // their result in its place; they see every minute that has a stock value.
+        var trackedMmol: Float?
+        if let stockMmol {
+            let eventTimeMs = Int64((reading.eventTime.timeIntervalSince1970 * 1000).rounded())
+            var value = Float.nan
+            if var tracker = balanced {
+                value = tracker.process(stockMmol: stockMmol, rawMmol: raw, temperatureC: Float(reading.temperatureC),
+                                        impedance: Float(reading.impedance), index: reading.index, eventTimeMs: eventTimeMs)
+                balanced = tracker
+            } else if var estimator = responsive {
+                value = estimator.process(stockMmol: stockMmol, rawMmol: raw, temperatureC: Float(reading.temperatureC),
+                                          impedance: Float(reading.impedance), index: reading.index, eventTimeMs: eventTimeMs)
+                responsive = estimator
+            }
+            if value.isFinite, value > Validation.minimumCandidateMmol, value <= Validation.maximumCandidateMmol { trackedMmol = value }
+        }
+        guard let displayMmol = adaptiveMmol ?? trackedMmol ?? stockMmol else { return nil }
 
         let mgDl = Double(displayMmol) * Self.mmolToMgDlConversionFactor
         guard mgDl.isFinite,
@@ -225,6 +261,8 @@ struct Sibionics2GlucoseProcessor {
         ensureUniqueCore()
         coreBox.value.reset()
         coreBox.adaptive?.reset()
+        balanced?.reset()
+        responsive?.reset()
         liveDeltaMmol = nil
         replayDeltaMmol = nil
         lastIndex = nil
@@ -260,6 +298,10 @@ struct Sibionics2GlucoseProcessor {
             data.appendUInt32BE(UInt32(adaptiveBytes.count))
             data.append(contentsOf: adaptiveBytes)
         }
+        if let trackerBytes = balanced?.snapshot() ?? responsive?.snapshot() {
+            data.appendUInt32BE(UInt32(trackerBytes.count))
+            data.append(trackerBytes)
+        }
         let checksum = Self.checksum(data)
         data.appendUInt32BE(checksum)
         return data
@@ -284,6 +326,7 @@ struct Sibionics2GlucoseProcessor {
         else { return false }
         let coreEnd = headerSize + Int(coreLength)
         var adaptiveHexBytes: [UInt8]?
+        var trackerBytes: Data?
         if model == .adaptiveV2 {
             guard let adaptiveLength = data.uint32BE(at: coreEnd),
                   adaptiveLength > 0, adaptiveLength <= Self.maximumCoreHexLength,
@@ -292,6 +335,13 @@ struct Sibionics2GlucoseProcessor {
             else { return false }
             let start = data.index(data.startIndex, offsetBy: coreEnd + 4)
             adaptiveHexBytes = Array(data[start..<data.index(start, offsetBy: Int(adaptiveLength))])
+        } else if model == .balanced || model == .responsive {
+            guard let trackerLength = data.uint32BE(at: coreEnd),
+                  trackerLength > 0, trackerLength <= Self.maximumTrackerSnapshotLength,
+                  data.count == coreEnd + 4 + Int(trackerLength) + checksumSize
+            else { return false }
+            let start = data.index(data.startIndex, offsetBy: coreEnd + 4)
+            trackerBytes = Data(data[start..<data.index(start, offsetBy: Int(trackerLength))])
         } else {
             guard data.count == coreEnd + checksumSize else { return false }
         }
@@ -325,6 +375,20 @@ struct Sibionics2GlucoseProcessor {
             guard let adaptiveHexBytes,
                   Self.restoreCoreSnapshot(hexBytes: adaptiveHexBytes, into: adaptive) else { return false }
         }
+        var restoredBalanced: SibionicsBalancedTracker?
+        var restoredResponsive: SibionicsResponsiveEstimator?
+        switch model {
+        case .balanced:
+            guard let trackerBytes, let tracker = SibionicsBalancedTracker.restored(from: trackerBytes, sensitivity: sensitivity) else { return false }
+            restoredBalanced = tracker
+        case .responsive:
+            guard let trackerBytes, let estimator = SibionicsResponsiveEstimator.restored(from: trackerBytes, sensitivity: sensitivity) else { return false }
+            restoredResponsive = estimator
+        case .stock, .adaptiveV2:
+            break
+        }
+        balanced = restoredBalanced
+        responsive = restoredResponsive
         coreBox = restored
         self.lastIndex = restoredIndex
         self.liveDeltaMmol = (flags & 1) == 0 ? nil : liveDelta
@@ -442,5 +506,429 @@ private extension Data {
         guard let a = byte(at: offset), let b = byte(at: offset + 1),
               let c = byte(at: offset + 2), let d = byte(at: offset + 3) else { return nil }
         return UInt32(a) << 24 | UInt32(b) << 16 | UInt32(c) << 8 | UInt32(d)
+    }
+}
+
+// MARK: - JugglucoNG Balanced and Responsive models
+
+private extension Float {
+    func clamped(_ lower: Float, _ upper: Float) -> Float { Swift.min(Swift.max(self, lower), upper) }
+}
+
+/// Shared helpers of JugglucoNG's one-minute trackers, in Float as the Kotlin originals.
+private enum SibionicsTrackerMath {
+    static func roundTenth(_ value: Float) -> Float {
+        guard value.isFinite else { return .nan }
+        return Float(Int(value * 10 + 0.5)) / 10
+    }
+
+    static func median(_ values: [Float]) -> Float {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let middle = sorted.count / 2
+        return sorted.count % 2 == 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle]
+    }
+
+    static func elapsedMinutes(eventTimeMs: Int64, lastTimestampMs: Int64, index: Int, lastIndex: Int) -> Float {
+        if eventTimeMs > lastTimestampMs && lastTimestampMs > 0 {
+            return (Float(eventTimeMs - lastTimestampMs) / 60_000).clamped(0.5, 3)
+        }
+        if index > lastIndex { return Float(index - lastIndex).clamped(1, 3) }
+        return 1
+    }
+}
+
+/// Fixed binary layout for the trackers' state; Float NaN survives as its bit pattern.
+private struct SibionicsTrackerWriter {
+    var data = Data()
+    mutating func float(_ value: Float) { data.appendUInt32BE(value.bitPattern) }
+    mutating func int(_ value: Int) { data.appendUInt32BE(UInt32(bitPattern: Int32(clamping: value))) }
+    mutating func int64(_ value: Int64) {
+        data.appendUInt32BE(UInt32(truncatingIfNeeded: UInt64(bitPattern: value) >> 32))
+        data.appendUInt32BE(UInt32(truncatingIfNeeded: UInt64(bitPattern: value)))
+    }
+    mutating func bool(_ value: Bool) { data.append(value ? 1 : 0) }
+}
+
+private struct SibionicsTrackerReader {
+    let data: Data
+    var offset = 0
+    mutating func float() -> Float? {
+        guard let bits = data.uint32BE(at: offset) else { return nil }
+        offset += 4
+        return Float(bitPattern: bits)
+    }
+    mutating func int() -> Int? {
+        guard let bits = data.uint32BE(at: offset) else { return nil }
+        offset += 4
+        return Int(Int32(bitPattern: bits))
+    }
+    mutating func int64() -> Int64? {
+        guard let high = data.uint32BE(at: offset), let low = data.uint32BE(at: offset + 4) else { return nil }
+        offset += 8
+        return Int64(bitPattern: UInt64(high) << 32 | UInt64(low))
+    }
+    mutating func bool() -> Bool? {
+        guard let byte = data.byte(at: offset), byte <= 1 else { return nil }
+        offset += 1
+        return byte == 1
+    }
+    var isAtEnd: Bool { offset == data.count }
+}
+
+/// JugglucoNG `SibionicsBalancedAlgorithmContext`: a bounded one-minute tracker around the stock
+/// value that only attenuates small quantisation noise and yields at once to real motion. Its
+/// calibration anchors are always empty in JugglucoNG for this model, so they are not ported.
+struct SibionicsBalancedTracker {
+    private static let baseLevelGain: Float = 0.35
+    private static let maxLevelGain: Float = 0.92
+    private static let rapidInnovationMmol: Float = 0.8
+    private static let trendGain: Float = 0.02
+    private static let rawTrendWeight: Float = 0.05
+    private static let maxTrendRate: Float = 0.35
+    private static let maxTrendInnovation: Float = 1
+    private static let minDirectionStep: Float = 0.05
+    private static let minRawTrendRate: Float = 0.02
+    private static let startupPassthroughSamples = 5
+    private static let maxTrackingDistanceMmol: Float = 0.2
+    private static let largeStepMmol: Float = 1
+    private static let turnStepMmol: Float = 0.15
+    private static let lowExactMmol: Float = 3.9
+    private static let lowFallGuardMmol: Float = 4.5
+    private static let temperatureJumpC: Float = 1.2
+    private static let impedanceQualitySlope: Float = 5
+    private static let impedanceAnomalyFraction: Float = 0.75
+    private static let minSignalQuality: Float = 0.20
+    private static let impedanceLearningRate: Float = 0.04
+    private static let anomalousImpedanceLearningRate: Float = 0.004
+
+    let sensitivity: Float
+    private var initialized = false
+    private var level: Float = .nan
+    private var trend: Float = 0
+    private var lastMeasurement: Float = .nan
+    private var lastRaw: Float = .nan
+    private var lastTemperature: Float = .nan
+    private var impedanceBaseline: Float = .nan
+    private var lastTimestampMs: Int64 = 0
+    private var lastIndex = -1
+    private var samplesSinceReset = 0
+
+    init(sensitivity: Float) {
+        self.sensitivity = sensitivity.isFinite && (0.5...3.5).contains(sensitivity) ? sensitivity : 1.27
+    }
+
+    mutating func reset() { self = SibionicsBalancedTracker(sensitivity: sensitivity) }
+
+    mutating func process(stockMmol: Float, rawMmol: Float, temperatureC: Float, impedance: Float,
+                          index: Int, eventTimeMs: Int64) -> Float {
+        guard stockMmol.isFinite, stockMmol > 0 else { return .nan }
+        let measurement = stockMmol
+        if !initialized || index <= 1 || index <= lastIndex {
+            reset()
+            initialized = true
+            level = measurement
+            samplesSinceReset = 1
+            updateTelemetry(rawMmol: rawMmol, temperatureC: temperatureC, impedance: impedance, index: index,
+                            eventTimeMs: eventTimeMs, measurement: measurement)
+            return SibionicsTrackerMath.roundTenth(measurement)
+        }
+
+        let elapsed = SibionicsTrackerMath.elapsedMinutes(eventTimeMs: eventTimeMs, lastTimestampMs: lastTimestampMs,
+                                                          index: index, lastIndex: lastIndex)
+        let signal = signalQuality(temperatureC: temperatureC, impedance: impedance)
+        let latestStep: Float = lastMeasurement.isFinite ? measurement - lastMeasurement : 0
+        let predicted = level + trend * elapsed
+        let innovation = measurement - predicted
+        let rapidChange = (abs(innovation) / Self.rapidInnovationMmol).clamped(0, 1)
+        let alpha = Self.baseLevelGain + (Self.maxLevelGain - Self.baseLevelGain) * rapidChange
+        level = predicted + alpha * innovation
+
+        let rawTrend: Float = rawMmol.isFinite && lastRaw.isFinite
+            ? ((rawMmol - lastRaw) / sensitivity / elapsed).clamped(-Self.maxTrendRate, Self.maxTrendRate)
+            : .nan
+        let rawCoherent = rawTrend.isFinite && (abs(latestStep) < Self.minDirectionStep || abs(rawTrend) < Self.minRawTrendRate
+                                                || latestStep * rawTrend > 0)
+        let rawWeight: Float = rawCoherent ? Self.rawTrendWeight * signal.overall : 0
+        let innovationTrend = Self.trendGain * innovation.clamped(-Self.maxTrendInnovation, Self.maxTrendInnovation) / elapsed
+        let rawContribution: Float = rawTrend.isFinite ? rawTrend * rawWeight : 0
+        trend = ((trend + innovationTrend) * (1 - rawWeight) + rawContribution).clamped(-Self.maxTrendRate, Self.maxTrendRate)
+        samplesSinceReset += 1
+
+        let turning = abs(latestStep) >= Self.turnStepMmol && latestStep * trend < 0
+        let exactPassThrough = samplesSinceReset <= Self.startupPassthroughSamples || abs(latestStep) >= Self.largeStepMmol
+            || measurement <= Self.lowExactMmol || turning || signal.telemetryAnomaly
+        var output: Float
+        if exactPassThrough {
+            level = measurement
+            if abs(latestStep) >= Self.largeStepMmol || signal.telemetryAnomaly { trend = 0 }
+            output = measurement
+        } else {
+            output = level.clamped(measurement - Self.maxTrackingDistanceMmol, measurement + Self.maxTrackingDistanceMmol)
+        }
+        if measurement < Self.lowFallGuardMmol && latestStep < 0 { output = Swift.min(output, measurement) }
+
+        updateTelemetry(rawMmol: rawMmol, temperatureC: temperatureC, impedance: impedance, index: index,
+                        eventTimeMs: eventTimeMs, measurement: measurement)
+        return SibionicsTrackerMath.roundTenth(Swift.max(output, 0))
+    }
+
+    private func signalQuality(temperatureC: Float, impedance: Float) -> (overall: Float, telemetryAnomaly: Bool) {
+        let temperatureJump = lastTemperature.isFinite && temperatureC.isFinite && abs(temperatureC - lastTemperature) > Self.temperatureJumpC
+        var temperatureQuality: Float
+        if !temperatureC.isFinite {
+            temperatureQuality = 0.45
+        } else if (28...40).contains(temperatureC) {
+            temperatureQuality = 1
+        } else if (10...42).contains(temperatureC) {
+            temperatureQuality = 0.65
+        } else {
+            temperatureQuality = 0.25
+        }
+        temperatureQuality *= temperatureJump ? 0.55 : 1
+        let impedanceDelta: Float = impedance.isFinite && impedance > 0 && impedanceBaseline.isFinite
+            ? abs(impedance - impedanceBaseline) / Swift.max(abs(impedanceBaseline), 1)
+            : 0
+        let impedanceQuality = (1 / (1 + impedanceDelta * Self.impedanceQualitySlope)).clamped(Self.minSignalQuality, 1)
+        let anomaly = temperatureJump || (temperatureC.isFinite && !(10...42).contains(temperatureC))
+            || impedanceDelta > Self.impedanceAnomalyFraction
+        return ((temperatureQuality * 0.68 + impedanceQuality * 0.32).clamped(Self.minSignalQuality, 1), anomaly)
+    }
+
+    private mutating func updateTelemetry(rawMmol: Float, temperatureC: Float, impedance: Float, index: Int,
+                                          eventTimeMs: Int64, measurement: Float) {
+        if impedance.isFinite && impedance > 0 {
+            if impedanceBaseline.isFinite {
+                let relativeDelta = abs(impedance - impedanceBaseline) / Swift.max(abs(impedanceBaseline), 1)
+                let rate = relativeDelta > Self.impedanceAnomalyFraction ? Self.anomalousImpedanceLearningRate : Self.impedanceLearningRate
+                impedanceBaseline = impedanceBaseline * (1 - rate) + impedance * rate
+            } else {
+                impedanceBaseline = impedance
+            }
+        }
+        if rawMmol.isFinite { lastRaw = rawMmol }
+        if temperatureC.isFinite { lastTemperature = temperatureC }
+        lastMeasurement = measurement
+        lastTimestampMs = eventTimeMs
+        lastIndex = index
+    }
+
+    private var isStateValid: Bool {
+        guard initialized else { return true }
+        return level.isFinite && (0...50).contains(level) && trend.isFinite && abs(trend) <= Self.maxTrendRate
+            && lastMeasurement.isFinite && (0...50).contains(lastMeasurement) && lastIndex >= 0 && samplesSinceReset > 0
+    }
+
+    func snapshot() -> Data {
+        var writer = SibionicsTrackerWriter()
+        writer.float(sensitivity)
+        writer.bool(initialized)
+        writer.float(level)
+        writer.float(trend)
+        writer.float(lastMeasurement)
+        writer.float(lastRaw)
+        writer.float(lastTemperature)
+        writer.float(impedanceBaseline)
+        writer.int64(lastTimestampMs)
+        writer.int(lastIndex)
+        writer.int(samplesSinceReset)
+        return writer.data
+    }
+
+    /// Restores a snapshot of a tracker with the same sensitivity; nil otherwise.
+    static func restored(from data: Data, sensitivity: Float) -> SibionicsBalancedTracker? {
+        var tracker = SibionicsBalancedTracker(sensitivity: sensitivity)
+        var reader = SibionicsTrackerReader(data: data)
+        guard let saved = reader.float(), saved.isFinite, abs(saved - tracker.sensitivity) <= 0.0001,
+              let initialized = reader.bool(), let level = reader.float(), let trend = reader.float(),
+              let lastMeasurement = reader.float(), let lastRaw = reader.float(), let lastTemperature = reader.float(),
+              let impedanceBaseline = reader.float(), let lastTimestampMs = reader.int64(), let lastIndex = reader.int(),
+              let samplesSinceReset = reader.int(), reader.isAtEnd else { return nil }
+        tracker.initialized = initialized
+        tracker.level = level
+        tracker.trend = trend
+        tracker.lastMeasurement = lastMeasurement
+        tracker.lastRaw = lastRaw
+        tracker.lastTemperature = lastTemperature
+        tracker.impedanceBaseline = impedanceBaseline
+        tracker.lastTimestampMs = lastTimestampMs
+        tracker.lastIndex = lastIndex
+        tracker.samplesSinceReset = samplesSinceReset
+        return tracker.isStateValid ? tracker : nil
+    }
+}
+
+/// JugglucoNG `SibionicsResponsiveAlgorithmContext`: a glucose/velocity estimator around the stock
+/// value with a robust innovation clamp and a small trend lead, kept within a safety distance of
+/// the stock value. Calibration anchors are always empty for it in JugglucoNG.
+struct SibionicsResponsiveEstimator {
+    private static let innovationWindow = 7
+    private static let minInnovationScale: Float = 0.12
+    private static let minInnovationLimit: Float = 0.55
+    private static let maxInnovation: Float = 2.5
+    private static let maxVelocity: Float = 0.30
+    private static let maxTrendLead: Float = 0.35
+    private static let minOutputDistance: Float = 0.65
+    private static let maxOutputDistanceFraction: Float = 0.16
+    private static let lowQualitySafetyExpansion: Float = 2
+
+    let sensitivity: Float
+    private var initialized = false
+    private var glucose: Float = .nan
+    private var velocity: Float = 0
+    private var lastMeasurement: Float = .nan
+    private var lastRaw: Float = .nan
+    private var lastTemperature: Float = .nan
+    private var impedanceBaseline: Float = .nan
+    private var lastTimestampMs: Int64 = 0
+    private var lastIndex = -1
+    private var innovations: [Float] = []
+
+    init(sensitivity: Float) {
+        self.sensitivity = sensitivity.isFinite && (0.5...3.5).contains(sensitivity) ? sensitivity : 1.27
+    }
+
+    mutating func reset() { self = SibionicsResponsiveEstimator(sensitivity: sensitivity) }
+
+    mutating func process(stockMmol: Float, rawMmol: Float, temperatureC: Float, impedance: Float,
+                          index: Int, eventTimeMs: Int64) -> Float {
+        guard stockMmol.isFinite, stockMmol > 0 else { return .nan }
+        let measurement = stockMmol
+        if !initialized || index <= 1 || index <= lastIndex || !glucose.isFinite {
+            // As in JugglucoNG, this restart keeps the recent innovations.
+            initialized = true
+            glucose = measurement
+            velocity = 0
+            updateTelemetry(rawMmol: rawMmol, temperatureC: temperatureC, impedance: impedance, index: index,
+                            eventTimeMs: eventTimeMs, measurement: measurement)
+            return SibionicsTrackerMath.roundTenth(measurement)
+        }
+
+        let elapsed = SibionicsTrackerMath.elapsedMinutes(eventTimeMs: eventTimeMs, lastTimestampMs: lastTimestampMs,
+                                                          index: index, lastIndex: lastIndex)
+        let quality = signalQuality(temperatureC: temperatureC, impedance: impedance)
+        let predicted = glucose + velocity * elapsed
+        var innovation = measurement - predicted
+
+        if innovations.count >= 5 {
+            let median = SibionicsTrackerMath.median(innovations)
+            let scale = Swift.max(Self.minInnovationScale, SibionicsTrackerMath.median(innovations.map { abs($0 - median) }))
+            let robustLimit = Swift.max(Self.minInnovationLimit, scale * 3)
+            if quality < 0.75 && abs(innovation - median) > robustLimit {
+                innovation = median + (innovation - median).clamped(-robustLimit, robustLimit)
+            }
+        }
+        innovation = innovation.clamped(-Self.maxInnovation, Self.maxInnovation)
+
+        let rapidChange = (abs(innovation) / 1.2).clamped(0, 1)
+        let rawVelocity: Float = rawMmol.isFinite && lastRaw.isFinite
+            ? ((rawMmol - lastRaw) / sensitivity / elapsed).clamped(-Self.maxVelocity, Self.maxVelocity)
+            : 0
+        let directionAgreement: Float
+        if abs(rawVelocity) < 0.015 || abs(innovation) < 0.08 {
+            directionAgreement = 0
+        } else if rawVelocity * innovation > 0 {
+            directionAgreement = 1
+        } else {
+            directionAgreement = -1
+        }
+        let alpha = (0.34 + quality * 0.30 + rapidChange * 0.18 + directionAgreement * 0.06).clamped(0.18, 0.84)
+        let beta = (0.055 + quality * 0.12 + rapidChange * 0.07).clamped(0.04, 0.24)
+
+        glucose = predicted + alpha * innovation
+        let innovationVelocity = beta * innovation / elapsed
+        velocity = (velocity * 0.72 + innovationVelocity + rawVelocity * quality * 0.20).clamped(-Self.maxVelocity, Self.maxVelocity)
+
+        let lead = (velocity * (0.25 + quality * 0.25)).clamped(-Self.maxTrendLead, Self.maxTrendLead)
+        let safetyDistance = Swift.max(Self.minOutputDistance, measurement * Self.maxOutputDistanceFraction)
+            * (1 + (1 - quality) * Self.lowQualitySafetyExpansion)
+        let output = (glucose + lead).clamped(measurement - safetyDistance, measurement + safetyDistance)
+
+        innovations.append(innovation)
+        while innovations.count > Self.innovationWindow { innovations.removeFirst() }
+        updateTelemetry(rawMmol: rawMmol, temperatureC: temperatureC, impedance: impedance, index: index,
+                        eventTimeMs: eventTimeMs, measurement: measurement)
+        return SibionicsTrackerMath.roundTenth(Swift.max(output, 0))
+    }
+
+    private func signalQuality(temperatureC: Float, impedance: Float) -> Float {
+        var temperatureQuality: Float
+        if !temperatureC.isFinite {
+            temperatureQuality = 0.35
+        } else if (28...40).contains(temperatureC) {
+            temperatureQuality = 1
+        } else if (10...42).contains(temperatureC) {
+            temperatureQuality = 0.65
+        } else {
+            temperatureQuality = 0.25
+        }
+        temperatureQuality *= lastTemperature.isFinite && abs(temperatureC - lastTemperature) > 1.2 ? 0.65 : 1
+        var impedanceQuality: Float = 1
+        if impedance.isFinite && impedance > 0 && impedanceBaseline.isFinite {
+            let relativeDelta = abs(impedance - impedanceBaseline) / Swift.max(abs(impedanceBaseline), 1)
+            impedanceQuality = (1 / (1 + relativeDelta * 5)).clamped(0.2, 1)
+        }
+        return (temperatureQuality * 0.7 + impedanceQuality * 0.3).clamped(0.2, 1)
+    }
+
+    private mutating func updateTelemetry(rawMmol: Float, temperatureC: Float, impedance: Float, index: Int,
+                                          eventTimeMs: Int64, measurement: Float) {
+        if impedance.isFinite && impedance > 0 {
+            impedanceBaseline = impedanceBaseline.isFinite ? impedanceBaseline * 0.96 + impedance * 0.04 : impedance
+        }
+        if rawMmol.isFinite { lastRaw = rawMmol }
+        if temperatureC.isFinite { lastTemperature = temperatureC }
+        lastMeasurement = measurement
+        lastTimestampMs = eventTimeMs
+        lastIndex = index
+    }
+
+    private var isStateValid: Bool {
+        guard initialized else { return true }
+        return glucose.isFinite && (0...50).contains(glucose) && velocity.isFinite && abs(velocity) <= Self.maxVelocity && lastIndex >= 0
+    }
+
+    func snapshot() -> Data {
+        var writer = SibionicsTrackerWriter()
+        writer.float(sensitivity)
+        writer.bool(initialized)
+        writer.float(glucose)
+        writer.float(velocity)
+        writer.float(lastMeasurement)
+        writer.float(lastRaw)
+        writer.float(lastTemperature)
+        writer.float(impedanceBaseline)
+        writer.int64(lastTimestampMs)
+        writer.int(lastIndex)
+        writer.int(innovations.count)
+        innovations.forEach { writer.float($0) }
+        return writer.data
+    }
+
+    static func restored(from data: Data, sensitivity: Float) -> SibionicsResponsiveEstimator? {
+        var estimator = SibionicsResponsiveEstimator(sensitivity: sensitivity)
+        var reader = SibionicsTrackerReader(data: data)
+        guard let saved = reader.float(), saved.isFinite, abs(saved - estimator.sensitivity) <= 0.0001,
+              let initialized = reader.bool(), let glucose = reader.float(), let velocity = reader.float(),
+              let lastMeasurement = reader.float(), let lastRaw = reader.float(), let lastTemperature = reader.float(),
+              let impedanceBaseline = reader.float(), let lastTimestampMs = reader.int64(), let lastIndex = reader.int(),
+              let count = reader.int(), (0...innovationWindow).contains(count) else { return nil }
+        var innovations: [Float] = []
+        for _ in 0..<count {
+            guard let value = reader.float(), value.isFinite else { return nil }
+            innovations.append(value)
+        }
+        guard reader.isAtEnd else { return nil }
+        estimator.initialized = initialized
+        estimator.glucose = glucose
+        estimator.velocity = velocity
+        estimator.lastMeasurement = lastMeasurement
+        estimator.lastRaw = lastRaw
+        estimator.lastTemperature = lastTemperature
+        estimator.impedanceBaseline = impedanceBaseline
+        estimator.lastTimestampMs = lastTimestampMs
+        estimator.lastIndex = lastIndex
+        estimator.innovations = innovations
+        return estimator.isStateValid ? estimator : nil
     }
 }

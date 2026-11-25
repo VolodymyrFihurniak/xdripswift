@@ -123,6 +123,13 @@ log on the clipboard for a problem report. It is cleared when the sensor is dele
 Sibionics 1 and 2 → **Glucose model**:
 
 - **Stock (default)** — the manufacturer's algorithm (V116A, or V115G for the Chinese Sibionics 1).
+- **Balanced (experimental)** — JugglucoNG's Balanced tracker around the stock value. It smooths
+  the stock value's small 0.1 mmol/L steps (never more than 0.2 mmol/L away from it) and follows the
+  stock value exactly for the first minutes, on a step of 1 mmol/L or more, on a turn, at or below
+  3.9 mmol/L and when temperature or impedance jump.
+- **Responsive (experimental)** — JugglucoNG's Responsive estimator: glucose and its speed, with a
+  robust clamp on outliers and a small lead in the direction of the trend, kept within about 0.65
+  mmol/L (16 %) of the stock value, more when the signal looks poor.
 - **Adaptive V2 (experimental)** — JugglucoNG's probabilistic estimator. It reads the sensor's
   calibrated signal before the manufacturer's display filtering and deconvolution, so it follows
   changes sooner and looks less smooth. It gives a value every minute once the stock algorithm has
