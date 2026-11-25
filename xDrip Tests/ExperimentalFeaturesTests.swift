@@ -1592,3 +1592,65 @@ final class PredictionInspectorTests: XCTestCase {
                                                    now: start.addingTimeInterval(4 * 3600)), .missing)
     }
 }
+
+// MARK: - Amount assist
+
+/// Expectations from a Python port of JugglucoNG `JournalAmountAssist`.
+final class TreatmentAmountAssistTests: XCTestCase {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+    /// Midnight UTC of a fixed day.
+    private let day = Date(timeIntervalSince1970: 1_800_000_000 - 1_800_000_000 % 86_400)
+
+    /// One entry a day, `days` before `day`, at `minute` past midnight.
+    private func entries(_ amounts: [Double], minute: Int) -> [TreatmentAmountAssist.Entry] {
+        amounts.enumerated().map { offset, amount in
+            TreatmentAmountAssist.Entry(date: day.addingTimeInterval(TimeInterval(-(offset + 1) * 86_400 + minute * 60)), amount: amount)
+        }
+    }
+
+    private func at(_ minute: Int) -> Date { day.addingTimeInterval(TimeInterval(minute * 60)) }
+
+    func testWholeUnitsLearnAOneUnitStepAndTheMostCommonDose() {
+        let habit = TreatmentAmountAssist.insulinHabit(entries([4, 4, 5, 6, 4, 3, 4, 8, 2, 4], minute: 480), at: at(510), calendar: calendar)
+        XCTAssertEqual(habit, TreatmentAmountAssist.Habit(step: 1, usual: 4))
+    }
+
+    func testFewEntriesKeepTheDefaultStepAndNeedEnoughHistory() {
+        XCTAssertEqual(TreatmentAmountAssist.insulinHabit(entries([2.5, 3, 3], minute: 480), at: at(480), calendar: calendar),
+                       TreatmentAmountAssist.Habit(step: 0.5, usual: 3))
+        XCTAssertEqual(TreatmentAmountAssist.insulinHabit(entries([1, 1, 1, 1], minute: 1200), at: at(480), calendar: calendar),
+                       TreatmentAmountAssist.Habit(step: 0.5, usual: nil))
+        // Nothing repeated: the middle of the log.
+        XCTAssertEqual(TreatmentAmountAssist.insulinHabit(entries([2, 4, 6, 8, 10], minute: 1200), at: at(480), calendar: calendar),
+                       TreatmentAmountAssist.Habit(step: 0.5, usual: 6))
+    }
+
+    func testCarbsInTensLearnATenGramStep() {
+        XCTAssertEqual(TreatmentAmountAssist.carbHabit(entries([20, 40, 50, 70, 80, 100, 110, 10], minute: 720), at: at(720), calendar: calendar),
+                       TreatmentAmountAssist.Habit(step: 10, usual: 50))
+    }
+
+    func testSteppingLandsOnTheGrid() {
+        XCTAssertEqual(TreatmentAmountAssist.stepped(2.5, direction: 1, step: 1), 3)
+        XCTAssertEqual(TreatmentAmountAssist.stepped(2.5, direction: -1, step: 1), 2)
+        XCTAssertEqual(TreatmentAmountAssist.stepped(3, direction: 1, step: 1), 4)
+        XCTAssertEqual(TreatmentAmountAssist.stepped(0, direction: -1, step: 0.5), 0)
+        XCTAssertEqual(TreatmentAmountAssist.stepped(2, direction: 1, step: 0.5), 2.5)
+    }
+
+    func testUncoveredCarbsIgnoreMealsADoseAlreadyAnswered() {
+        let now = at(720)
+        func minutesAgo(_ minutes: Double, _ amount: Double) -> TreatmentAmountAssist.Entry {
+            TreatmentAmountAssist.Entry(date: now.addingTimeInterval(-minutes * 60), amount: amount)
+        }
+        let carbs = [minutesAgo(60, 40), minutesAgo(20, 10)]
+        XCTAssertEqual(TreatmentAmountAssist.uncoveredCarbs(carbs: carbs, doses: [minutesAgo(100, 3)], at: now), 50)
+        // A dose 70 minutes ago covers food up to 30 minutes after it.
+        XCTAssertEqual(TreatmentAmountAssist.uncoveredCarbs(carbs: carbs, doses: [minutesAgo(70, 3)], at: now), 10)
+        XCTAssertNil(TreatmentAmountAssist.uncoveredCarbs(carbs: carbs, doses: [minutesAgo(10, 0.5)], at: now))
+    }
+}

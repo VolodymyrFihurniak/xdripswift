@@ -202,6 +202,47 @@ struct TreatmentEditorView: View {
                         }
                         .fixedSize(horizontal: true, vertical: false)
                     }
+
+                    // JugglucoNG amount assist: steps learned from the person's own entries.
+                    if let habit = viewModel.amountHabit {
+                        HStack(spacing: 12) {
+                            if let usual = habit.usual {
+                                Button {
+                                    viewModel.useUsualAmount()
+                                } label: {
+                                    Text(String(format: ExperimentalTexts.text("assist.usual", "Usual: %@"),
+                                                usual.stringWithoutTrailingZeroes + " " + viewModel.unitText))
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            Spacer()
+                            Button {
+                                viewModel.stepAmount(-1)
+                            } label: {
+                                Image(systemName: "minus")
+                                    .frame(width: 28, height: 22)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(String(format: ExperimentalTexts.text("assist.less", "%@ less"),
+                                                       habit.step.stringWithoutTrailingZeroes + " " + viewModel.unitText))
+                            Button {
+                                viewModel.stepAmount(1)
+                            } label: {
+                                Image(systemName: "plus")
+                                    .frame(width: 28, height: 22)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(String(format: ExperimentalTexts.text("assist.more", "%@ more"),
+                                                       habit.step.stringWithoutTrailingZeroes + " " + viewModel.unitText))
+                        }
+                    }
+
+                    if let carbs = viewModel.uncoveredCarbs {
+                        Label(String(format: ExperimentalTexts.text("assist.uncovered", "%@ g of carbs in the last 90 minutes have no bolus yet."),
+                                     carbs.stringWithoutTrailingZeroes), systemImage: "fork.knife")
+                            .font(.footnote)
+                            .foregroundStyle(Color(.colorSecondary))
+                    }
                 }
 
                 // Food library: adds up a meal and fills in its carbs (and protein and fat when those are logged).

@@ -23,19 +23,23 @@ import OSLog
 
     // MARK: - @Published properties
 
-    @Published var selectedType: TreatmentType
+    @Published var selectedType: TreatmentType { didSet { refreshAmountAssist() } }
     @Published var selectedDate: Date
     @Published var enteredValue: String
     @Published var enteredByValue: String
     @Published var enteredNotesValue: String
     @Published var enteredInsulinDescription: String
     /// Experimental: the insulin of a bolus, stored in its notes. Nil uses the default bolus insulin.
-    @Published var selectedBolusInsulin: InsulinProfile?
+    @Published var selectedBolusInsulin: InsulinProfile? { didSet { refreshAmountAssist() } }
     /// Experimental: protein and fat of a carb entry and exercise intensity, stored in the notes.
     @Published var enteredProtein: String
     @Published var enteredFat: String
     @Published var selectedIntensity: ExperimentalExerciseIntensity?
     @Published var alertMessage: TreatmentEditorAlertMessage?
+    /// JugglucoNG amount assist: the stepper's step and the usual amount, from the person's own entries.
+    @Published private(set) var amountHabit: TreatmentAmountAssist.Habit?
+    /// Carbs of the last 90 minutes no dose has answered yet, shown while entering a bolus.
+    @Published private(set) var uncoveredCarbs: Double?
 
     /// Only show the copied-values footer when both fields were prefilled for a new injection.
     let didPrefillBasalInjection: Bool
@@ -95,6 +99,66 @@ import OSLog
         } else {
             self.enteredValue = ""
         }
+        refreshAmountAssist()
+    }
+
+    // MARK: - amount assist
+
+    /// Amounts typed in xDrip itself (not from a pump, AID or Nightscout), as JugglucoNG uses only
+    /// manual entries: a pump's 4.35 U says nothing about how someone counts.
+    private func typedEntries(_ type: TreatmentType, matchingInsulin: Bool) -> [TreatmentAmountAssist.Entry] {
+        guard let coreDataManager else { return [] }
+        let applicationName = ConstantsHomeView.applicationName
+        return TreatmentEntryAccessor(coreDataManager: coreDataManager)
+            .getLatestTreatments(howOld: TreatmentAmountAssist.habitWindow)
+            .filter { entry in
+                entry.treatmentType == type && !entry.treatmentdeleted && entry !== originalTreatment
+                    && (entry.enteredBy == nil || entry.enteredBy == applicationName)
+                    && (!matchingInsulin || InsulinProfile.matching(notes: entry.notes) == selectedBolusInsulin)
+            }
+            .map { TreatmentAmountAssist.Entry(date: $0.date, amount: $0.value) }
+    }
+
+    func refreshAmountAssist() {
+        let now = Date()
+        switch selectedType {
+        case .Insulin:
+            amountHabit = TreatmentAmountAssist.insulinHabit(typedEntries(.Insulin, matchingInsulin: true), at: now)
+            uncoveredCarbs = isAddMode ? TreatmentAmountAssist.uncoveredCarbs(
+                carbs: carbEntries(), doses: typedOrNotEntries(.Insulin), at: now) : nil
+        case .BasalInjection:
+            amountHabit = TreatmentAmountAssist.insulinHabit(typedEntries(.BasalInjection, matchingInsulin: false), at: now)
+            uncoveredCarbs = nil
+        case .Carbs:
+            amountHabit = TreatmentAmountAssist.carbHabit(typedEntries(.Carbs, matchingInsulin: false), at: now)
+            uncoveredCarbs = nil
+        default:
+            amountHabit = nil
+            uncoveredCarbs = nil
+        }
+    }
+
+    /// Any dose counts as covering a meal, whoever logged it.
+    private func typedOrNotEntries(_ type: TreatmentType) -> [TreatmentAmountAssist.Entry] {
+        guard let coreDataManager else { return [] }
+        return TreatmentEntryAccessor(coreDataManager: coreDataManager)
+            .getLatestTreatments(howOld: 4 * 60 * 60)
+            .filter { $0.treatmentType == type && !$0.treatmentdeleted }
+            .map { TreatmentAmountAssist.Entry(date: $0.date, amount: $0.value) }
+    }
+
+    private func carbEntries() -> [TreatmentAmountAssist.Entry] { typedOrNotEntries(.Carbs) }
+
+    /// One stepper press from the entered value along the learned step.
+    func stepAmount(_ direction: Int) {
+        guard let habit = amountHabit else { return }
+        let current = enteredValue.toDouble() ?? 0
+        enteredValue = TreatmentAmountAssist.stepped(current, direction: direction, step: habit.step).stringWithoutTrailingZeroes
+    }
+
+    func useUsualAmount() {
+        guard let usual = amountHabit?.usual else { return }
+        enteredValue = usual.stringWithoutTrailingZeroes
     }
 
     // MARK: - public computed properties

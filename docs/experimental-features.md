@@ -262,6 +262,15 @@ Devices tabs open only after it is entered, and lock again when the app goes to 
 Readings, alarms, the chart and treatments stay available. The PIN is kept in the app's settings
 unencrypted; reinstalling the app removes it.
 
+## Amount assist
+
+In the treatment editor (bolus, basal injection, carbs), as JugglucoNG's journal does, with no
+setting: − and + buttons move the amount by the step your own entries use (1, 0.5, 0.25 or 0.1 U;
+15, 10 or 5 g, learned once 85 % of at least 8 entries of the last 60 days sit on it), and a
+**Usual** button fills in what you most often log within two hours of this time of day. Only
+amounts typed in xDrip count, not pump or Nightscout entries. While adding a bolus, carbs of the last
+90 minutes that no dose has answered yet are shown. Nothing is estimated or dosed for you.
+
 ## Food library
 
 In the treatment editor, a carbs entry has a **Food library** button (it needs no setting). Pick

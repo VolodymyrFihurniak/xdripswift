@@ -680,6 +680,10 @@
 
 /* Food library */
 "experimental.food.library" = "Food library";
+"experimental.assist.usual" = "Usual: %@";
+"experimental.assist.less" = "%@ less";
+"experimental.assist.more" = "%@ more";
+"experimental.assist.uncovered" = "%@ g of carbs in the last 90 minutes have no bolus yet.";
 "experimental.food.meal" = "Meal";
 "experimental.food.search" = "Search foods";
 "experimental.food.searchOnline" = "Search Open Food Facts";

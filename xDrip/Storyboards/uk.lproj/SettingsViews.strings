@@ -1156,6 +1156,10 @@
 
 /* Food library */
 "experimental.food.library" = "Бібліотека продуктів";
+"experimental.assist.usual" = "Зазвичай: %@";
+"experimental.assist.less" = "На %@ менше";
+"experimental.assist.more" = "На %@ більше";
+"experimental.assist.uncovered" = "%@ г вуглеводів за останні 90 хвилин ще без болюсу.";
 "experimental.food.meal" = "Страва";
 "experimental.food.search" = "Пошук продуктів";
 "experimental.food.searchOnline" = "Шукати в Open Food Facts";

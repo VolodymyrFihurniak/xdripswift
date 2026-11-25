@@ -2300,3 +2300,131 @@ enum GlucoseUncertaintyStore {
         return result.sorted { $0.date < $1.date }
     }
 }
+
+// MARK: - Amount assist
+
+/// JugglucoNG `JournalAmountAssist`: where the treatment editor's steppers start and how far they
+/// move, read only from what the person typed themselves. It estimates nothing and changes no
+/// setting; it repeats the person's own logging back to them.
+enum TreatmentAmountAssist {
+    struct Habit: Equatable {
+        /// What one press of the stepper adds.
+        let step: Double
+        /// What is usually logged around this time of day; nil until the log can say.
+        let usual: Double?
+    }
+
+    struct Entry {
+        let date: Date
+        let amount: Double
+    }
+
+    static let defaultInsulinStep = 0.5
+    static let defaultCarbStep = 5.0
+    /// Coarsest first: the first one that fits the log wins.
+    static let insulinSteps = [1, 0.5, 0.25, 0.1]
+    static let carbSteps = [15.0, 10, 5]
+
+    static let habitWindow: TimeInterval = 60 * 24 * 60 * 60
+    private static let stepMinimumSamples = 8
+    private static let stepMinimumShare = 0.85
+    private static let gridTolerance = 1e-3
+    private static let timeOfDayWindowMinutes = 120
+    private static let usualMinimumAtThisTime = 3
+    private static let usualMinimumOverall = 5
+    static let mealWindow: TimeInterval = 90 * 60
+    /// A dose this long before food is a pre-bolus for it, not an earlier meal's dose.
+    static let preBolus: TimeInterval = 30 * 60
+
+    static func insulinHabit(_ entries: [Entry], at date: Date, calendar: Calendar = .current) -> Habit {
+        habit(entries, steps: insulinSteps, defaultStep: defaultInsulinStep, at: date, calendar: calendar)
+    }
+
+    static func carbHabit(_ entries: [Entry], at date: Date, calendar: Calendar = .current) -> Habit {
+        habit(entries, steps: carbSteps, defaultStep: defaultCarbStep, at: date, calendar: calendar)
+    }
+
+    /// Carbs from the last 90 minutes with no dose after them (any dose, however small, so a split
+    /// bolus reads as covered); nil when there are none.
+    static func uncoveredCarbs(carbs: [Entry], doses: [Entry], at date: Date) -> Double? {
+        let lastDose = doses.filter { $0.date <= date && $0.amount > 0 }.map(\.date).max()
+        let meals = carbs.filter { entry in
+            entry.amount > 0 && entry.date >= date.addingTimeInterval(-mealWindow) && entry.date <= date
+                && (lastDose.map { entry.date > $0.addingTimeInterval(preBolus) } ?? true)
+        }
+        return meals.isEmpty ? nil : meals.reduce(0) { $0 + $1.amount }
+    }
+
+    /// One press away from `current`, landing on the step's grid: with 1 U steps, 2.5 goes to 3
+    /// and 2. Never below zero.
+    static func stepped(_ current: Double, direction: Int, step: Double) -> Double {
+        let position = current / step
+        let nearest = position.rounded()
+        let next: Double
+        if abs(position - nearest) < gridTolerance {
+            next = nearest + Double(direction)
+        } else {
+            next = direction > 0 ? position.rounded(.up) : position.rounded(.down)
+        }
+        return max(0, next * step)
+    }
+
+    private static func habit(_ entries: [Entry], steps: [Double], defaultStep: Double, at date: Date, calendar: Calendar) -> Habit {
+        let typed = entries.filter {
+            $0.amount.isFinite && $0.amount > 0 && $0.date <= date && $0.date >= date.addingTimeInterval(-habitWindow)
+        }
+        let step = learnedStep(typed.map(\.amount), steps: steps, defaultStep: defaultStep)
+        return Habit(step: step, usual: usualAmount(typed, step: step, at: date, calendar: calendar))
+    }
+
+    private static func learnedStep(_ amounts: [Double], steps: [Double], defaultStep: Double) -> Double {
+        guard amounts.count >= stepMinimumSamples else { return defaultStep }
+        return steps.first { step in
+            Double(amounts.filter { onGrid($0, step: step) }.count) >= Double(amounts.count) * stepMinimumShare
+        } ?? defaultStep
+    }
+
+    private static func onGrid(_ amount: Double, step: Double) -> Bool {
+        let position = amount / step
+        return abs(position - position.rounded()) < gridTolerance
+    }
+
+    /// The amount logged most often around this time of day, or across the whole log when this
+    /// time of day has too few entries. With nothing repeated, the middle of the log.
+    private static func usualAmount(_ entries: [Entry], step: Double, at date: Date, calendar: Calendar) -> Double? {
+        let minute = minuteOfDay(date, calendar: calendar)
+        let atThisTime = entries.filter { timeOfDayDistance(minuteOfDay($0.date, calendar: calendar), minute) <= timeOfDayWindowMinutes }
+        let pool: [Entry]
+        if atThisTime.count >= usualMinimumAtThisTime {
+            pool = atThisTime
+        } else if entries.count >= usualMinimumOverall {
+            pool = entries
+        } else {
+            return nil
+        }
+        // Kotlin roundToInt rounds half up (towards positive infinity).
+        let byAmount = Dictionary(grouping: pool) { Int(($0.amount / step + 0.5).rounded(.down)) }
+        guard let best = byAmount.max(by: { lhs, rhs in
+            if lhs.value.count != rhs.value.count { return lhs.value.count < rhs.value.count }
+            return (lhs.value.map(\.date).max() ?? .distantPast) < (rhs.value.map(\.date).max() ?? .distantPast)
+        }) else { return nil }
+        let position: Int
+        if best.value.count >= 2 {
+            position = best.key
+        } else {
+            let keys = byAmount.keys.sorted()
+            position = keys[(keys.count - 1) / 2]
+        }
+        return max(Double(position) * step, step)
+    }
+
+    private static func minuteOfDay(_ date: Date, calendar: Calendar) -> Int {
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+    }
+
+    private static func timeOfDayDistance(_ first: Int, _ second: Int) -> Int {
+        let distance = abs(first - second)
+        return min(distance, 24 * 60 - distance)
+    }
+}

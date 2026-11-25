@@ -144,6 +144,9 @@ editor, no setting): JugglucoNG staples embedded as a `key|carbs|protein|fat|por
 custom foods and recents as UserDefaults JSON, Open Food Facts search/barcode (network only on
 request). It fills the editor's carbs/protein/fat; the meal itself is not stored.
 
+Amount assist (`TreatmentAmountAssist`, JugglucoNG `JournalAmountAssist`, no setting): stepper step and
+usual amount in `TreatmentEditorViewModel` from xDrip-typed entries (`enteredBy` nil or the app name).
+
 Insulin pens (`xDrip/Managers/Therapy/InsulinPenReader.swift`): Swift port of JugglucoNG
 `NovoPen/opennov` (NFC Type 4 `PenT4` → `PenPHD` record → IEEE 11073 `PenMessage`/`PenMachine`,
 run by `PenSession` over a `PenTransport`), `PenDoseParser`, `InsulinPenStore` (UserDefaults JSON,
