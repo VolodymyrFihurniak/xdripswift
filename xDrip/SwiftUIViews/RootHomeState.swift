@@ -561,14 +561,20 @@ final class RootHomeStateModel: ObservableObject {
 
         let minutesAgo = max(0, -Int(latestReading.timeStamp.timeIntervalSinceNow) / 60)
         let previousReading = latestReadings.count > 1 ? latestReadings[1] : nil
+        // JugglucoNG "sensor reach": say plainly that the sensor is not being heard, instead of
+        // only greying the value out after 11 minutes.
+        let outOfReach = UserDefaults.standard.isMaster && RootHomeSensorReach.isOutOfReach(
+            minutesSinceReading: Double(-latestReading.timeStamp.timeIntervalSinceNow) / 60,
+            transmitterType: UserDefaults.standard.cgmTransmitterType)
+        let agoText = "\(minutesAgo == 1 ? Texts_Common.minute : Texts_Common.minutes) \(Texts_HomeView.ago)"
 
         return RootHomeGlucoseState(
             valueText: valueText,
             valueColor: valueColor,
             valueHasStrikethrough: isStale,
             minutesText: String(minutesAgo),
-            minutesAgoText: "\(minutesAgo == 1 ? Texts_Common.minute : Texts_Common.minutes) \(Texts_HomeView.ago)",
-            minutesColor: ConstantsAppColors.primaryText,
+            minutesAgoText: outOfReach ? agoText + " · " + Texts_HomeView.sensorOutOfReach : agoText,
+            minutesColor: outOfReach ? ConstantsAppColors.warning : ConstantsAppColors.primaryText,
             deltaText: latestReading.unitizedDeltaString(previousBgReading: previousReading, showUnit: false, highGranularity: true, mgDl: isMgDl),
             deltaUnitText: isMgDl ? Texts_Common.mgdl : Texts_Common.mmol,
             deltaColor: ConstantsAppColors.primaryText
@@ -1172,4 +1178,20 @@ struct RootHomeActions {
     var hideFollowerUrl: () -> Void = {}
     var showAIDStatus: () -> Void = {}
     var showBluetooth: () -> Void = {}
+}
+
+/// When Home says the sensor is not being heard (JugglucoNG "sensor reach").
+enum RootHomeSensorReach {
+    /// Sensors that send a reading every minute are missed after three; the others after
+    /// two missed five-minute readings, when Home already greys the value out.
+    static func thresholdMinutes(for transmitterType: CGMTransmitterType?) -> Double {
+        switch transmitterType {
+        case .Libre2, .Libre3, .sibionics2: return 3
+        default: return 11
+        }
+    }
+
+    static func isOutOfReach(minutesSinceReading: Double, transmitterType: CGMTransmitterType?) -> Bool {
+        minutesSinceReading >= thresholdMinutes(for: transmitterType)
+    }
 }

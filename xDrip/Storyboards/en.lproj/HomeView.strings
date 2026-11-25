@@ -267,3 +267,4 @@
 "postProcessingAdjustmentUnavailableNativeCalibration" = "Offset and shape adjustment are unavailable because this CGM uses native calibration.";
 
 "postProcessingWarningAgreement" = "Tap OK only if you understand and agree to enable this feature.";
+"sensorOutOfReach" = "no signal";

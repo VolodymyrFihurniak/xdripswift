@@ -153,6 +153,24 @@ enum Sibionics2DeviceStatus {
         userDefaults.set(date, forKey: key("batteryReadAt", identifier))
     }
 
+    /// The last link problem (JugglucoNG "Last BLE status"): kept until a reading arrives, so the
+    /// device screen says why readings stopped instead of only "Disconnected".
+    static func setLastLinkProblem(_ text: String?, at date: Date = Date(), for identifier: String, userDefaults: UserDefaults = .standard) {
+        if let text {
+            userDefaults.set(text, forKey: key("lastLinkProblem", identifier))
+            userDefaults.set(date, forKey: key("lastLinkProblemAt", identifier))
+        } else {
+            userDefaults.removeObject(forKey: key("lastLinkProblem", identifier))
+            userDefaults.removeObject(forKey: key("lastLinkProblemAt", identifier))
+        }
+    }
+
+    static func lastLinkProblem(for identifier: String, userDefaults: UserDefaults = .standard) -> (text: String, date: Date)? {
+        guard let text = userDefaults.string(forKey: key("lastLinkProblem", identifier)),
+              let date = userDefaults.object(forKey: key("lastLinkProblemAt", identifier)) as? Date else { return nil }
+        return (text, date)
+    }
+
     static func battery(for identifier: String, userDefaults: UserDefaults = .standard) -> (percentage: Int, readAt: Date)? {
         guard let percentage = userDefaults.object(forKey: key("battery", identifier)) as? Int,
               let readAt = userDefaults.object(forKey: key("batteryReadAt", identifier)) as? Date else { return nil }

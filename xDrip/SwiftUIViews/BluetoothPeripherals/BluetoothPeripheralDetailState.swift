@@ -1215,6 +1215,15 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
     /// and registration key group that produced readings.
     private func sibionicsDeviceInfoSection(address: String, isSibionics1: Bool) -> BluetoothPeripheralDetailSection {
         var rows = [BluetoothPeripheralDetailRow]()
+        // Why readings stopped, until the next reading (JugglucoNG "Last BLE status").
+        rows.append(row(
+            id: "sibionics-last-link-problem",
+            title: Texts_BluetoothPeripheralView.sibionicsLastLinkProblem,
+            detail: Sibionics2DeviceStatus.lastLinkProblem(for: address).map {
+                $0.text + " · " + RelativeDateTimeFormatter().localizedString(for: $0.date, relativeTo: Date())
+            } ?? Texts_BluetoothPeripheralView.sibionicsNoLinkProblem,
+            detailIndicator: Sibionics2DeviceStatus.lastLinkProblem(for: address) != nil ? SettingsIndicator(color: Color.orange) : nil
+        ))
         let battery = Sibionics2DeviceStatus.battery(for: address)
         // Battery is a Sibionics 2 value, as in JugglucoNG.
         if !isSibionics1 { rows.append(row(

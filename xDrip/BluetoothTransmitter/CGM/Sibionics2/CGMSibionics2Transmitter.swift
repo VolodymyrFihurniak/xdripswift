@@ -230,6 +230,12 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     /// Adds an event to this sensor's connection log (see `Sibionics2ConnectionLog`).
+    /// Remembers why readings stopped, for the device screen; a reading clears it.
+    private func noteLinkProblem(_ text: String) {
+        guard let address = deviceAddress else { return }
+        Sibionics2DeviceStatus.setLastLinkProblem(text, for: address)
+    }
+
     private func logEvent(_ text: String) {
         guard let address = deviceAddress else { return }
         Sibionics2ConnectionLog.add(variant.productName + ": " + text, for: address)
@@ -239,6 +245,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         let sessionWasChinese = usesChineseProtocol
         logEvent("disconnected" + (error.map { ": " + $0.localizedDescription } ?? "")
                  + (streamingReady ? "" : " (before streaming)"))
+        if let error { noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemLinkLost + " (" + error.localizedDescription + ")") }
         probeGeneration += 1
         sibionics1Connection = nil
         readingPollGeneration += 1
@@ -757,6 +764,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                   self.streamingReady,
                   self.getConnectionStatus() == .connected else { return }
             self.logEvent("no readings for 3 minutes while streaming; reconnecting")
+            self.noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemNoReadings)
             trace("Sibionics 2 no readings for %{public}@ seconds while streaming; reconnecting",
                   log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
                   Sibionics2ConnectionPolicy.readingsStallTimeout.description)
@@ -902,6 +910,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 // Connected but silent: asking again on this link has not helped, and nothing
                 // else ends such a session. A fresh connection does.
                 self.logEvent("no data page after repeated requests; reconnecting")
+                self.noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemNotResponding)
                 trace("Sibionics 1 gave no data page after %{public}@ requests; reconnecting",
                       log: self.transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
                       self.chineseDataRetryCount.description)
@@ -922,6 +931,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
         guard Sibionics2AuthenticationAddress.override(for: address) == nil,
               chineseAddressRefusals < candidates.count else {
             logEvent("sensor refused the authentication address")
+            noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemAddressRefused)
             trace("Sibionics 1 refused the authentication address (%{public}@ refusals); no other address to try now",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error,
                   chineseAddressRefusals.description)
@@ -1008,6 +1018,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
                 return
             }
             self.logEvent("handshake stalled; reconnecting")
+            self.noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemAuthentication)
             trace("Sibionics 2 handshake stalled: FF31 has not begun streaming",
                   log: self.transmitterLog,
                   category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
@@ -1079,6 +1090,7 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
             authenticationKeyGroupIndex = 0
         connectionKeyGroups = []
             logEvent("authentication not answered with any key group")
+            noteLinkProblem(Texts_BluetoothPeripheralView.sibionicsProblemAuthentication)
             trace("Sibionics 2 authentication was not answered with any key group",
                   log: transmitterLog, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
             reconnectAfterStalledHandshake()
@@ -1275,6 +1287,9 @@ class CGMSibionics2Transmitter: BluetoothTransmitter, CGMTransmitter {
     private func receiveReadings(_ readings: [Sibionics2RawReading], at receivedAt: Date) {
         guard let address = deviceAddress else { return }
         if !readings.isEmpty {
+            if Sibionics2DeviceStatus.lastLinkProblem(for: address) != nil {
+                Sibionics2DeviceStatus.setLastLinkProblem(nil, for: address)
+            }
             scheduleStreamingWatchdog()
             refreshBatteryLevelIfDue(now: receivedAt)
             // Glucose is flowing: the display-only strings can be asked for now.

@@ -699,6 +699,10 @@ enum Texts_HomeView {
         return NSLocalizedString("lastconnection", tableName: filename, bundle: Bundle.main, value: "Last Connection", comment: "status info : literally 'Last connection', shows when the last connection to a transmitter occured")
     }()
     
+    static let sensorOutOfReach: String = {
+        return NSLocalizedString("sensorOutOfReach", tableName: filename, bundle: Bundle.main, value: "no signal", comment: "Home, after the reading age when the sensor has not been heard for a while")
+    }()
+
     static let ago:String = {
         return NSLocalizedString("ago", tableName: filename, bundle: Bundle.main, value: "ago", comment: "for home view, where it say how old the reading is, 'x minutes ago', literaly translation of 'ago'")
     }()

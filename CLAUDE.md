@@ -79,8 +79,11 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
   stock (default) or JugglucoNG Adaptive V2. The estimator is vendored Kotlin in
   `Sibionics2Core/.../adaptive2` behind `SibionicsAdaptiveV2Facade`; the stock facade feeds it its
   `latestSensorObservation` (`processAdaptiveV2`). A usable estimate replaces the stock value, which
-  stays the fallback. Processor snapshot version 3 = version 2 + estimator state; the other
+  stays the fallback, at full precision (JugglucoNG e64e3fd3e; only display rounds). Processor snapshot version 3 = version 2 + estimator state; the other
   model's snapshot is refused, so changing the model replays history.
+- **Last link problem** (`Sibionics2DeviceStatus.lastLinkProblem`, JugglucoNG "Last BLE status"): set by
+  `noteLinkProblem` on lost links, refusals, stalls and auth failures, cleared by a reading; shown on the
+  device screen. Home says "no signal" after 3 min for 1-minute sensors (`RootHomeSensorReach`).
 - **Reset**: manual for all variants (S2 encrypted `0x10`, EU/Hematonix `24 E7 6F 34`,
   Chinese `AA 55 10 F1`); automatic only for Sibionics 2. The post-reset session probe is one-shot.
 - **Calibration** (`xDrip/Calibration/Sibionics2Calibrator.swift`): xDrip+ or JugglucoNG

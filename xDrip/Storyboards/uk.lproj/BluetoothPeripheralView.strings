@@ -358,3 +358,10 @@
 "sibionics.glucoseModelStock" = "Стандартна (типово)";
 "sibionics.glucoseModelAdaptiveV2" = "Adaptive V2 (експериментальна)";
 "sibionics.glucoseModelFooter" = "Стандартна — алгоритм виробника. Adaptive V2 — експериментальний оцінювач із JugglucoNG: він працює з каліброваним сигналом датчика до згладжування виробника, швидше реагує на зміни й менш плавний. Якщо для хвилини оцінки немає, показується стандартне значення. Зміна моделі перераховує історію датчика. Перш ніж покладатися на неї, порівняйте з глюкометром.";
+"sibionics.lastLinkProblem" = "Остання проблема зв’язку";
+"sibionics.noLinkProblem" = "Немає від останнього показника";
+"sibionics.problemLinkLost" = "Зв’язок втрачено";
+"sibionics.problemNoReadings" = "Немає показників під час з’єднання";
+"sibionics.problemNotResponding" = "Сенсор не відповідає";
+"sibionics.problemAddressRefused" = "Сенсор відхилив усі адреси";
+"sibionics.problemAuthentication" = "Автентифікація не вдалася";

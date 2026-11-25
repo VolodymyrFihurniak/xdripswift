@@ -145,7 +145,9 @@ struct Sibionics2GlucoseProcessor {
             if estimate.isFinite,
                estimate > Validation.minimumCandidateMmol,
                estimate <= Validation.maximumCandidateMmol {
-                adaptiveMmol = Self.nativeRound(estimate)
+                // Full precision, as JugglucoNG emits it since e64e3fd3e: rounding to 0.1 mmol/L left
+                // about two minutes in three repeating the previous value. Display still rounds.
+                adaptiveMmol = estimate
             }
         }
         let stockMmol = stockDisplayMmol(candidate: candidate, raw: raw, mode: mode)

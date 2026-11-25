@@ -147,3 +147,11 @@ the address, and `refused the authentication address; asking again with the next
 Frequent "connection has timed out" disconnects themselves are radio: distance, the body between phone
 and sensor, or a phone case. Keeping the phone on the same side as the sensor helps. Readings missed while
 disconnected are filled in from the sensor's history on the next connection.
+
+## Last link problem and "no signal"
+
+The device screen's sensor information starts with **Last link problem**: why readings stopped (link
+lost, no readings while connected, sensor not responding, sensor refused every address, authentication
+failed) and when. It stays until the next reading arrives. On Home, the reading age turns amber and adds
+**no signal** once a one-minute sensor (Sibionics, Libre 2, Libre 3) has not been heard for 3 minutes,
+or any other sensor for 11 minutes.

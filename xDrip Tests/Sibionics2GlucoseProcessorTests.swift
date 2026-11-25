@@ -222,10 +222,10 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         // Neither model has a value before the stock core's first correction at minute 5.
         XCTAssertTrue((1...4).allSatisfy { adaptiveResults[$0] == nil && stockResults[$0] == nil })
         XCTAssertEqual(adaptiveResults.count, rows.count - 4)
-        // Values verified against the Kotlin estimator: 7.27 and 3.53 mmol/L, shown to 0.1.
-        XCTAssertEqual(try XCTUnwrap(adaptiveResults[5]), 7.3 * 18, accuracy: 0.001)
+        // Values from the Kotlin estimator (7.2715197 and 3.5303624 mmol/L), at full precision.
+        XCTAssertEqual(try XCTUnwrap(adaptiveResults[5]), 7.2715197 * 18, accuracy: 0.001)
         XCTAssertEqual(try XCTUnwrap(stockResults[5]), 10.4 * 18, accuracy: 0.001)
-        XCTAssertEqual(try XCTUnwrap(adaptiveResults[130]), 3.5 * 18, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(adaptiveResults[130]), 3.5303624 * 18, accuracy: 0.001)
         XCTAssertEqual(try XCTUnwrap(stockResults[130]), 3.6 * 18, accuracy: 0.001)
     }
 

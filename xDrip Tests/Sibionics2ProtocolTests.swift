@@ -748,3 +748,31 @@ final class Sibionics2ProtocolTests: XCTestCase {
         XCTAssertEqual(TroubleshootingLogSource(directTransmitterType: .sibionics2), .sibionics2)
     }
 }
+
+final class SensorReachAndLinkProblemTests: XCTestCase {
+    func testOneMinuteSensorsAreMissedSoonerThanFiveMinuteOnes() {
+        XCTAssertEqual(RootHomeSensorReach.thresholdMinutes(for: .sibionics2), 3)
+        XCTAssertEqual(RootHomeSensorReach.thresholdMinutes(for: .Libre2), 3)
+        XCTAssertEqual(RootHomeSensorReach.thresholdMinutes(for: .Libre3), 3)
+        XCTAssertEqual(RootHomeSensorReach.thresholdMinutes(for: .dexcom), 11)
+        XCTAssertEqual(RootHomeSensorReach.thresholdMinutes(for: nil), 11)
+        XCTAssertFalse(RootHomeSensorReach.isOutOfReach(minutesSinceReading: 2.9, transmitterType: .sibionics2))
+        XCTAssertTrue(RootHomeSensorReach.isOutOfReach(minutesSinceReading: 3, transmitterType: .sibionics2))
+        XCTAssertFalse(RootHomeSensorReach.isOutOfReach(minutesSinceReading: 6, transmitterType: .dexcom))
+        XCTAssertTrue(RootHomeSensorReach.isOutOfReach(minutesSinceReading: 11, transmitterType: .dexcom))
+    }
+
+    func testLastLinkProblemIsKeptUntilCleared() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "SensorReachAndLinkProblemTests"))
+        defaults.removePersistentDomain(forName: "SensorReachAndLinkProblemTests")
+        let address = "AFD9F321-3746-861B-192E-F5C10FD5F853"
+        XCTAssertNil(Sibionics2DeviceStatus.lastLinkProblem(for: address, userDefaults: defaults))
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        Sibionics2DeviceStatus.setLastLinkProblem("Link lost", at: date, for: address, userDefaults: defaults)
+        let stored = try XCTUnwrap(Sibionics2DeviceStatus.lastLinkProblem(for: address.lowercased(), userDefaults: defaults))
+        XCTAssertEqual(stored.text, "Link lost")
+        XCTAssertEqual(stored.date, date)
+        Sibionics2DeviceStatus.setLastLinkProblem(nil, for: address, userDefaults: defaults)
+        XCTAssertNil(Sibionics2DeviceStatus.lastLinkProblem(for: address, userDefaults: defaults))
+    }
+}

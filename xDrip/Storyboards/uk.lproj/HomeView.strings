@@ -403,3 +403,4 @@
 "postProcessingAdjustmentDisabledBecauseSensorIsCalibrated" = "Коригування вимкнено, бо цей сенсор уже використовує власне калібрування.";
 "postProcessingAdjustmentDisabledUseNativeAlgorithm" = "Коригування вимкнено, бо цей сенсор уже використовує власне калібрування. Перейдіть на власний алгоритм, щоб дозволити коригування глюкози.";
 "showTreatments" = "Показувати лікування";
+"sensorOutOfReach" = "немає сигналу";

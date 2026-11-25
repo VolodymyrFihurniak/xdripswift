@@ -257,3 +257,10 @@
 "sibionics.glucoseModelStock" = "Stock (default)";
 "sibionics.glucoseModelAdaptiveV2" = "Adaptive V2 (experimental)";
 "sibionics.glucoseModelFooter" = "Stock is the manufacturer's algorithm. Adaptive V2 is an experimental estimator from JugglucoNG: it works from the sensor's calibrated signal before the manufacturer's display filtering, follows changes sooner and is less smooth. A minute it cannot estimate shows the stock value. Changing the model recalculates the sensor's history. Compare with a meter before relying on it.";
+"sibionics.lastLinkProblem" = "Last link problem";
+"sibionics.noLinkProblem" = "None since the last reading";
+"sibionics.problemLinkLost" = "Link lost";
+"sibionics.problemNoReadings" = "No readings while connected";
+"sibionics.problemNotResponding" = "Sensor not responding";
+"sibionics.problemAddressRefused" = "Sensor refused every address";
+"sibionics.problemAuthentication" = "Authentication failed";
