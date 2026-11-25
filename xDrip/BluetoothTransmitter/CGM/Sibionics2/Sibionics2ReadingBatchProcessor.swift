@@ -150,6 +150,11 @@ struct Sibionics2ReadingBatchProcessor {
         readingState = state
         stateStore.save(state, for: deviceIdentifier)
 
+        GlucoseUncertaintyStore.record(processed.compactMap { result in
+            guard let lower = result.lowerMgDl, let upper = result.upperMgDl else { return nil }
+            return GlucoseUncertaintyStore.Entry(date: result.eventTime, mgDl: result.glucoseMgDl, lower: lower, upper: upper)
+        })
+
         guard let newest = processed.max(by: {
             if $0.eventTime == $1.eventTime { return $0.index < $1.index }
             return $0.eventTime < $1.eventTime

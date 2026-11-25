@@ -1523,3 +1523,39 @@ final class AlertDeltaRunAndQuietWindowTests: XCTestCase {
         defaults.removePersistentDomain(forName: "ExperimentalQuietWindowTests")
     }
 }
+
+// MARK: - Uncertainty ribbon
+
+final class GlucoseUncertaintyRibbonTests: XCTestCase {
+
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func testMergeKeepsUsableRecentEntriesOnePerMoment() {
+        let old = GlucoseUncertaintyStore.Entry(date: start.addingTimeInterval(-37 * 3600), mgDl: 100, lower: 90, upper: 110)
+        let first = GlucoseUncertaintyStore.Entry(date: start, mgDl: 100, lower: 90, upper: 110)
+        let replaced = GlucoseUncertaintyStore.Entry(date: start, mgDl: 102, lower: 95, upper: 109)
+        let unusable = GlucoseUncertaintyStore.Entry(date: start.addingTimeInterval(60), mgDl: 100, lower: 110, upper: 90)
+        let merged = GlucoseUncertaintyStore.merged([old, first], adding: [replaced, unusable], now: start)
+        XCTAssertEqual(merged, [replaced])
+    }
+
+    func testRibbonFollowsTheReadingDrawnAndLeavesHoles() {
+        let entries = [GlucoseUncertaintyStore.Entry(date: start, mgDl: 100, lower: 92, upper: 111),
+                       GlucoseUncertaintyStore.Entry(date: start.addingTimeInterval(60), mgDl: 104, lower: 96, upper: 115)]
+        // The second reading is calibrated 6 mg/dL higher and 20 s off; the third has no interval.
+        let dates = [start, start.addingTimeInterval(80), start.addingTimeInterval(180)]
+        let ribbon = GlucoseUncertaintyStore.ribbon(entries: entries, readingDates: dates, readingValues: [100, 110, 112])
+        XCTAssertEqual(ribbon, [GlucoseChartExperimentalPlots.UncertaintyPoint(date: start, lower: 92, upper: 111),
+                                GlucoseChartExperimentalPlots.UncertaintyPoint(date: start.addingTimeInterval(80), lower: 102, upper: 121)])
+    }
+
+    func testRunsBreakAtMissingIntervalsAndGapsAndDropLonePoints() {
+        func point(_ minute: Int) -> GlucoseChartExperimentalPlots.UncertaintyPoint {
+            GlucoseChartExperimentalPlots.UncertaintyPoint(date: start.addingTimeInterval(TimeInterval(minute * 60)), lower: 90, upper: 110)
+        }
+        let dates = [0, 1, 2, 3, 4, 5, 30, 31, 50].map { start.addingTimeInterval(TimeInterval($0 * 60)) }
+        // Minutes 2 and 5 have no interval, 30–31 follow a 26-minute gap, 50 stands alone after a 19-minute one.
+        let runs = GlucoseChartExperimentalPlots.uncertaintyRuns([0, 1, 3, 4, 30, 31, 50].map(point), readingDates: dates)
+        XCTAssertEqual(runs.map { $0.points.map { Int($0.date.timeIntervalSince(start) / 60) } }, [[0, 1], [3, 4], [30, 31]])
+    }
+}

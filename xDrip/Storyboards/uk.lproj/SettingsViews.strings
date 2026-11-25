@@ -843,6 +843,8 @@
 
 /* Fork: Ukrainian translation completed */
 "experimental.chartCursor" = "Лінійка на графіку";
+"experimental.uncertaintyRibbon" = "Імовірний діапазон навколо показників";
+"experimental.uncertaintyRibbonDetail" = "Sibionics Adaptive V2";
 "experimental.iobValue" = "IOB %@";
 "experimental.cobValue" = "COB %@";
 "experimental.basalOnBoardValue" = "Базальний %@";

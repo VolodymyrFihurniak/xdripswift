@@ -229,6 +229,25 @@ final class Sibionics2GlucoseProcessorTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(stockResults[130]), 3.6 * 18, accuracy: 0.001)
     }
 
+    func testAdaptiveV2CarriesItsIntervalAndStockHasNone() throws {
+        let rows = try startupRows()
+        var adaptive = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: .adaptiveV2)
+        var stock = Sibionics2GlucoseProcessor(sensitivity: 1.44)
+        var intervals = 0
+        for row in rows {
+            if let result = adaptive.process(row.reading(), mode: .replay), let lower = result.lowerMgDl, let upper = result.upperMgDl {
+                intervals += 1
+                XCTAssertGreaterThan(lower, 0)
+                XCTAssertGreaterThanOrEqual(upper, lower)
+            }
+            if let result = stock.process(row.reading(), mode: .replay) {
+                XCTAssertNil(result.lowerMgDl)
+                XCTAssertNil(result.upperMgDl)
+            }
+        }
+        XCTAssertGreaterThan(intervals, 0)
+    }
+
     func testAdaptiveV2SnapshotContinuesExactlyAndIsNotInterchangeableWithStock() throws {
         let rows = try startupRows()
         var source = Sibionics2GlucoseProcessor(sensitivity: 1.44, model: .adaptiveV2)

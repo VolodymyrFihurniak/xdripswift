@@ -16,6 +16,13 @@ Island, Smart Stack and CarPlay included), the watch app and the rotated day-com
 (landscape, and the iPad AGP view). Companions pick it up with the next reading. The small
 overview chart under the main chart keeps its dots.
 
+**Likely range around readings** (on by default, as in JugglucoNG) draws a faint band around the
+readings of a Sibionics sensor on the Adaptive V2 glucose model: the estimator's 90 % interval for
+each minute. It is the model's own probability, not a measured accuracy. The band keeps its width
+and follows the reading drawn (so a calibration moves it with the line), breaks where a reading has
+no interval or at a 17-minute gap, and is kept for 36 hours. Stock readings and other sensors have
+no band. Main chart only; readings, alarms and uploads are unchanged.
+
 ## Chart cursor
 
 JugglucoNG's scrub cursor, on by default. Touch the glucose line (within 26 points; JugglucoNG

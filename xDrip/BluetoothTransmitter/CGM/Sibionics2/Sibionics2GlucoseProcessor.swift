@@ -58,6 +58,9 @@ struct Sibionics2ProcessedGlucose {
     let index: Int
     let eventTime: Date
     let trend: Sibionics2Trend
+    /// Adaptive V2's 90 % interval around this value (mg/dL), nil for the stock algorithm.
+    var lowerMgDl: Double? = nil
+    var upperMgDl: Double? = nil
 }
 
 /// Stateful xDrip wrapper for stock correction streams. V115G uses validated
@@ -135,6 +138,7 @@ struct Sibionics2GlucoseProcessor {
         // anything can return. Its estimate replaces the stock value whenever it is usable;
         // the stock value (and its deltas) stays the fallback and is never fed back into it.
         var adaptiveMmol: Float?
+        var adaptiveBounds: (lower: Float, upper: Float)?
         if let adaptive = coreBox.adaptive {
             let estimate = core.processAdaptiveV2(
                 estimator: adaptive,
@@ -148,6 +152,8 @@ struct Sibionics2GlucoseProcessor {
                 // Full precision, as JugglucoNG emits it since e64e3fd3e: rounding to 0.1 mmol/L left
                 // about two minutes in three repeating the previous value. Display still rounds.
                 adaptiveMmol = estimate
+                let lower = adaptive.latestLower90Mmol(), upper = adaptive.latestUpper90Mmol()
+                if lower.isFinite, upper.isFinite, lower > 0, upper >= lower { adaptiveBounds = (lower, upper) }
             }
         }
         let stockMmol = stockDisplayMmol(candidate: candidate, raw: raw, mode: mode)
@@ -157,12 +163,17 @@ struct Sibionics2GlucoseProcessor {
         guard mgDl.isFinite,
               mgDl > 0,
               mgDl <= Sibionics2SensorProfile.maximumReportableGlucoseMgDl else { return nil }
-        return Sibionics2ProcessedGlucose(
+        var result = Sibionics2ProcessedGlucose(
             glucoseMgDl: mgDl,
             index: reading.index,
             eventTime: reading.eventTime,
             trend: reading.trend
         )
+        if adaptiveMmol != nil, let adaptiveBounds {
+            result.lowerMgDl = Double(adaptiveBounds.lower) * Self.mmolToMgDlConversionFactor
+            result.upperMgDl = Double(adaptiveBounds.upper) * Self.mmolToMgDlConversionFactor
+        }
+        return result
     }
 
     /// The stock value for a sample: the core's correction, or raw glucose carried by the

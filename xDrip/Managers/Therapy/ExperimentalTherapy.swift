@@ -110,6 +110,7 @@ extension UserDefaults {
     private enum ExperimentalKey {
         static let chartStyle = "experimentalGlucoseChartStyle"
         static let chartCursor = "experimentalChartCursorEnabled"
+        static let uncertaintyRibbon = "experimentalUncertaintyRibbonEnabled"
         static let predictionEnabled = "experimentalPredictionEnabled"
         static let predictionHorizon = "experimentalPredictionHorizonMinutes"
         static let predictionMomentum = "experimentalPredictionTrendMomentum"
@@ -145,6 +146,13 @@ extension UserDefaults {
     var experimentalChartCursorEnabled: Bool {
         get { object(forKey: ExperimentalKey.chartCursor) as? Bool ?? true }
         set { set(newValue, forKey: ExperimentalKey.chartCursor) }
+    }
+
+    /// JugglucoNG's uncertainty ribbon (`glucose_uncertainty_ribbon`, on by default there too): only
+    /// readings of an estimator with an interval (Sibionics Adaptive V2) have one.
+    var experimentalUncertaintyRibbonEnabled: Bool {
+        get { object(forKey: ExperimentalKey.uncertaintyRibbon) as? Bool ?? true }
+        set { set(newValue, forKey: ExperimentalKey.uncertaintyRibbon) }
     }
 
     /// Off by default here: JugglucoNG enables it, but in xDrip it is an experimental feature.
@@ -1933,6 +1941,7 @@ enum ExperimentalChartInputs {
     static func settingsSignature(defaults: UserDefaults = .standard) -> String {
         let model = ExperimentalPredictionModel(defaults: defaults)
         return [defaults.experimentalGlucoseChartStyle.rawValue.description, defaults.experimentalPredictionEnabled.description,
+                defaults.experimentalUncertaintyRibbonEnabled.description,
                 defaults.experimentalInsulinsEnabled.description, model.horizonMinutes.description, model.trendMomentum.description,
                 model.carbRatio.description, model.insulinSensitivityMgDl.description, model.carbAbsorption.description,
                 model.bolusInsulin.rawValue, model.basalInsulin.rawValue, defaults.bloodGlucoseUnitIsMgDl.description,
@@ -1993,6 +2002,11 @@ enum ExperimentalChartInputs {
                       defaults: UserDefaults = .standard, now: Date = Date()) async -> GlucoseChartExperimentalPlots {
         var plots = GlucoseChartExperimentalPlots()
         plots.drawsGlucoseAsLine = defaults.experimentalGlucoseChartStyle == .line
+        if defaults.experimentalUncertaintyRibbonEnabled {
+            plots.uncertainty = GlucoseUncertaintyStore.ribbon(
+                entries: GlucoseUncertaintyStore.entries(from: dataStart.addingTimeInterval(-60), to: dataEnd.addingTimeInterval(60)),
+                readingDates: chartState.bgReadingDates, readingValues: chartState.bgReadingValues)
+        }
         let model = ExperimentalPredictionModel(defaults: defaults)
         let atPresent = chartState.endDate.timeIntervalSince(now) > -ConstantsGlucoseChartSwiftUI.experimentalPredictionPresentTolerance
         let wantsPrediction = defaults.experimentalPredictionEnabled && atPresent
@@ -2158,5 +2172,93 @@ enum ExperimentalQuietWindow {
         silenced[key] = [since.timeIntervalSince1970, date.timeIntervalSince1970]
         defaults.set(silenced, forKey: silencedKey)
         return delivery
+    }
+}
+
+// MARK: - Uncertainty ribbon
+
+/// JugglucoNG `GlucoseUncertainty` for the readings of an estimator that says how sure it is
+/// (Sibionics Adaptive V2): the 90 % interval around each value, kept 36 hours in Application
+/// Support. Display only — readings, alarms and uploads never see it.
+enum GlucoseUncertaintyStore {
+    struct Entry: Codable, Equatable {
+        let date: Date
+        /// The value the interval was computed around; the chart shifts the interval to the reading drawn.
+        let mgDl: Double
+        let lower: Double
+        let upper: Double
+
+        var isUsable: Bool { lower.isFinite && upper.isFinite && lower > 0 && upper >= lower }
+    }
+
+    static let keptFor: TimeInterval = 36 * 60 * 60
+    private static let queue = DispatchQueue(label: "glucose.uncertainty", qos: .utility)
+    private static var cache: [Entry]?
+
+    static var fileURL: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("experimental-glucose-uncertainty.json")
+    }
+
+    /// Entries oldest first, one per moment (a newer entry for the same second replaces the older one).
+    static func merged(_ existing: [Entry], adding new: [Entry], now: Date) -> [Entry] {
+        var byDate: [TimeInterval: Entry] = [:]
+        for entry in existing + new where entry.isUsable && now.timeIntervalSince(entry.date) <= keptFor {
+            byDate[entry.date.timeIntervalSince1970.rounded()] = entry
+        }
+        return byDate.values.sorted { $0.date < $1.date }
+    }
+
+    static func record(_ entries: [Entry], now: Date = Date()) {
+        guard !entries.isEmpty else { return }
+        queue.async {
+            let updated = merged(loadLocked(), adding: entries, now: now)
+            cache = updated
+            guard let url = fileURL else { return }
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? JSONEncoder().encode(updated).write(to: url, options: .atomic)
+        }
+    }
+
+    static func entries(from start: Date, to end: Date) -> [Entry] {
+        queue.sync { loadLocked().filter { $0.date >= start && $0.date <= end } }
+    }
+
+    static func clear() {
+        queue.sync {
+            cache = []
+            if let url = fileURL { try? FileManager.default.removeItem(at: url) }
+        }
+    }
+
+    private static func loadLocked() -> [Entry] {
+        if let cache { return cache }
+        guard let url = fileURL, let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([Entry].self, from: data) else { return [] }
+        cache = decoded
+        return decoded
+    }
+
+    /// The ribbon around the readings drawn: each stored interval keeps its width and follows its
+    /// reading (JugglucoNG `GlucoseUncertainty.shifted`, so calibration moves it with the line).
+    /// A reading without an interval within 30 seconds leaves a hole.
+    static func ribbon(entries: [Entry], readingDates: [Date], readingValues: [Double]) -> [GlucoseChartExperimentalPlots.UncertaintyPoint] {
+        guard !entries.isEmpty else { return [] }
+        let sorted = entries.sorted { $0.date < $1.date }
+        var result: [GlucoseChartExperimentalPlots.UncertaintyPoint] = []
+        for (date, value) in zip(readingDates, readingValues) where value > 0 {
+            var low = 0, high = sorted.count
+            while low < high {
+                let middle = (low + high) / 2
+                if sorted[middle].date < date { low = middle + 1 } else { high = middle }
+            }
+            let candidates = [low - 1, low].filter { sorted.indices.contains($0) }
+            guard let nearest = candidates.min(by: { abs(sorted[$0].date.timeIntervalSince(date)) < abs(sorted[$1].date.timeIntervalSince(date)) }),
+                  abs(sorted[nearest].date.timeIntervalSince(date)) <= 30 else { continue }
+            let entry = sorted[nearest]
+            let shift = value - entry.mgDl
+            result.append(GlucoseChartExperimentalPlots.UncertaintyPoint(date: date, lower: entry.lower + shift, upper: entry.upper + shift))
+        }
+        return result.sorted { $0.date < $1.date }
     }
 }

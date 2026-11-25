@@ -51,7 +51,8 @@ extension SettingsViewGroupedSettingsViewModel {
                     settingsScreen: { ExperimentalSettingsViewModel.powerSavingScreen }
                 )
             ],
-            leadingRows: { [ExperimentalSettingsViewModel.chartStyleRow(), ExperimentalSettingsViewModel.chartCursorRow()] }
+            leadingRows: { [ExperimentalSettingsViewModel.chartStyleRow(), ExperimentalSettingsViewModel.chartCursorRow(),
+                            ExperimentalSettingsViewModel.uncertaintyRibbonRow()] }
         )
     }
 }
@@ -135,6 +136,14 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         SettingsRow(id: "experimental.chartCursor", title: ExperimentalTexts.text("chartCursor", "Chart cursor"),
                     control: .toggle(isOn: { UserDefaults.standard.experimentalChartCursorEnabled },
                                      setIsOn: { UserDefaults.standard.experimentalChartCursorEnabled = $0 }))
+    }
+
+    /// JugglucoNG's uncertainty ribbon around readings of Sibionics Adaptive V2.
+    static func uncertaintyRibbonRow() -> SettingsRow {
+        SettingsRow(id: "experimental.uncertaintyRibbon", title: ExperimentalTexts.text("uncertaintyRibbon", "Likely range around readings"),
+                    detail: ExperimentalTexts.text("uncertaintyRibbonDetail", "Sibionics Adaptive V2"),
+                    control: .toggle(isOn: { UserDefaults.standard.experimentalUncertaintyRibbonEnabled },
+                                     setIsOn: { UserDefaults.standard.experimentalUncertaintyRibbonEnabled = $0 }))
     }
 
     static func title(for style: ExperimentalGlucoseChartStyle) -> String {
