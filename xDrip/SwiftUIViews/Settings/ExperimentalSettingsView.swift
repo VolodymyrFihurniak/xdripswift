@@ -6,6 +6,7 @@
 //  line style. The prediction and insulin models are ported from JugglucoNG.
 //
 
+import Charts
 import SwiftUI
 import UserNotifications
 
@@ -671,6 +672,8 @@ struct ExperimentalPredictionAccuracyView: View {
     @State private var report: [HorizonAccuracy] = []
     @State private var adaptiveReport: [HorizonAccuracy] = []
     @State private var forecastCount = 0
+    @State private var forecasts: [RecordedForecast] = []
+    @State private var readings: [(date: Date, mgDl: Double)] = []
     @State private var isLoading = true
     private let isMgDl = UserDefaults.standard.bloodGlucoseUnitIsMgDl
 
@@ -694,8 +697,14 @@ struct ExperimentalPredictionAccuracyView: View {
                     }
                 }
                 Section {
+                    NavigationLink(ExperimentalTexts.text("inspectorTitle", "Past forecasts")) {
+                        ExperimentalPredictionInspectorView(moments: PredictionInspector.moments(forecasts), readings: readings)
+                    }
+                }
+                Section {
                     Button(ExperimentalTexts.text("accuracyClear", "Delete recorded forecasts"), role: .destructive) {
                         PredictionAccuracyRecorder.clear()
+                        forecasts = []
                         report = []
                         adaptiveReport = []
                         forecastCount = 0
@@ -736,6 +745,7 @@ struct ExperimentalPredictionAccuracyView: View {
     @MainActor
     private func load() async {
         let forecasts = PredictionAccuracyRecorder.load()
+        self.forecasts = forecasts
         forecastCount = forecasts.filter { !$0.isAdaptive }.count
         guard let earliest = forecasts.map(\.origin).min(), let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager else {
             isLoading = false
@@ -744,10 +754,141 @@ struct ExperimentalPredictionAccuracyView: View {
         let readings = BgReadingsAccessor(coreDataManager: coreDataManager)
             .getLatestBgReadings(limit: nil, fromDate: earliest.addingTimeInterval(-60), forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
             .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
+        self.readings = readings.filter { $0.mgDl > 0 }.sorted { $0.date < $1.date }
         report = PredictionAccuracy.report(forecasts: forecasts.filter { !$0.isAdaptive }, readings: readings)
         let adaptive = forecasts.filter(\.isAdaptive)
         adaptiveReport = adaptive.isEmpty ? [] : PredictionAccuracy.report(forecasts: adaptive, readings: readings)
         isLoading = false
+    }
+}
+
+/// JugglucoNG's prediction inspector: one recorded forecast at a time, drawn over the readings of
+/// the hour before and the two hours after, with what it said and what happened at each horizon.
+struct ExperimentalPredictionInspectorView: View {
+    let moments: [PredictionInspector.Moment]
+    let readings: [(date: Date, mgDl: Double)]
+    @State private var index = 0
+    private let isMgDl = UserDefaults.standard.bloodGlucoseUnitIsMgDl
+
+    private struct Point: Identifiable {
+        let series: String
+        let date: Date
+        let mgDl: Double
+        var id: String { series + String(date.timeIntervalSince1970) }
+    }
+
+    var body: some View {
+        List {
+            if moments.isEmpty {
+                Text(ExperimentalTexts.text("accuracyEmpty", "No forecasts recorded yet. Turn on Record accuracy and come back after a few hours."))
+            } else {
+                let moment = moments[min(index, moments.count - 1)]
+                Section {
+                    HStack {
+                        Button {
+                            index = min(index + 1, moments.count - 1)
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .disabled(index >= moments.count - 1)
+                        .accessibilityLabel(ExperimentalTexts.text("inspectorPrevious", "Earlier forecast"))
+                        Spacer()
+                        Text(String(format: ExperimentalTexts.text("inspectorForecastAt", "Forecast at %@"),
+                                    moment.origin.formatted(date: .abbreviated, time: .shortened)))
+                            .font(.headline)
+                        Spacer()
+                        Button {
+                            index = max(index - 1, 0)
+                        } label: {
+                            Image(systemName: "chevron.right")
+                        }
+                        .disabled(index == 0)
+                        .accessibilityLabel(ExperimentalTexts.text("inspectorNext", "Later forecast"))
+                    }
+                    .buttonStyle(.borderless)
+                    chart(moment)
+                        .frame(height: 220)
+                }
+                Section(footer: Text(ExperimentalTexts.text("inspectorFooter", "Solid: the readings that followed. Dashed: the standard forecast; dotted: the adaptive one. A forecast is compared with the glucose at each horizon, read between two readings when needed."))) {
+                    outcomeHeader(hasAdaptive: moment.adaptive != nil)
+                    ForEach(PredictionAccuracy.horizons, id: \.self) { horizon in
+                        outcomeRow(moment: moment, horizon: horizon)
+                    }
+                }
+            }
+        }
+        .navigationTitle(ExperimentalTexts.text("inspectorTitle", "Past forecasts"))
+    }
+
+    private func points(_ moment: PredictionInspector.Moment) -> [Point] {
+        let start = moment.origin.addingTimeInterval(-60 * 60), end = moment.origin.addingTimeInterval(120 * 60)
+        var points = readings.filter { $0.date >= start && $0.date <= end }.map { Point(series: "actual", date: $0.date, mgDl: $0.mgDl) }
+        for (series, predicted) in [("standard", moment.standard), ("adaptive", moment.adaptive)] {
+            guard let predicted else { continue }
+            points.append(Point(series: series, date: moment.origin, mgDl: moment.originMgDl))
+            for horizon in predicted.keys.sorted() {
+                if let value = predicted[horizon] {
+                    points.append(Point(series: series, date: moment.origin.addingTimeInterval(TimeInterval(horizon * 60)), mgDl: value))
+                }
+            }
+        }
+        return points
+    }
+
+    private func chart(_ moment: PredictionInspector.Moment) -> some View {
+        Chart(points(moment)) { point in
+            LineMark(x: .value("Time", point.date), y: .value("BG", display(point.mgDl)), series: .value("Series", point.series))
+                .foregroundStyle(point.series == "actual" ? Color.primary : ConstantsGlucoseChartSwiftUI.experimentalPredictionColor)
+                .lineStyle(point.series == "actual" ? StrokeStyle(lineWidth: 2)
+                           : point.series == "adaptive" ? StrokeStyle(lineWidth: 2.5, lineCap: .round, dash: [0.1, 5])
+                           : StrokeStyle(lineWidth: 2, dash: [6, 4]))
+            if point.series != "actual" {
+                PointMark(x: .value("Time", point.date), y: .value("BG", display(point.mgDl)))
+                    .symbolSize(18)
+                    .foregroundStyle(ConstantsGlucoseChartSwiftUI.experimentalPredictionColor)
+            }
+        }
+        .chartXScale(domain: moment.origin.addingTimeInterval(-60 * 60)...moment.origin.addingTimeInterval(120 * 60))
+    }
+
+    private func outcomeHeader(hasAdaptive: Bool) -> some View {
+        HStack {
+            Text(ExperimentalTexts.text("inspectorIn", "In")).frame(maxWidth: .infinity, alignment: .leading)
+            Text(ExperimentalTexts.text("accuracyStandard", "Standard forecast")).frame(maxWidth: .infinity, alignment: .trailing)
+            if hasAdaptive {
+                Text(ExperimentalTexts.text("accuracyAdaptive", "Adaptive forecast")).frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            Text(ExperimentalTexts.text("inspectorActual", "Actual")).frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(2)
+    }
+
+    private func outcomeRow(moment: PredictionInspector.Moment, horizon: Int) -> some View {
+        let outcome = PredictionInspector.outcome(origin: moment.origin, horizon: horizon, readings: readings,
+                                                  maximumGap: PredictionAccuracy.maximumGap(readings: readings))
+        let actualText: String
+        switch outcome {
+        case .actual(let value): actualText = glucose(value)
+        case .pending: actualText = ExperimentalTexts.text("inspectorPending", "waiting")
+        case .missing: actualText = ExperimentalTexts.text("inspectorMissing", "no reading")
+        }
+        return HStack {
+            Text(ExperimentalSettingsViewModel.minutesText(horizon)).frame(maxWidth: .infinity, alignment: .leading)
+            Text(moment.standard?[horizon].map(glucose) ?? "–").frame(maxWidth: .infinity, alignment: .trailing)
+            if moment.adaptive != nil {
+                Text(moment.adaptive?[horizon].map(glucose) ?? "–").frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            Text(actualText).frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .font(.callout.monospacedDigit())
+    }
+
+    private func display(_ mgDl: Double) -> Double { isMgDl ? mgDl : mgDl * ConstantsBloodGlucose.mgDlToMmoll }
+
+    private func glucose(_ mgDl: Double) -> String {
+        ExperimentalSettingsViewModel.numberText(display(mgDl), fractionDigits: isMgDl ? 0 : 1)
     }
 }
 

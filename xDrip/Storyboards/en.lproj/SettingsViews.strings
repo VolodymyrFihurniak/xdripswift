@@ -608,6 +608,15 @@
 "experimental.accuracyCount" = "%ld forecasts recorded. A horizon needs at least %ld compared forecasts to say much.";
 "experimental.accuracyLine" = "Error %@ · no change %@ · bias %@";
 "experimental.accuracyClear" = "Delete recorded forecasts";
+"experimental.inspectorTitle" = "Past forecasts";
+"experimental.inspectorPrevious" = "Earlier forecast";
+"experimental.inspectorNext" = "Later forecast";
+"experimental.inspectorForecastAt" = "Forecast at %@";
+"experimental.inspectorFooter" = "Solid: the readings that followed. Dashed: the standard forecast; dotted: the adaptive one. A forecast is compared with the glucose at each horizon, read between two readings when needed.";
+"experimental.inspectorIn" = "In";
+"experimental.inspectorActual" = "Actual";
+"experimental.inspectorPending" = "waiting";
+"experimental.inspectorMissing" = "no reading";
 "experimental.predictionNightscout" = "Upload to Nightscout";
 "experimental.predictionNightscoutFooter" = "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.";
 "experimental.chartCursor" = "Chart cursor";

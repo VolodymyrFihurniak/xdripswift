@@ -1676,6 +1676,44 @@ enum PredictionAccuracy {
     }
 }
 
+/// JugglucoNG `PredictionInspectorScreen`: one recorded forecast at a time over the readings that
+/// followed it — what it said, and what happened.
+enum PredictionInspector {
+    struct Moment: Hashable {
+        let origin: Date
+        let originMgDl: Double
+        var standard: [Int: Double]?
+        var adaptive: [Int: Double]?
+    }
+
+    enum Outcome: Equatable {
+        case pending
+        case missing
+        case actual(Double)
+    }
+
+    /// The standard and adaptive forecast of one reading together, newest first.
+    static func moments(_ records: [RecordedForecast]) -> [Moment] {
+        var byOrigin: [Int: Moment] = [:]
+        for record in records {
+            let key = Int(record.origin.timeIntervalSince1970.rounded())
+            var moment = byOrigin[key] ?? Moment(origin: record.origin, originMgDl: record.originMgDl)
+            if record.isAdaptive { moment.adaptive = record.predicted } else { moment.standard = record.predicted }
+            byOrigin[key] = moment
+        }
+        return byOrigin.values.sorted { $0.origin > $1.origin }
+    }
+
+    /// What happened `horizon` minutes after `origin`, scored as `PredictionAccuracy.report` does.
+    static func outcome(origin: Date, horizon: Int, readings: [(date: Date, mgDl: Double)], maximumGap: TimeInterval,
+                        now: Date = Date()) -> Outcome {
+        let target = origin.addingTimeInterval(TimeInterval(horizon * 60))
+        if let actual = PredictionAccuracy.actual(at: target, readings: readings, maximumGap: maximumGap) { return .actual(actual) }
+        let latest = readings.last?.date ?? .distantPast
+        return target > latest && target > now.addingTimeInterval(-PredictionAccuracy.arrivalAllowance) ? .pending : .missing
+    }
+}
+
 /// Records one forecast every five minutes while "Record accuracy" is on, keeping 14 days in a
 /// file in Application Support.
 enum PredictionAccuracyRecorder {

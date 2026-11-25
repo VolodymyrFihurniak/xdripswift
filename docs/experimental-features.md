@@ -112,6 +112,12 @@ the bias (positive means the forecast ran high) and the error of simply assuming
 Readings are interpolated across gaps of at most 2.5 reading intervals (6–20 minutes). A horizon
 needs at least 36 compared forecasts before it says much.
 
+**Past forecasts** (Prediction accuracy → Past forecasts, JugglucoNG's prediction inspector) shows
+one recorded forecast at a time over the hour before and the two hours after it: the readings that
+followed (solid), the standard forecast (dashed) and the adaptive one (dotted), and a table of what
+each said at 15, 30, 60 and 120 minutes against the glucose then (waiting / no reading when there is
+none yet). Arrows step to earlier and later forecasts.
+
 ### Nightscout
 
 **Upload to Nightscout** sends the forecast every five minutes as an OpenAPS-style devicestatus

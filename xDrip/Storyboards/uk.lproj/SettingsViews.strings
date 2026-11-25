@@ -838,6 +838,15 @@
 "experimental.accuracyCount" = "Записано прогнозів: %ld. Для надійної оцінки горизонту потрібно щонайменше %ld порівняних прогнозів.";
 "experimental.accuracyLine" = "Похибка %@ · без змін %@ · зміщення %@";
 "experimental.accuracyClear" = "Видалити записані прогнози";
+"experimental.inspectorTitle" = "Минулі прогнози";
+"experimental.inspectorPrevious" = "Попередній прогноз";
+"experimental.inspectorNext" = "Наступний прогноз";
+"experimental.inspectorForecastAt" = "Прогноз о %@";
+"experimental.inspectorFooter" = "Суцільна лінія — показники, що були далі. Штрихова — стандартний прогноз, пунктирна — адаптивний. Прогноз порівнюється з глюкозою на кожному горизонті, за потреби — між двома показниками.";
+"experimental.inspectorIn" = "Через";
+"experimental.inspectorActual" = "Насправді";
+"experimental.inspectorPending" = "очікується";
+"experimental.inspectorMissing" = "немає показника";
 "experimental.predictionNightscout" = "Відвантажувати в Nightscout";
 "experimental.predictionNightscoutFooter" = "Кожні п’ять хвилин прогноз відвантажується як devicestatus у форматі OpenAPS, як це робить AAPS, тож Nightscout показує його лініями прогнозу (увімкніть плагін openaps). Недоступно, поки xDrip стежить за статусом AID із Nightscout. Болюси також передають вибраний інсулін у нотатках, а вуглеводи — білки й жири.";
 

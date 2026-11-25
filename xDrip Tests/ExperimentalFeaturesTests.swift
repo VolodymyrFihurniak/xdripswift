@@ -1559,3 +1559,36 @@ final class GlucoseUncertaintyRibbonTests: XCTestCase {
         XCTAssertEqual(runs.map { $0.points.map { Int($0.date.timeIntervalSince(start) / 60) } }, [[0, 1], [3, 4], [30, 31]])
     }
 }
+
+// MARK: - Prediction inspector
+
+final class PredictionInspectorTests: XCTestCase {
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func testMomentsPairStandardAndAdaptiveNewestFirst() {
+        let records = [
+            RecordedForecast(origin: start, originMgDl: 100, predicted: [15: 110]),
+            RecordedForecast(origin: start, originMgDl: 100, predicted: [15: 105], model: RecordedForecast.adaptiveModel),
+            RecordedForecast(origin: start.addingTimeInterval(300), originMgDl: 102, predicted: [15: 112])
+        ]
+        let moments = PredictionInspector.moments(records)
+        XCTAssertEqual(moments.map(\.origin), [start.addingTimeInterval(300), start])
+        XCTAssertEqual(moments[1].standard, [15: 110])
+        XCTAssertEqual(moments[1].adaptive, [15: 105])
+        XCTAssertNil(moments[0].adaptive)
+    }
+
+    func testOutcomeIsActualPendingOrMissing() {
+        // Readings every 5 minutes for 20 minutes, rising 2 a minute.
+        let readings = (0...4).map { (date: start.addingTimeInterval(TimeInterval($0 * 300)), mgDl: 100 + Double($0 * 10)) }
+        let gap = PredictionAccuracy.maximumGap(readings: readings)
+        XCTAssertEqual(PredictionInspector.outcome(origin: start, horizon: 15, readings: readings, maximumGap: gap,
+                                                   now: start.addingTimeInterval(1200)), .actual(130))
+        // 30 minutes: after the newest reading, within the arrival allowance.
+        XCTAssertEqual(PredictionInspector.outcome(origin: start, horizon: 30, readings: readings, maximumGap: gap,
+                                                   now: start.addingTimeInterval(1200)), .pending)
+        // Long past and still without a reading.
+        XCTAssertEqual(PredictionInspector.outcome(origin: start, horizon: 30, readings: readings, maximumGap: gap,
+                                                   now: start.addingTimeInterval(4 * 3600)), .missing)
+    }
+}
