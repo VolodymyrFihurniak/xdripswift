@@ -214,6 +214,10 @@ root list; the index walks rows that open a child `SettingsScreen` (depth 4) whe
 result pushes the screen chain (`SettingsActionPresenter.show(settingsScreens:)`). Rows inside custom
 SwiftUI screens (e.g. `.custom` NavigationLinks) are found only as far as their parent screen.
 
+Quick treatment logging (`AppShortcuts.swift`): `LogCarbsIntent` / `LogInsulinIntent` (Siri, Shortcuts,
+Action button; unlocked phone only) save a `TreatmentEntry` like the editor (`QuickTreatmentLog`, app's store
+when running, else `CoreDataManager.create`) and request a Nightscout sync. Strings in `Localizable.strings`.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new

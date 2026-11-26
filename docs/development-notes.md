@@ -117,5 +117,7 @@ hardware first, roughly in order of risk:
 3. Bluetooth glucose meters (Glucose Profile, Verio, Satellite): pairing prompt, record cursor.
 4. Libre 2 stream watchdog: a hung link is dropped after 150 s and comes back 5 s later.
 5. Alarm quiet window: sound held back, lows still breaking through.
+6. Predicted High alert and its insulin coverage; Settings search opening the right screen;
+   Siri / Shortcuts "Log carbs" and "Log insulin" (entry appears on Home and goes to Nightscout).
 
 Not portable to iOS: NovoPen unattended background reading (NFC needs a user tap).
