@@ -148,6 +148,17 @@ xDrip follows an AID's status from Nightscout, so the AID's own lines stay the o
 upload the chosen insulin as `notes`, carb entries their `protein` and `fat`, exercise its
 intensity note.
 
+### Suggest from history
+
+Glucose prediction → Model → **Suggest from history** (`TherapyParameterEstimator`, fork
+extension) reads the last 28 days and estimates, per model period, the insulin sensitivity from
+clean corrections (a lone bolus ≥ 0.5 U from ≥ 120 mg/dL, no carbs, exercise or other insulin from
+3 h before to 4 h after: drop over 4 h ÷ (units × delivered share)) and the carb ratio from clean
+meals (carbs within 30 min, bolused within 30 min, nothing else from 3 h before to 5 h after;
+solved from the 5-hour change with the period's sensitivity). Readings must be continuous (gaps
+≤ 20 min) and stay ≥ 70 mg/dL. A suggestion is the median of at least three events within the
+settings' ranges; **Use** writes it into the single value or that period. Nothing changes on its own.
+
 ### Predicted low alert
 
 Settings → Alerts → **Predicted Low** (off by default) warns before a low: it fires when the

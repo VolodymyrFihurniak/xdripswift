@@ -1024,6 +1024,218 @@ enum PredictedHighAlert {
     }
 }
 
+// MARK: - Sensitivity and carb ratio from history (fork extension)
+
+/// Estimates insulin sensitivity and carb ratio from the person's own logged history, per period
+/// of the prediction model, for the person to review: nothing is ever changed without a tap.
+///
+/// - Sensitivity, from **corrections**: one bolus of at least 0.5 U of an insulin that counts
+///   toward the forecast, glucose at least 120 mg/dL, no carbs, exercise or other bolus from three
+///   hours before to four hours after, readings throughout (no gap over 20 minutes) and none below
+///   70 mg/dL (a low may have been treated with carbs nobody logged). Sensitivity = drop over four
+///   hours ÷ (units × the share of the dose's action delivered by then).
+/// - Carb ratio, from **meals**: carbs of at least 10 g within 30 minutes, bolused within 30 minutes
+///   of the first, nothing else from three hours before to five hours after, readings throughout and
+///   none below 70 mg/dL. With the model's sensitivity, the change over five hours is carbs × absorbed
+///   share × sensitivity ÷ ratio − units × delivered share × sensitivity, solved for the ratio.
+///
+/// A period's suggestion is the median of at least `minimumEvents` events, and only within the
+/// settings' ranges. Unlogged food, exercise, illness, stress and sensor error all bend it.
+enum TherapyParameterEstimator {
+    enum Parameter: String, Sendable { case sensitivity, carbRatio }
+
+    struct Suggestion: Hashable, Sendable {
+        /// Start of the model period, minutes after midnight; nil for the single values (before the first period).
+        let periodStartMinute: Int?
+        let parameter: Parameter
+        /// mg/dL per unit, or grams per unit.
+        let suggested: Double
+        let current: Double
+        let events: Int
+    }
+
+    static let minimumEvents = 3
+    static let minimumCorrectionUnits = 0.5
+    static let minimumCorrectionStartMgDl = 120.0
+    static let minimumMealGrams = 10.0
+    static let lowLimitMgDl = 70.0
+    static let maximumGap: TimeInterval = 20 * 60
+    static let quietBefore: TimeInterval = 3 * 60 * 60
+    static let correctionWindow: TimeInterval = 4 * 60 * 60
+    static let mealWindow: TimeInterval = 5 * 60 * 60
+    static let mealCluster: TimeInterval = 30 * 60
+    static let historyDays = 28
+
+    /// One estimate per usable event, with the period it belongs to.
+    struct Event: Hashable, Sendable {
+        let date: Date
+        let parameter: Parameter
+        let value: Double
+    }
+
+    /// Glucose at `date` from ascending readings, interpolated across at most `maximumGap`.
+    static func glucose(at date: Date, readings: [(date: Date, mgDl: Double)]) -> Double? {
+        PredictionAccuracy.actual(at: date, readings: readings, maximumGap: maximumGap)
+    }
+
+    /// Readings cover `from...to` without a gap over `maximumGap` and none is below the low limit.
+    static func isClean(from: Date, to: Date, readings: [(date: Date, mgDl: Double)]) -> Bool {
+        let inside = readings.filter { $0.date >= from.addingTimeInterval(-maximumGap) && $0.date <= to.addingTimeInterval(maximumGap) }
+        guard let first = inside.first, let last = inside.last, first.date <= from, last.date >= to else { return false }
+        for (previous, next) in zip(inside, inside.dropFirst()) where next.date.timeIntervalSince(previous.date) > maximumGap { return false }
+        return !inside.contains { $0.date >= from && $0.date <= to && $0.mgDl < lowLimitMgDl }
+    }
+
+    private static func countsAsInsulin(_ treatment: ExperimentalTreatment, model: ExperimentalPredictionModel) -> Bool {
+        guard treatment.kind == .bolus || treatment.kind == .basalInjection, treatment.amount.isFinite, treatment.amount > 0 else { return false }
+        return treatment.insulin(bolusDefault: model.bolusInsulin, basalDefault: model.basalInsulin)?.countsTowardPrediction == true
+    }
+
+    /// Share of a dose's action delivered `minutes` after it.
+    private static func deliveredShare(_ treatment: ExperimentalTreatment, model: ExperimentalPredictionModel, minutes: Double) -> Double {
+        guard let insulin = treatment.insulin(bolusDefault: model.bolusInsulin, basalDefault: model.basalInsulin) else { return 0 }
+        let points = InsulinCurveCatalogue.curve(for: insulin, units: treatment.amount, bodyWeightKg: model.bodyWeightKg)
+        return InsulinCurveMath.cumulativeFraction(points, elapsedMinutes: minutes)
+    }
+
+    static func events(readings unsorted: [(date: Date, mgDl: Double)], treatments unsortedTreatments: [ExperimentalTreatment],
+                       model: ExperimentalPredictionModel) -> [Event] {
+        let readings = unsorted.filter { $0.mgDl > 0 && $0.mgDl.isFinite }.sorted { $0.date < $1.date }
+        let treatments = unsortedTreatments.sorted { $0.date < $1.date }
+        let insulin = treatments.filter { countsAsInsulin($0, model: model) }
+        let carbs = treatments.filter { $0.kind == .carbs && $0.amount.isFinite && $0.amount > 0 }
+        let exercise = treatments.filter { $0.kind == .exercise }
+        func any(_ list: [ExperimentalTreatment], from: Date, to: Date) -> Bool {
+            list.contains { $0.date >= from && $0.date <= to }
+        }
+        var events: [Event] = []
+
+        // Corrections.
+        for bolus in insulin where bolus.kind == .bolus && bolus.amount >= minimumCorrectionUnits {
+            let start = bolus.date, end = start.addingTimeInterval(correctionWindow)
+            let quietStart = start.addingTimeInterval(-quietBefore)
+            guard !any(carbs, from: quietStart, to: end), !any(exercise, from: quietStart, to: end),
+                  !insulin.contains(where: { $0.date >= quietStart && $0.date <= end && $0 != bolus }),
+                  isClean(from: start, to: end, readings: readings),
+                  let before = glucose(at: start, readings: readings), before >= minimumCorrectionStartMgDl,
+                  let after = glucose(at: end, readings: readings) else { continue }
+            let share = deliveredShare(bolus, model: model, minutes: correctionWindow / 60)
+            guard share > 0.05 else { continue }
+            let sensitivity = (before - after) / (bolus.amount * share)
+            guard ExperimentalPredictionModel.insulinSensitivityRange.contains(sensitivity) else { continue }
+            events.append(Event(date: start, parameter: .sensitivity, value: sensitivity))
+        }
+
+        // Meals: a cluster starts at a carb entry with no carbs in the three hours before.
+        for first in carbs {
+            let start = first.date, clusterEnd = start.addingTimeInterval(mealCluster), end = start.addingTimeInterval(mealWindow)
+            let quietStart = start.addingTimeInterval(-quietBefore)
+            guard !carbs.contains(where: { $0.date >= quietStart && $0.date < start }) else { continue }
+            let meal = carbs.filter { $0.date >= start && $0.date <= clusterEnd }
+            let grams = meal.reduce(0) { $0 + $1.amount }
+            let boluses = insulin.filter { $0.kind == .bolus && abs($0.date.timeIntervalSince(start)) <= mealCluster }
+            guard grams >= minimumMealGrams, !boluses.isEmpty,
+                  !carbs.contains(where: { $0.date > clusterEnd && $0.date <= end }),
+                  !insulin.contains(where: { $0.date >= quietStart && $0.date <= end && abs($0.date.timeIntervalSince(start)) > mealCluster }),
+                  !any(exercise, from: quietStart, to: end),
+                  isClean(from: start, to: end, readings: readings),
+                  let before = glucose(at: start, readings: readings), let after = glucose(at: end, readings: readings) else { continue }
+            let parameters = model.parameters(at: start)
+            let sensitivity = parameters.insulinSensitivityMgDl
+            let insulinEffect = boluses.reduce(0) {
+                $0 + $1.amount * deliveredShare($1, model: model, minutes: end.timeIntervalSince($1.date) / 60) * sensitivity
+            }
+            let carbRise = meal.reduce(0) { total, entry in
+                let rate = min(max(parameters.carbAbsorption, ExperimentalPredictionModel.carbAbsorptionRange.lowerBound),
+                               ExperimentalPredictionModel.carbAbsorptionRange.upperBound)
+                let duration = min(max(entry.amount / rate * 60, 30), 360)
+                return total + entry.amount * InsulinCurveMath.mealProgress(elapsedMinutes: end.timeIntervalSince(entry.date) / 60,
+                                                                           durationMinutes: duration) * sensitivity
+            }
+            let denominator = after - before + insulinEffect
+            guard denominator > 0 else { continue }
+            let ratio = carbRise / denominator
+            guard ExperimentalPredictionModel.carbRatioRange.contains(ratio) else { continue }
+            events.append(Event(date: start, parameter: .carbRatio, value: ratio))
+        }
+        return events
+    }
+
+    /// Start minute of the model period `date` falls in, nil before the first period.
+    static func periodStart(of date: Date, model: ExperimentalPredictionModel) -> Int? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = model.timeZone
+        let components = calendar.dateComponents([.hour, .minute], from: date)
+        let minute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+        return ExperimentalPredictionPeriod.sanitized(model.periods).last { $0.startMinute <= minute }?.startMinute
+    }
+
+    static func median(_ values: [Double]) -> Double? {
+        let sorted = values.sorted()
+        guard !sorted.isEmpty else { return nil }
+        let middle = sorted.count / 2
+        return sorted.count % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
+    }
+
+    /// Suggestions per period and parameter with at least `minimumEvents` events, in period order.
+    static func suggestions(events: [Event], model: ExperimentalPredictionModel) -> [Suggestion] {
+        let periods = ExperimentalPredictionPeriod.sanitized(model.periods)
+        let starts: [Int?] = [nil] + periods.map { Optional($0.startMinute) }
+        var result: [Suggestion] = []
+        for start in starts {
+            let current = periods.first { $0.startMinute == start }
+            for parameter in [Parameter.sensitivity, .carbRatio] {
+                let values = events.filter { $0.parameter == parameter && periodStart(of: $0.date, model: model) == start }.map(\.value)
+                guard values.count >= minimumEvents, let suggested = median(values) else { continue }
+                let currentValue: Double
+                switch parameter {
+                case .sensitivity: currentValue = current?.insulinSensitivityMgDl ?? model.insulinSensitivityMgDl
+                case .carbRatio: currentValue = current?.carbRatio ?? model.carbRatio
+                }
+                result.append(Suggestion(periodStartMinute: start, parameter: parameter, suggested: suggested,
+                                         current: currentValue, events: values.count))
+            }
+        }
+        return result
+    }
+
+    /// Writes a suggestion into the settings: the single value, or that period's value.
+    static func apply(_ suggestion: Suggestion, defaults: UserDefaults = .standard) {
+        guard let start = suggestion.periodStartMinute else {
+            switch suggestion.parameter {
+            case .sensitivity: defaults.experimentalPredictionInsulinSensitivityMgDl = suggestion.suggested
+            case .carbRatio: defaults.experimentalPredictionCarbRatio = suggestion.suggested
+            }
+            return
+        }
+        var periods = defaults.experimentalPredictionPeriods
+        guard let index = periods.firstIndex(where: { $0.startMinute == start }) else { return }
+        switch suggestion.parameter {
+        case .sensitivity: periods[index].insulinSensitivityMgDl = suggestion.suggested
+        case .carbRatio: periods[index].carbRatio = suggestion.suggested
+        }
+        defaults.experimentalPredictionPeriods = periods
+    }
+
+    /// Readings and treatments of the last four weeks, on a background context.
+    static func load(coreDataManager: CoreDataManager, now: Date = Date()) async -> (readings: [(date: Date, mgDl: Double)], treatments: [ExperimentalTreatment])? {
+        let coordinator = coreDataManager.privateManagedObjectContext.persistentStoreCoordinator
+        let policy = UserDefaults.standard.dataFlowPolicy
+        let from = now.addingTimeInterval(-TimeInterval(historyDays) * 24 * 60 * 60)
+        return await withCheckedContinuation { continuation in
+            let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+            context.persistentStoreCoordinator = coordinator
+            context.perform {
+                guard let readings = AdaptiveForecastStore.fetchReadings(in: context, from: from, to: now),
+                      let treatments = ExperimentalTreatment.fetch(from: from.addingTimeInterval(-quietBefore), to: now, in: context, policy: policy)
+                else { continuation.resume(returning: nil); return }
+                let pairs = zip(readings.times, readings.mgDl).map { (date: Date(timeIntervalSince1970: $0.0), mgDl: $0.1) }
+                continuation.resume(returning: (pairs, treatments))
+            }
+        }
+    }
+}
+
 // MARK: - Dose hints (JugglucoNG data/prediction/StateDoseHint.kt)
 
 /// JugglucoNG's `StateDoseHintCalculator`: a hint read off the current state, not off the far end

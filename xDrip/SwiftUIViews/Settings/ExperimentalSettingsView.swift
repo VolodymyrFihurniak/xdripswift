@@ -260,7 +260,13 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                 bodyWeightRow(),
                 SettingsRow(id: "experimental.prediction.macros", title: ExperimentalTexts.text("predictionMacros", "Protein and fat"),
                             control: .toggle(isOn: { UserDefaults.standard.experimentalPredictionMacrosEnabled },
-                                             setIsOn: { UserDefaults.standard.experimentalPredictionMacrosEnabled = $0 }))
+                                             setIsOn: { UserDefaults.standard.experimentalPredictionMacrosEnabled = $0 })),
+                SettingsRow(id: "experimental.prediction.suggest", title: ExperimentalTexts.text("suggestTitle", "Suggest from history"),
+                            control: .custom(content: {
+                                AnyView(NavigationLink(ExperimentalTexts.text("suggestTitle", "Suggest from history")) {
+                                    ExperimentalParameterSuggestionsView()
+                                })
+                            }))
             ]
         case .predictionAlert:
             return [
@@ -819,6 +825,97 @@ struct ExperimentalPredictionAccuracyView: View {
         let blend = forecasts.filter(\.isBlend)
         blendReport = blend.isEmpty ? [] : PredictionAccuracy.report(forecasts: blend, readings: readings)
         isLoading = false
+    }
+}
+
+/// Sensitivity and carb ratio estimated from the person's own history (`TherapyParameterEstimator`),
+/// per period of the prediction model, each with a button that writes it into the settings.
+struct ExperimentalParameterSuggestionsView: View {
+    @State private var suggestions: [TherapyParameterEstimator.Suggestion] = []
+    @State private var corrections = 0
+    @State private var meals = 0
+    @State private var applied: Set<TherapyParameterEstimator.Suggestion> = []
+    @State private var isLoading = true
+    private let isMgDl = UserDefaults.standard.bloodGlucoseUnitIsMgDl
+
+    var body: some View {
+        List {
+            if isLoading {
+                ProgressView()
+            } else {
+                Section(footer: Text(String(format: ExperimentalTexts.text("suggestFound", "Found %ld corrections and %ld meals in the last 28 days that are clean enough to read."),
+                                            corrections, meals))) {
+                    if suggestions.isEmpty {
+                        Text(String(format: ExperimentalTexts.text("suggestNone", "Not enough yet: each period needs at least %ld corrections or %ld meals."),
+                                    TherapyParameterEstimator.minimumEvents, TherapyParameterEstimator.minimumEvents))
+                    }
+                    ForEach(suggestions, id: \.self) { suggestion in
+                        row(suggestion)
+                    }
+                }
+                Section(footer: Text(ExperimentalTexts.text("suggestFooter", "NOT MEDICAL ADVICE. Estimated only from quiet stretches of your own logged history. A correction is a lone bolus of at least 0.5 U from at least 120 mg/dL (6.7 mmol/L) with no carbs, exercise or other insulin from three hours before to four hours after; a meal is carbs bolused within 30 minutes with nothing else for five hours. Readings must run throughout and stay above 70 mg/dL (3.9 mmol/L). Unlogged food, exercise, illness, stress, sensor error and a wrong basal all bend the numbers. Use changes only the prediction model; discuss your real doses with your care team."))) {
+                    EmptyView()
+                }
+            }
+        }
+        .navigationTitle(ExperimentalTexts.text("suggestTitle", "Suggest from history"))
+        .task { await load() }
+    }
+
+    private func row(_ suggestion: TherapyParameterEstimator.Suggestion) -> some View {
+        let isSensitivity = suggestion.parameter == .sensitivity
+        let title = isSensitivity ? ExperimentalTexts.text("predictionSensitivity", "Insulin sensitivity (per unit)")
+            : ExperimentalTexts.text("predictionCarbRatio", "Carb ratio (grams per unit)")
+        let format = isSensitivity ? ExperimentalTexts.text("suggestSensitivityLine", "Suggested %@, now %@, from %ld corrections")
+            : ExperimentalTexts.text("suggestCarbRatioLine", "Suggested %@, now %@, from %ld meals")
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(periodText(suggestion.periodStartMinute)).font(.caption).foregroundStyle(.secondary)
+            Text(title).font(.headline)
+            Text(String(format: format, valueText(suggestion.suggested, suggestion.parameter), valueText(suggestion.current, suggestion.parameter),
+                        suggestion.events))
+                .font(.subheadline)
+            if applied.contains(suggestion) {
+                Text(ExperimentalTexts.text("suggestApplied", "Applied")).font(.subheadline).foregroundStyle(.green)
+            } else {
+                Button(ExperimentalTexts.text("suggestUse", "Use")) {
+                    TherapyParameterEstimator.apply(suggestion)
+                    applied.insert(suggestion)
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+    }
+
+    private func periodText(_ start: Int?) -> String {
+        guard let start else {
+            return UserDefaults.standard.experimentalPredictionPeriods.isEmpty
+                ? ExperimentalTexts.text("suggestAllDay", "Whole day") : ExperimentalTexts.text("suggestFromMidnight", "From midnight")
+        }
+        return String(format: ExperimentalTexts.text("suggestFrom", "From %@"), String(format: "%02d:%02d", start / 60, start % 60))
+    }
+
+    private func valueText(_ value: Double, _ parameter: TherapyParameterEstimator.Parameter) -> String {
+        switch parameter {
+        case .sensitivity:
+            let shown = isMgDl ? value : value * ConstantsBloodGlucose.mgDlToMmoll
+            return ExperimentalSettingsViewModel.numberText(shown, fractionDigits: isMgDl ? 0 : 1) + " " + (isMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
+        case .carbRatio:
+            return ExperimentalSettingsViewModel.numberText(value, fractionDigits: 1) + " g"
+        }
+    }
+
+    @MainActor
+    private func load() async {
+        defer { isLoading = false }
+        guard let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager,
+              let history = await TherapyParameterEstimator.load(coreDataManager: coreDataManager) else { return }
+        let model = ExperimentalPredictionModel(defaults: .standard)
+        let events = await Task.detached(priority: .userInitiated) {
+            TherapyParameterEstimator.events(readings: history.readings, treatments: history.treatments, model: model)
+        }.value
+        corrections = events.filter { $0.parameter == .sensitivity }.count
+        meals = events.filter { $0.parameter == .carbRatio }.count
+        suggestions = TherapyParameterEstimator.suggestions(events: events, model: model)
     }
 }
 

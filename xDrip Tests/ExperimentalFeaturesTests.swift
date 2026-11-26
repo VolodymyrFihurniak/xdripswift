@@ -1743,6 +1743,121 @@ final class PredictionInspectorTests: XCTestCase {
     }
 }
 
+// MARK: - Sensitivity and carb ratio from history
+
+/// Built from exact algebra: readings are drawn so that the true sensitivity is the given one,
+/// with the dose's delivered share taken from the same insulin catalogue the estimator reads.
+final class TherapyParameterEstimatorTests: XCTestCase {
+    private let midnight = Date(timeIntervalSince1970: 1_799_971_200)
+    private let day: TimeInterval = 86_400
+    private let hour: TimeInterval = 3_600
+
+    private func model(periods: [ExperimentalPredictionPeriod] = []) -> ExperimentalPredictionModel {
+        var model = ExperimentalPredictionModel()
+        model.timeZone = TimeZone(identifier: "UTC")!
+        model.periods = periods
+        return model
+    }
+
+    /// Five-minute readings over `from...to`.
+    private func readings(from: Date, to: Date, _ value: (Date) -> Double) -> [(date: Date, mgDl: Double)] {
+        stride(from: from.timeIntervalSince1970, through: to.timeIntervalSince1970, by: 300).map { seconds -> (date: Date, mgDl: Double) in
+            let date = Date(timeIntervalSince1970: seconds)
+            return (date, value(date))
+        }
+    }
+
+    private func share(_ units: Double, minutes: Double) -> Double {
+        InsulinCurveMath.cumulativeFraction(InsulinCurveCatalogue.curve(for: .aspart, units: units, bodyWeightKg: nil), elapsedMinutes: minutes)
+    }
+
+    /// 2 U at 03:00 from 200 mg/dL, glucose falling linearly by 100 mg/dL over four hours.
+    private func correction(dayIndex: Double, dipTo low: Double? = nil) -> (readings: [(date: Date, mgDl: Double)], bolus: ExperimentalTreatment) {
+        let start = midnight.addingTimeInterval(dayIndex * day + 3 * hour)
+        let values = readings(from: start.addingTimeInterval(-2 * hour), to: start.addingTimeInterval(5 * hour)) { date in
+            let elapsed = date.timeIntervalSince(start)
+            if let low, abs(elapsed - 2 * self.hour) < 1 { return low }
+            return elapsed <= 0 ? 200 : elapsed >= 4 * self.hour ? 100 : 200 - 100 * elapsed / (4 * self.hour)
+        }
+        return (values, ExperimentalTreatment(date: start, amount: 2, kind: .bolus, notes: nil))
+    }
+
+    func testCleanCorrectionsGiveSensitivityAndSpoiledOnesAreLeftOut() throws {
+        var readings: [(date: Date, mgDl: Double)] = []
+        var treatments: [ExperimentalTreatment] = []
+        for index in 0..<5 {
+            let event = correction(dayIndex: Double(index), dipTo: index == 4 ? 65 : nil)
+            readings += event.readings
+            treatments.append(event.bolus)
+        }
+        // Day 3: carbs an hour after the bolus spoil it; day 4 dips below 70.
+        treatments.append(ExperimentalTreatment(date: midnight.addingTimeInterval(3 * day + 4 * hour), amount: 15, kind: .carbs, notes: nil))
+        let events = TherapyParameterEstimator.events(readings: readings, treatments: treatments, model: model())
+        let expected = 100 / (2 * share(2, minutes: 240))
+        XCTAssertEqual(events.count, 3)
+        for event in events {
+            XCTAssertEqual(event.parameter, .sensitivity)
+            XCTAssertEqual(event.value, expected, accuracy: 1e-9)
+        }
+        let suggestions = TherapyParameterEstimator.suggestions(events: events, model: model())
+        XCTAssertEqual(suggestions.count, 1)
+        let suggestion = try XCTUnwrap(suggestions.first)
+        XCTAssertNil(suggestion.periodStartMinute)
+        XCTAssertEqual(suggestion.suggested, expected, accuracy: 1e-9)
+        XCTAssertEqual(suggestion.current, ExperimentalPredictionModel.defaultInsulinSensitivityMgDl)
+        XCTAssertEqual(suggestion.events, 3)
+        // Two events are too few.
+        XCTAssertTrue(TherapyParameterEstimator.suggestions(events: Array(events.prefix(2)), model: model()).isEmpty)
+    }
+
+    func testMealsGiveTheCarbRatioOfTheirPeriod() throws {
+        // From 10:00 the period says sensitivity 50 and ratio 12; the meals behave like ratio 10.
+        let period = ExperimentalPredictionPeriod(startMinute: 600, carbRatio: 12, insulinSensitivityMgDl: 50, carbAbsorption: 35)
+        let model = model(periods: [period])
+        var readings: [(date: Date, mgDl: Double)] = []
+        var treatments: [ExperimentalTreatment] = []
+        let insulinShare = share(6, minutes: 300)
+        // 60 g at 35 g/h is absorbed within five hours: rise 60 × 50 / 10, fall 6 U × share × 50.
+        let change = 60.0 * 50 / 10 - 6 * insulinShare * 50
+        for index in 0..<3 {
+            let start = midnight.addingTimeInterval(Double(index) * day + 12 * hour)
+            readings += self.readings(from: start.addingTimeInterval(-hour), to: start.addingTimeInterval(6 * hour)) { date in
+                let elapsed = min(max(date.timeIntervalSince(start), 0), 5 * self.hour)
+                return 120 + change * elapsed / (5 * self.hour)
+            }
+            treatments.append(ExperimentalTreatment(date: start, amount: 60, kind: .carbs, notes: nil))
+            treatments.append(ExperimentalTreatment(date: start.addingTimeInterval(-10 * 60), amount: 6, kind: .bolus, notes: nil))
+        }
+        let events = TherapyParameterEstimator.events(readings: readings, treatments: treatments, model: model)
+        XCTAssertEqual(events.map(\.parameter), [.carbRatio, .carbRatio, .carbRatio])
+        // The bolus came ten minutes early, so its share is read at 310 minutes.
+        let expected = 60.0 * 50 / (change + 6 * share(6, minutes: 310) * 50)
+        for event in events { XCTAssertEqual(event.value, expected, accuracy: 1e-9) }
+        let suggestion = try XCTUnwrap(TherapyParameterEstimator.suggestions(events: events, model: model).first)
+        XCTAssertEqual(suggestion.periodStartMinute, 600)
+        XCTAssertEqual(suggestion.parameter, .carbRatio)
+        XCTAssertEqual(suggestion.current, 12)
+
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "TherapyParameterEstimatorTests"))
+        defaults.removePersistentDomain(forName: "TherapyParameterEstimatorTests")
+        defaults.experimentalPredictionPeriods = [period]
+        TherapyParameterEstimator.apply(suggestion, defaults: defaults)
+        XCTAssertEqual(try XCTUnwrap(defaults.experimentalPredictionPeriods.first).carbRatio, expected, accuracy: 1e-9)
+        TherapyParameterEstimator.apply(TherapyParameterEstimator.Suggestion(periodStartMinute: nil, parameter: .sensitivity, suggested: 47,
+                                                                             current: 54, events: 3), defaults: defaults)
+        XCTAssertEqual(defaults.experimentalPredictionInsulinSensitivityMgDl, 47)
+    }
+
+    func testMedianAndPeriods() {
+        XCTAssertEqual(TherapyParameterEstimator.median([3, 1, 2]), 2)
+        XCTAssertEqual(TherapyParameterEstimator.median([4, 1, 3, 2]), 2.5)
+        XCTAssertNil(TherapyParameterEstimator.median([]))
+        let model = model(periods: [ExperimentalPredictionPeriod(startMinute: 360, carbRatio: 10, insulinSensitivityMgDl: 54, carbAbsorption: 35)])
+        XCTAssertNil(TherapyParameterEstimator.periodStart(of: midnight.addingTimeInterval(5 * hour), model: model))
+        XCTAssertEqual(TherapyParameterEstimator.periodStart(of: midnight.addingTimeInterval(7 * hour), model: model), 360)
+    }
+}
+
 // MARK: - Accuracy summary, combined forecast and likely range
 
 /// Expected values from a Python port of the quantile and weighting arithmetic.

@@ -668,6 +668,17 @@
 "experimental.predictedHighIobCoverage" = "Quiet while insulin covers the rise";
 "experimental.predictedAlertsTitle" = "Predicted alerts";
 "experimental.predictedHighFooter" = "Predicted High warns when the forecast rises above its value within its own time while glucose is still below it; set it in Settings > Alerts > Predicted High. Quiet while insulin covers the rise keeps it silent while the insulin still to act (all of it, including a bolus that has not started working) times the sensitivity is at least the rise above the value: what it would announce is already treated. This never applies to Predicted Low, where insulin makes a low more likely.";
+"experimental.suggestTitle" = "Suggest from history";
+"experimental.suggestFound" = "Found %ld corrections and %ld meals in the last 28 days that are clean enough to read.";
+"experimental.suggestNone" = "Not enough yet: each period needs at least %ld corrections or %ld meals.";
+"experimental.suggestFooter" = "NOT MEDICAL ADVICE. Estimated only from quiet stretches of your own logged history. A correction is a lone bolus of at least 0.5 U from at least 120 mg/dL (6.7 mmol/L) with no carbs, exercise or other insulin from three hours before to four hours after; a meal is carbs bolused within 30 minutes with nothing else for five hours. Readings must run throughout and stay above 70 mg/dL (3.9 mmol/L). Unlogged food, exercise, illness, stress, sensor error and a wrong basal all bend the numbers. Use changes only the prediction model; discuss your real doses with your care team.";
+"experimental.suggestSensitivityLine" = "Suggested %@, now %@, from %ld corrections";
+"experimental.suggestCarbRatioLine" = "Suggested %@, now %@, from %ld meals";
+"experimental.suggestApplied" = "Applied";
+"experimental.suggestUse" = "Use";
+"experimental.suggestAllDay" = "Whole day";
+"experimental.suggestFromMidnight" = "From midnight";
+"experimental.suggestFrom" = "From %@";
 "experimental.alerts" = "Alarms";
 "experimental.meter.title" = "Glucose meters (Bluetooth)";
 "experimental.meter.introduction" = "Experimental and not yet confirmed on a real meter. Reads finger-stick readings from a Bluetooth glucose meter (the standard Glucose Profile: Contour Next One, Accu-Chek Guide and Instant, CareSens and others; or OneTouch Verio) and logs them as BG checks.";
