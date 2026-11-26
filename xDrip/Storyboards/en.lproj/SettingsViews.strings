@@ -1,4 +1,6 @@
 "settingsviews_settingstitle" = "Settings";
+"settingsviews_searchPrompt" = "Search settings";
+"settingsviews_searchNoResults" = "No matching settings";
 "settingsviews_glucoseDisplaySectionTitle" = "General";
 "settingsviews_glucoseRangesSectionTitle" = "Glucose Ranges";
 "settingsviews_glucoseRangesSectionFooter" = "Glucose Ranges only affect the main chart display colours. They are not related to Alarm values.";

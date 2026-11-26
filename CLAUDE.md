@@ -207,6 +207,11 @@ launch (+60 s) or foreground, settings + readings + treatments without accounts 
 Documents/Automatic backups (visible in Files), kept 7 days / 4 ISO weeks / 6 months, notification when
 it shrinks below half of the previous one.
 
+Settings search (`SettingsSearchIndex` in `SettingsView.swift`, JugglucoNG 726ad73a8): `.searchable` on the
+root list; the index walks rows that open a child `SettingsScreen` (depth 4) when a search starts, and a
+result pushes the screen chain (`SettingsActionPresenter.show(settingsScreens:)`). Rows inside custom
+SwiftUI screens (e.g. `.custom` NavigationLinks) are found only as far as their parent screen.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new

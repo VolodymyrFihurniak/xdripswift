@@ -16,6 +16,14 @@ class Texts_SettingsView {
         return NSLocalizedString("settingsviews_settingstitle", tableName: filename, bundle: Bundle.main, value: "Settings", comment: "shown on top of the first settings screen, literally 'Settings'")
     }()
 
+    static let searchPrompt: String = {
+        return NSLocalizedString("settingsviews_searchPrompt", tableName: filename, bundle: Bundle.main, value: "Search settings", comment: "Settings search field placeholder")
+    }()
+
+    static let searchNoResults: String = {
+        return NSLocalizedString("settingsviews_searchNoResults", tableName: filename, bundle: Bundle.main, value: "No matching settings", comment: "Settings search: nothing matches the query")
+    }()
+
     static let selectCategory: String = {
         return NSLocalizedString("settingsviews_selectCategory", tableName: filename, bundle: Bundle.main, value: "Select a category in the sidebar", comment: "iPad Settings detail placeholder")
     }()

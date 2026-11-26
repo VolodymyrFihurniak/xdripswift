@@ -1858,6 +1858,41 @@ final class TherapyParameterEstimatorTests: XCTestCase {
     }
 }
 
+// MARK: - Settings search
+
+final class SettingsSearchTests: XCTestCase {
+    private func entry(_ title: String, _ location: [String]) -> SettingsSearchEntry {
+        SettingsSearchEntry(id: title + location.joined(), title: title, location: location, screens: [])
+    }
+
+    func testWordsIgnoreCaseDiacriticsAndPunctuation() {
+        XCTAssertEqual(SettingsSearchIndex.words("  Night-Scout  URL "), ["night", "scout", "url"])
+        XCTAssertEqual(SettingsSearchIndex.words("Ґлюкоза ПРОГНОЗ"), SettingsSearchIndex.words("ґлюкоза прогноз"))
+        XCTAssertEqual(SettingsSearchIndex.words("Café"), ["cafe"])
+        XCTAssertTrue(SettingsSearchIndex.words("   ").isEmpty)
+    }
+
+    func testTitlePrefixFirstThenTitleThenLocation() {
+        let entries = [
+            entry("Upload every reading", ["Nightscout"]),
+            entry("Nightscout URL", ["Sharing and Services", "Nightscout"]),
+            entry("Use Nightscout", ["Sharing and Services"]),
+            entry("Low alarm", ["Alerts"])
+        ]
+        XCTAssertEqual(SettingsSearchIndex.matches(entries, query: "nightscout").map(\.title),
+                       ["Nightscout URL", "Use Nightscout", "Upload every reading"])
+        // Every word must be found, in any order.
+        XCTAssertEqual(SettingsSearchIndex.matches(entries, query: "reading upload").map(\.title), ["Upload every reading"])
+        XCTAssertTrue(SettingsSearchIndex.matches(entries, query: "nightscout alarm").isEmpty)
+        XCTAssertTrue(SettingsSearchIndex.matches(entries, query: " ").isEmpty)
+    }
+
+    func testARowReachableTwiceIsListedOnce() {
+        let entries = [entry("Units", ["General"]), entry("Units", ["General"]), entry("Units", ["Other"])]
+        XCTAssertEqual(SettingsSearchIndex.matches(entries, query: "units").map(\.location), [["General"], ["Other"]])
+    }
+}
+
 // MARK: - Accuracy summary, combined forecast and likely range
 
 /// Expected values from a Python port of the quantile and weighting arithmetic.

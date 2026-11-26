@@ -445,20 +445,149 @@ private struct SettingsTraceMailView: UIViewControllerRepresentable {
 
 // MARK: - Root Settings View
 
-/// Displays the root Settings sections supplied by `SettingsListModel`.
+/// Displays the root Settings sections supplied by `SettingsListModel`, with a search field that
+/// finds rows on every screen reachable from here (JugglucoNG settings search).
 struct SettingsView: View {
     @ObservedObject var listModel: SettingsListModel
     @ObservedObject var presenter: SettingsActionPresenter
+    @State private var query = ""
+    @State private var searchIndex: [SettingsSearchEntry]?
 
     var body: some View {
-        SettingsListView(
-            listModel: listModel,
-            presenter: presenter,
-            title: Texts_SettingsView.screenTitle,
-            titleDisplayMode: .large,
-            headerView: { AnyView(SettingsAppBannerView()) }
-        )
+        Group {
+            if SettingsSearchIndex.words(query).isEmpty {
+                SettingsListView(
+                    listModel: listModel,
+                    presenter: presenter,
+                    title: Texts_SettingsView.screenTitle,
+                    titleDisplayMode: .large,
+                    headerView: { AnyView(SettingsAppBannerView()) }
+                )
+            } else {
+                SettingsSearchResultsView(results: SettingsSearchIndex.matches(searchIndex ?? [], query: query)) { entry in
+                    query = ""
+                    if !entry.screens.isEmpty { presenter.show(settingsScreens: entry.screens) }
+                }
+            }
+        }
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .automatic), prompt: Texts_SettingsView.searchPrompt)
+        .onChange(of: query) { newValue in
+            // Built once per search, so it reflects the settings as they are now.
+            if SettingsSearchIndex.words(newValue).isEmpty {
+                searchIndex = nil
+            } else if searchIndex == nil {
+                searchIndex = SettingsSearchIndex.build(sections: listModel.sections, presenter: presenter)
+            }
+        }
         .onlineHelp(.settings)
+    }
+}
+
+/// One row reachable from the Settings root.
+struct SettingsSearchEntry: Identifiable {
+    let id: String
+    let title: String
+    /// Screen and section titles from the root to the row.
+    let location: [String]
+    /// Screens to push, root first: the screen that shows the row, or for a row that opens a
+    /// screen, that screen itself. Empty for a row on the root list.
+    let screens: [SettingsScreen]
+}
+
+/// Walks the Settings tree through rows that open a child screen, as far as `maximumDepth`.
+@MainActor
+enum SettingsSearchIndex {
+    static let maximumDepth = 4
+    nonisolated static let maximumResults = 60
+
+    static func build(sections: [SettingsSectionModel], presenter: SettingsActionPresenter) -> [SettingsSearchEntry] {
+        var entries: [SettingsSearchEntry] = []
+        walk(sections: sections, location: [], screens: [], depth: 0, presenter: presenter, into: &entries)
+        return entries
+    }
+
+    private static func walk(sections: [SettingsSectionModel], location: [String], screens: [SettingsScreen], depth: Int,
+                             presenter: SettingsActionPresenter, into entries: inout [SettingsSearchEntry]) {
+        for model in sections {
+            let section = model.section()
+            let place = location + [section.title].compactMap { $0 }.filter { !$0.isEmpty }
+            for row in section.rows where row.isVisible && !row.title.isEmpty {
+                // Unique even when one section is shown on two screens.
+                let id = String(entries.count) + "|" + (location + [row.id]).joined(separator: "/")
+                if case let .settingsScreen(makeScreen) = row.action {
+                    let screen = makeScreen()
+                    entries.append(SettingsSearchEntry(id: id, title: row.title, location: place, screens: screens + [screen]))
+                    if depth < maximumDepth {
+                        walk(sections: screen.makeSections(presenter), location: location + [screen.title], screens: screens + [screen],
+                             depth: depth + 1, presenter: presenter, into: &entries)
+                    }
+                } else {
+                    entries.append(SettingsSearchEntry(id: id, title: row.title, location: place, screens: screens))
+                }
+            }
+        }
+    }
+
+    /// Lowercased words without diacritics.
+    nonisolated static func words(_ text: String) -> [String] {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+            .split(whereSeparator: { $0.isWhitespace || $0.isPunctuation }).map(String.init)
+    }
+
+    /// Entries whose title, or title and location together, hold every word of the query: titles
+    /// that start with the query first, then other title matches, then location matches.
+    nonisolated static func matches(_ entries: [SettingsSearchEntry], query: String) -> [SettingsSearchEntry] {
+        let queryWords = words(query)
+        guard !queryWords.isEmpty else { return [] }
+        let phrase = queryWords.joined(separator: " ")
+        var seen = Set<String>()
+        let ranked: [(rank: Int, index: Int, entry: SettingsSearchEntry)] = entries.enumerated().compactMap { index, entry in
+            let title = words(entry.title).joined(separator: " ")
+            let everything = title + " " + entry.location.flatMap(words).joined(separator: " ")
+            let rank: Int
+            if title.hasPrefix(phrase) { rank = 0 }
+            else if queryWords.allSatisfy({ title.contains($0) }) { rank = 1 }
+            else if queryWords.allSatisfy({ everything.contains($0) }) { rank = 2 }
+            else { return nil }
+            return (rank, index, entry)
+        }
+        return ranked.sorted { ($0.rank, $0.index) < ($1.rank, $1.index) }
+            .map(\.entry)
+            // The same row can be reachable twice (a section shown on two screens): keep the first.
+            .filter { seen.insert($0.title + "|" + $0.location.joined(separator: "/")).inserted }
+            .prefix(maximumResults).map { $0 }
+    }
+}
+
+private struct SettingsSearchResultsView: View {
+    let results: [SettingsSearchEntry]
+    let open: (SettingsSearchEntry) -> Void
+    @Environment(\.dismissSearch) private var dismissSearch
+
+    var body: some View {
+        List {
+            if results.isEmpty {
+                Text(Texts_SettingsView.searchNoResults)
+                    .foregroundStyle(Color(.colorSecondary))
+            }
+            ForEach(results) { entry in
+                Button {
+                    dismissSearch()
+                    open(entry)
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(entry.title)
+                            .foregroundStyle(Color(.colorPrimary))
+                        if !entry.location.isEmpty {
+                            Text(entry.location.joined(separator: " › "))
+                                .font(.caption)
+                                .foregroundStyle(Color(.colorSecondary))
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle(Texts_SettingsView.screenTitle)
     }
 }
 

@@ -239,6 +239,8 @@
 
 /// shown on top of the first settings screen, literally 'Settings'
 "settingsviews_settingstitle" = "Налаштування";
+"settingsviews_searchPrompt" = "Пошук у налаштуваннях";
+"settingsviews_searchNoResults" = "Нічого не знайдено";
 "settingsviews_glucoseDisplaySectionTitle" = "Загальні";
 "settingsviews_glucoseRangesSectionTitle" = "Діапазони глюкози";
 "settingsviews_alertsAndNotificationsSectionTitle" = "Оповіщення та сповіщення";
