@@ -35,6 +35,7 @@
 "sensorExpiry.endingSoonBody" = "Your sensor is expected to reach the end of its lifetime on %@.";
 "sensorExpiry.expectedExpiryBody" = "Your sensor has reached its expected expiry time (%@).";
 "alerts_predictedLowAlertTitle" = "Predicted Low";
+"alerts_predictedHighAlertTitle" = "Predicted High";
 "alerts_predictedLowInMinutes" = "in %ld min";
 "alerts_signalRestoredTitle" = "Signal restored";
 "alerts_signalRestoredBody" = "Readings are back after %ld min.";

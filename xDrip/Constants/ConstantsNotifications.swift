@@ -25,6 +25,8 @@ enum ConstantsNotifications {
 
         /// experimental predicted low alert
         static let predictedLowAlert = "predictedLowAlert"
+        /// Experimental predicted high alert.
+        static let predictedHighAlert = "predictedHighAlert"
         /// phone battery low
         static let phoneBatteryLow = "phoneBatteryLow"
         /// not looping

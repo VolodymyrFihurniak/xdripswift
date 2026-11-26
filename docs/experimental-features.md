@@ -5,6 +5,22 @@ and mostly changes the main chart on the Home screen; where a feature reaches wi
 watch, alerts or Nightscout, its section says so. AID sharing is never affected. The models are
 ported from JugglucoNG (see `THIRD_PARTY_NOTICES.md`).
 
+## Recommended set
+
+**Recommended set → Turn on** (`ExperimentalRecommendedSet`, after a confirmation) switches on
+what only shows or checks more: prediction with the adaptive forecast, Record accuracy, Combine
+by accuracy, Show likely range, the insulin activity, the chart cursor, the uncertainty ribbon,
+Consider IOB and recent glucose for the predicted low, and Automatic power saving. Alarms, dose
+hints, Nightscout uploads, the chart style, quiet window and restricted mode are left alone.
+
+## Sensor day counter
+
+**Sensor day counter** (`SensorDayCounter`, JugglucoNG `ManagedSensorStatusPolicy`) shows the
+sensor's age on Home as "Day N / T" instead of days and hours (not while Home counts down). T is
+the lifetime rounded to the nearest whole day, so a Libre 2 Plus (15 days + 12 hours) reads 16
+and a Libre 2 (14 days + 12 hours) 15, as in JugglucoNG; the real end is unchanged. A reminder
+before the end already exists: Settings → Alerts → Sensor ending soon (24 hours by default).
+
 ## Glucose on the chart
 
 **Points** is xDrip's usual one dot per reading. **Line** joins the readings in their range
@@ -85,7 +101,16 @@ tends to carry on, and how strongly glucose drifts back toward your own average.
 - One ridge regression (λ = 1) per horizon, every 5 minutes out to 2 hours, predicting the
   change from the current reading. Eight features from CGM history only: the change over the
   last 5, 15, 30 and 60 minutes, the distance from the 24-hour mean, the level and the time of
-  day. Logged insulin and carbs are not used (on JugglucoNG's data they made it worse).
+  day.
+- Fork extension: three more features from logged treatments, read through the standard
+  model's treatment curves and settings (`AdaptiveTreatmentFeatures`): the insulin effect still
+  to come within 6 hours, the carb effect still to come (protein and fat when those are on), and
+  every treatment's effect over the next 30 minutes, all in mg/dL. Only treatments logged at or
+  before the moment count. On JugglucoNG's data treatments made the model worse, so the model
+  with them is kept only when its holdout error beats the CGM-only model's; with less than four
+  days, or no treatment in the window, the CGM-only model is kept. Changing the carb ratio,
+  sensitivity, absorption, insulins, body weight, periods or macros relearns a model that reads
+  treatments. **Learned model** then says "with insulin and carbs".
 - Trained on the last 28 days on a 5-minute grid, from the displayed value; it needs 576 rows
   (two days) before it answers. A value is never read across a sensor change or a gap longer
   than 2.5 readings, and the hour behind a reading must be continuous, so a new sensor's first
@@ -102,8 +127,20 @@ tends to carry on, and how strongly glucose drifts back toward your own average.
   forecast; the chart cursor reads whichever is drawn.
 - With **Record accuracy** on, the adaptive forecast from the same reading is recorded too, and
   **Prediction accuracy** shows the two side by side.
+- **Combine by accuracy** (fork extension, needs Record accuracy): the adaptive and the standard
+  forecast (with the trend, as recorded) are mixed horizon by horizon, each weighted by the
+  inverse of its recorded mean square error (`ForecastBlend`); weights between 15, 30, 60 and
+  120 minutes are interpolated, held flat outside. It needs 36 scored forecasts of each at every
+  horizon (`PredictionAccuracySummary`, recomputed at most hourly on the recorder's queue and kept
+  in UserDefaults `experimentalPredictionAccuracySummary`); until then the adaptive one alone is
+  drawn. The combined forecast is recorded as model `blend` and shown in Prediction accuracy.
 
 ### Prediction accuracy
+
+**Show likely range** (fork extension) draws a faint band around the drawn forecast: the forecast
+plus the 10th and 90th percentile of that forecast's recorded error (actual − forecast) at 15, 30,
+60 and 120 minutes, interpolated, growing from zero at the reading and with the square root of
+time beyond two hours (`PredictionRange`). Main chart only; needs 36 scored forecasts per horizon.
 
 **Record accuracy** keeps the forecast every five minutes for 14 days (a file in Application
 Support) and **Prediction accuracy** compares it with the glucose that followed, as JugglucoNG's
@@ -127,6 +164,17 @@ xDrip follows an AID's status from Nightscout, so the AID's own lines stay the o
 upload the chosen insulin as `notes`, carb entries their `protein` and `fat`, exercise its
 intensity note.
 
+### Suggest from history
+
+Glucose prediction → Model → **Suggest from history** (`TherapyParameterEstimator`, fork
+extension) reads the last 28 days and estimates, per model period, the insulin sensitivity from
+clean corrections (a lone bolus ≥ 0.5 U from ≥ 120 mg/dL, no carbs, exercise or other insulin from
+3 h before to 4 h after: drop over 4 h ÷ (units × delivered share)) and the carb ratio from clean
+meals (carbs within 30 min, bolused within 30 min, nothing else from 3 h before to 5 h after;
+solved from the 5-hour change with the period's sensitivity). Readings must be continuous (gaps
+≤ 20 min) and stay ≥ 70 mg/dL. A suggestion is the median of at least three events within the
+settings' ranges; **Use** writes it into the single value or that period. Nothing changes on its own.
+
 ### Predicted low alert
 
 Settings → Alerts → **Predicted Low** (off by default) warns before a low: it fires when the
@@ -134,6 +182,16 @@ forecast falls below the alarm value within the lead time (15–45 minutes, defa
 Experimental features → Glucose prediction) while glucose is still above that value. Once glucose
 is below it, the ordinary Low alarm takes over. Sound, schedule and snooze work as for every alarm.
 The alert uses the prediction model even when the forecast is not drawn on the chart.
+
+### Predicted high alert
+
+Settings → Alerts → **Predicted High** (`AlertKind.predictedHigh`, raw value 17, off by default;
+JugglucoNG PRE_HIGH) is the mirror image: the forecast rises above the alarm value within its own
+lead time (default 30 minutes) while glucose is still at or below it. A current High or Very High
+wins. **Quiet while insulin covers the rise** (JugglucoNG `ForecastIobCoverage`, factor 1; off by
+default as there) keeps it silent while classic IOB (every unit still to act, a bolus before its
+onset included) × sensitivity is at least the projected overshoot. It never applies to the predicted
+low. Fast Rise and Predicted High share the same-direction rule as Fast Drop and Predicted Low.
 
 ## Insulins
 

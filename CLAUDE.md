@@ -135,6 +135,8 @@ watch and notification extensions. A treatment's insulin is named in its `notes`
 (`InsulinProfile.matching(notes:)`); every per-dose choice must round-trip through its
 `shortName`. All off by default; IOB/COB is untouched. Also: `AlertKind.predictedLow` (raw 16),
 prediction periods/body weight/protein-fat/intensity (notes tokens `P:20 F:15`, `intensity:light`),
+`TherapyParameterEstimator` (sensitivity / carb ratio suggestions from clean corrections and meals, per
+period, applied only on tap), `AlertKind.predictedHigh` (raw 17, `PredictedHighAlert`, JugglucoNG PRE_HIGH + `ForecastIobCoverage`),
 accuracy recorder (Application Support JSON, 14 days; `PredictionInspector` + `ExperimentalPredictionInspectorView` = JugglucoNG prediction inspector), Nightscout devicestatus forecast
 (`openaps.suggested.predBGs.IOB`, only when no AID status is followed), and
 `ExperimentalCompanionForecast` for widgets, Live Activity and watch (optional fields).
@@ -146,7 +148,13 @@ fields and the landscape AGP chart through `AGPChartView(drawsGlucoseAsLine:)`. 
 Adaptive prediction (`xDrip/Managers/Therapy/AdaptiveGlucoseForecast.swift`): JugglucoNG
 `AdaptiveGlucoseForecast` + `AdaptivePredictionStore`; model JSON in UserDefaults
 (`experimentalAdaptiveForecastModel`), daily refit on a private-queue context over 29 days of
-`BgReading` dictionaries; alerts and Nightscout stay on the standard forecast.
+`BgReading` dictionaries; alerts and Nightscout stay on the standard forecast. Fork extension:
+`AdaptiveTreatmentFeatures` (insulin / carbs still to come, 30-minute treatment effect) as features
+9–11, kept only when they beat the CGM-only model on the holdout (`usesTreatments`); every forecast
+caller passes them, a treatment model without them has no answer. `PredictionAccuracySummary` (hourly, per
+recorded model and horizon: RMSE, 10th/90th residual percentiles) feeds `ForecastBlend` (inverse-MSE
+mix of adaptive and standard, recorded as model `blend`) and `PredictionRange` (band around the
+forecast, `GlucoseChartExperimentalPlots.predictionRange`).
 Power saving (`ExperimentalPowerSaving`, mode Off/On/Automatic, never while charging) throttles the
 "every reading" uploads, Live Activity/widget refresh (`allowsRefresh`, urgent out of range), the
 Home chart minute redraw and the adaptive refit — never readings or alarms. Alarms (`AlertKind.swift`/`AlertManager`):
@@ -191,13 +199,24 @@ own hangup is never logged in); every link ends with a `Libre 2 link ended:` tra
 
 Statistics → CGM data: "Time in ranges by time of day" (JugglucoNG `StatsRangeFlow` + day-part strip):
 `GlucoseReportAnalytics.hourlyRanges` (24 × five bands, `GlucoseReportHourRanges`), blocks
-`GlucoseReportDayPart` combine by hour mask, none = whole day.
+`GlucoseReportDayPart` combine by hour mask, none = whole day. "Patterns" (fork extension, `GlucoseReportInsights`): low (< 70)
+and very high (> 250) episodes starting in the same two hours on ≥ 3 days, and the mean rise after
+breakfast / lunch / dinner (peak within 3 h − reading at the meal, ≥ 3 meals).
 
 Automatic backup (`AutomaticBackup` in `Utilities/Backup/BackupService.swift`, JugglucoNG
 `ScheduledBackupPolicy`; Settings → Data management toggle, off by default): at most once per 20 h on
 launch (+60 s) or foreground, settings + readings + treatments without accounts to
 Documents/Automatic backups (visible in Files), kept 7 days / 4 ISO weeks / 6 months, notification when
 it shrinks below half of the previous one.
+
+Settings search (`SettingsSearchIndex` in `SettingsView.swift`, JugglucoNG 726ad73a8): `.searchable` on the
+root list; the index walks rows that open a child `SettingsScreen` (depth 4) when a search starts, and a
+result pushes the screen chain (`SettingsActionPresenter.show(settingsScreens:)`). Rows inside custom
+SwiftUI screens (e.g. `.custom` NavigationLinks) are found only as far as their parent screen.
+
+Quick treatment logging (`AppShortcuts.swift`): `LogCarbsIntent` / `LogInsulinIntent` (Siri, Shortcuts,
+Action button; unlocked phone only) save a `TreatmentEntry` like the editor (`QuickTreatmentLog`, app's store
+when running, else `CoreDataManager.create`) and request a Nightscout sync. Strings in `Localizable.strings`.
 
 ## Localisation
 

@@ -202,3 +202,16 @@
 "Share Troubleshooting Log" = "Поділитися журналом діагностики";
 "No troubleshooting information was recorded during the previous 24 hours." = "За останні 24 години діагностичної інформації не записано.";
 "Opening backup…" = "Відкриття резервної копії…";
+"Log carbs" = "Записати вуглеводи";
+"Log insulin" = "Записати інсулін";
+"Grams" = "Грами";
+"Treatments" = "Записи лікування";
+"Adds a carbs entry now, as the treatment editor does." = "Додає запис вуглеводів на поточний час, як редактор записів.";
+"Adds a bolus entry now, as the treatment editor does. It records a dose already given; it does not deliver insulin." = "Додає запис болюсу на поточний час, як редактор записів. Він фіксує вже введену дозу, а не вводить інсулін.";
+"Log ${grams} g of carbs" = "Записати ${grams} г вуглеводів";
+"Log ${units} U of insulin" = "Записати ${units} ОД інсуліну";
+"Logged %@ g of carbs" = "Записано %@ г вуглеводів";
+"Logged %@ U of insulin" = "Записано %@ ОД інсуліну";
+"Carbs must be between 1 and 300 g." = "Вуглеводів має бути від 1 до 300 г.";
+"Insulin must be between 0.1 and 50 U." = "Інсуліну має бути від 0,1 до 50 ОД.";
+"The entry could not be saved." = "Не вдалося зберегти запис.";

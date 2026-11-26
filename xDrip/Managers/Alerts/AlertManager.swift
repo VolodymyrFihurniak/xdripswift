@@ -198,13 +198,17 @@ public class AlertManager: NSObject {
                 // alerts are checked in order of importance - there should be only one alert raised, except missed reading alert which will always be checked.
                 
                 // create helper to check and fire alerts
-                // The experimental forecast is only built when the predicted low alert can use it.
-                let forecast = predictedLowForecast()
-                let checkAlertAndFireHelper = { (_ alertKind: AlertKind) -> Bool in self.checkAlertAndFire(alertKind: alertKind, lastBgReading: lastBgReading, lastButOneBgReading: lastButOneBgReading, lastCalibration: lastCalibration, transmitterBatteryInfo: transmitterBatteryInfo, forecast: forecast) }
+                // The experimental forecast is only built when a predicted alert can use it.
+                let forecasts = predictedAlertForecasts()
+                let checkAlertAndFireHelper = { (_ alertKind: AlertKind) -> Bool in
+                    self.checkAlertAndFire(alertKind: alertKind, lastBgReading: lastBgReading, lastButOneBgReading: lastButOneBgReading,
+                                           lastCalibration: lastCalibration, transmitterBatteryInfo: transmitterBatteryInfo,
+                                           forecast: alertKind == .predictedHigh ? forecasts.high : forecasts.low)
+                }
                 
                 // Specify the order in which alerts should be checked and group those with related snoozes.
-                // A current low wins over a predicted one; the prediction warns before that.
-                var alertGroupsByPreference: [[AlertKind]] = [[.fastdrop], [.verylow, .low], [.predictedLow], [.fastrise], [.veryhigh, .high], [.calibration]]
+                // A current low or high wins over a predicted one; the prediction warns before that.
+                var alertGroupsByPreference: [[AlertKind]] = [[.fastdrop], [.verylow, .low], [.predictedLow], [.fastrise], [.veryhigh, .high], [.predictedHigh], [.calibration]]
 
                 // Select exactly one persisted battery configuration from the received payload.
                 // The firing path therefore reads the G7 value from the G7 AlertEntry, the G5 value
@@ -907,10 +911,13 @@ public class AlertManager: NSObject {
     }
 
     /// will check if the alert of type alertKind needs to be fired and also fires it, plays the sound, and if yes returns true, otherwise false
-    /// Forecast for the predicted low alert, or nil when that alert is off or cannot fire.
-    private func predictedLowForecast() -> [GlucosePredictionPoint]? {
-        let (entry, _) = alertEntriesAccessor.getCurrentAndNextAlertEntry(forAlertKind: .predictedLow, forWhen: Date(), alertTypesAccessor: alertTypesAccessor)
-        guard !entry.isDisabled, entry.alertType.enabled else { return nil }
+    /// Forecasts for the predicted low and high alerts, each nil when that alert is off or cannot fire.
+    private func predictedAlertForecasts() -> (low: [GlucosePredictionPoint]?, high: [GlucosePredictionPoint]?) {
+        let (lowEntry, _) = alertEntriesAccessor.getCurrentAndNextAlertEntry(forAlertKind: .predictedLow, forWhen: Date(), alertTypesAccessor: alertTypesAccessor)
+        let (highEntry, _) = alertEntriesAccessor.getCurrentAndNextAlertEntry(forAlertKind: .predictedHigh, forWhen: Date(), alertTypesAccessor: alertTypesAccessor)
+        let wantsLow = !lowEntry.isDisabled && lowEntry.alertType.enabled
+        let wantsHigh = !highEntry.isDisabled && highEntry.alertType.enabled
+        guard wantsLow || wantsHigh else { return (nil, nil) }
         let since = Date().addingTimeInterval(-2 * 60 * 60)
         let readings = bgReadingsAccessor.getLatestBgReadings(limit: nil, fromDate: since, forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
             .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
@@ -919,14 +926,26 @@ public class AlertManager: NSObject {
         let forecast = model.forecast(
             readings: readings, treatments: treatments, isMmol: !UserDefaults.standard.bloodGlucoseUnitIsMgDl,
             targetLowMgDl: UserDefaults.standard.lowMarkValue, targetHighMgDl: UserDefaults.standard.highMarkValue)
+        var low: [GlucosePredictionPoint]? = wantsLow ? forecast : nil
         // JugglucoNG's optional evidence check: a forecast that is not confirmed yet does not alert.
-        if UserDefaults.standard.experimentalPredictedLowEvidence {
+        if wantsLow, UserDefaults.standard.experimentalPredictedLowEvidence {
             let decision = PredictedLowEvidence.decide(
-                forecast: forecast, readings: readings, treatments: treatments, thresholdMgDl: Double(entry.value),
+                forecast: forecast, readings: readings, treatments: treatments, thresholdMgDl: Double(lowEntry.value),
                 leadMinutes: UserDefaults.standard.experimentalPredictedLowLeadMinutes, model: model)
-            guard decision.allowsAlert else { return nil }
+            if !decision.allowsAlert { low = nil }
         }
-        return forecast
+        var high: [GlucosePredictionPoint]? = wantsHigh ? forecast : nil
+        // JugglucoNG ForecastIobCoverage (PRE_HIGH only): quiet while the insulin still to act covers
+        // the projected overshoot. Never for the predicted low, where insulin makes a low more likely.
+        if wantsHigh, UserDefaults.standard.experimentalPredictedHighIobCoverage, let latest = readings.max(by: { $0.date < $1.date }),
+           let crossing = PredictedHighAlert.crossing(forecast: forecast, currentMgDl: latest.mgDl, thresholdMgDl: Double(highEntry.value),
+                                                      leadMinutes: UserDefaults.standard.experimentalPredictedHighLeadMinutes),
+           PredictedHighAlert.insulinCovers(projectedMgDl: crossing.mgDl, thresholdMgDl: Double(highEntry.value),
+                                            iobUnits: PredictedLowEvidence.insulin(treatments: treatments, model: model, at: Date()).classic,
+                                            insulinSensitivityMgDl: model.parameters(at: Date()).insulinSensitivityMgDl) {
+            high = nil
+        }
+        return (low, high)
     }
 
     private func checkAlertAndFire(alertKind: AlertKind, lastBgReading: BgReading?, lastButOneBgReading: BgReading?, lastCalibration: Calibration?, transmitterBatteryInfo: TransmitterBatteryInfo?, deviceStatus: NotLoopingDeviceStatus? = nil, forecast: [GlucosePredictionPoint]? = nil) -> Bool {
@@ -1113,7 +1132,7 @@ public class AlertManager: NSObject {
             // Device, calibration and missing-data warnings remain text-only.
             let includesGlucose: Bool
             switch alertKind {
-            case .verylow, .low, .high, .veryhigh, .fastdrop, .fastrise, .predictedLow:
+            case .verylow, .low, .high, .veryhigh, .fastdrop, .fastrise, .predictedLow, .predictedHigh:
                 includesGlucose = true
             case .missedreading, .calibration, .batterylow, .phonebatterylow, .notlooping,
                  .sensorTransmitterFailure, .dexcomG5BatteryLow, .dexcomG7BatteryLow, .sensorEndingSoon, .sensorExpectedExpiry:

@@ -213,6 +213,8 @@ struct GlucoseReportAnalytics {
     let veryHighEventCount: Int
     /// Readings of each hour of the day (local time) in the five bands; 24 entries, or none.
     var hourlyRanges: [GlucoseReportHourRanges] = []
+    /// Recurring lows and very highs by time of day and the rise after meals.
+    var insights = GlucoseReportInsights()
 
     var hasData: Bool {
         sampleCount > 0
@@ -277,6 +279,124 @@ struct GlucoseReportHourRanges: Equatable {
         return GlucoseReportRangeDistribution(veryLow: Double(veryLow) / count * 100, low: Double(low) / count * 100,
                                               target: Double(target) / count * 100, high: Double(high) / count * 100,
                                               veryHigh: Double(veryHigh) / count * 100)
+    }
+}
+
+/// Patterns in the period (fork extension): lows and very highs that keep starting in the same
+/// two hours of the day on different days, and how far glucose rises after meals by meal time.
+/// Plain counts and averages of the readings and logged carbs, not a diagnosis.
+struct GlucoseReportInsights: Equatable {
+    struct RecurringEpisodes: Equatable {
+        /// First hour of the two-hour block, local time.
+        let startHour: Int
+        /// Different days with an episode starting in the block.
+        let days: Int
+    }
+
+    enum Meal: Int, CaseIterable {
+        case breakfast, lunch, dinner
+
+        /// Breakfast 05:00–11:00, lunch 11:00–16:00, dinner 16:00–22:00; other hours are no meal time.
+        static func at(hour: Int) -> Meal? {
+            switch hour {
+            case 5..<11: return .breakfast
+            case 11..<16: return .lunch
+            case 16..<22: return .dinner
+            default: return nil
+            }
+        }
+    }
+
+    struct MealRise: Equatable {
+        let meal: Meal
+        /// Mean of highest reading within three hours − reading at the meal, mg/dL.
+        let averageRiseMgDl: Double
+        let meals: Int
+    }
+
+    static let blockHours = 2
+    static let minimumDays = 3
+    static let minimumMeals = 3
+    static let maximumBlocks = 3
+    static let minimumMealGrams = 10.0
+    static let mealCluster: TimeInterval = 30 * 60
+    static let riseWindow: TimeInterval = 3 * 60 * 60
+    static let baselineTolerance: TimeInterval = 10 * 60
+    /// An episode continues across readings at most this far apart, as the report's event counts.
+    static let episodeGap: TimeInterval = 15 * 60
+
+    var recurringLows: [RecurringEpisodes] = []
+    var recurringHighs: [RecurringEpisodes] = []
+    var mealRises: [MealRise] = []
+
+    var isEmpty: Bool { recurringLows.isEmpty && recurringHighs.isEmpty && mealRises.isEmpty }
+
+    /// - Parameters:
+    ///   - samples: readings, ascending.
+    ///   - carbs: carb entries (date, grams), any order.
+    static func make(samples: [(date: Date, mgDl: Double)], carbs: [(date: Date, grams: Double)],
+                     calendar: Calendar = .current) -> GlucoseReportInsights {
+        GlucoseReportInsights(
+            recurringLows: recurring(episodeStarts(samples, threshold: GlucoseReportClinicalConstants.timeInRangeLowMgDl, isBelow: true),
+                                     calendar: calendar),
+            recurringHighs: recurring(episodeStarts(samples, threshold: GlucoseReportClinicalConstants.veryHighMgDl, isBelow: false),
+                                      calendar: calendar),
+            mealRises: mealRises(samples: samples, carbs: carbs, calendar: calendar))
+    }
+
+    /// Start of every episode below (or above) `threshold`; an episode continues while the
+    /// readings that meet the condition are at most `episodeGap` apart.
+    static func episodeStarts(_ samples: [(date: Date, mgDl: Double)], threshold: Double, isBelow: Bool) -> [Date] {
+        var starts: [Date] = []
+        var lastMatch: Date?
+        for sample in samples {
+            guard isBelow ? sample.mgDl < threshold : sample.mgDl > threshold else { continue }
+            if lastMatch.map({ sample.date.timeIntervalSince($0) > episodeGap }) ?? true { starts.append(sample.date) }
+            lastMatch = sample.date
+        }
+        return starts
+    }
+
+    /// Two-hour blocks with episodes starting on at least `minimumDays` different days, most days first.
+    static func recurring(_ starts: [Date], calendar: Calendar) -> [RecurringEpisodes] {
+        var daysByBlock: [Int: Set<Date>] = [:]
+        for start in starts {
+            let block = calendar.component(.hour, from: start) / blockHours * blockHours
+            daysByBlock[block, default: []].insert(calendar.startOfDay(for: start))
+        }
+        return daysByBlock.filter { $0.value.count >= minimumDays }
+            .map { RecurringEpisodes(startHour: $0.key, days: $0.value.count) }
+            .sorted { $0.days != $1.days ? $0.days > $1.days : $0.startHour < $1.startHour }
+            .prefix(maximumBlocks).map { $0 }
+    }
+
+    /// Mean rise after meals by meal time, with at least `minimumMeals` measured meals. Carbs
+    /// within 30 minutes of a meal's first entry belong to it; a meal needs 10 g, a reading within
+    /// 10 minutes of it and readings at least two hours on.
+    static func mealRises(samples: [(date: Date, mgDl: Double)], carbs: [(date: Date, grams: Double)],
+                          calendar: Calendar) -> [MealRise] {
+        var rises: [Meal: [Double]] = [:]
+        let sortedCarbs = carbs.filter { $0.grams.isFinite && $0.grams > 0 }.sorted { $0.date < $1.date }
+        var index = 0
+        while index < sortedCarbs.count {
+            let start = sortedCarbs[index].date
+            var grams = 0.0
+            while index < sortedCarbs.count, sortedCarbs[index].date.timeIntervalSince(start) <= mealCluster {
+                grams += sortedCarbs[index].grams
+                index += 1
+            }
+            guard grams >= minimumMealGrams, let meal = Meal.at(hour: calendar.component(.hour, from: start)),
+                  let baseline = samples.min(by: { abs($0.date.timeIntervalSince(start)) < abs($1.date.timeIntervalSince(start)) }),
+                  abs(baseline.date.timeIntervalSince(start)) <= baselineTolerance else { continue }
+            let after = samples.filter { $0.date > start && $0.date <= start.addingTimeInterval(riseWindow) }
+            guard let last = after.last, last.date.timeIntervalSince(start) >= 2 * 60 * 60,
+                  let peak = after.map(\.mgDl).max() else { continue }
+            rises[meal, default: []].append(max(peak - baseline.mgDl, 0))
+        }
+        return Meal.allCases.compactMap { meal in
+            guard let values = rises[meal], values.count >= minimumMeals else { return nil }
+            return MealRise(meal: meal, averageRiseMgDl: values.reduce(0, +) / Double(values.count), meals: values.count)
+        }
     }
 }
 

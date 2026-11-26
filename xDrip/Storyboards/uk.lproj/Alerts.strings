@@ -71,6 +71,7 @@
 "sensorExpiry.endingSoonBody" = "Очікується, що термін роботи сенсора завершиться %@.";
 "sensorExpiry.expectedExpiryBody" = "Сенсор досяг очікуваного терміну завершення роботи (%@).";
 "alerts_predictedLowAlertTitle" = "Прогнозована гіпоглікемія";
+"alerts_predictedHighAlertTitle" = "Прогнозована гіперглікемія";
 "alerts_predictedLowInMinutes" = "через %ld хв";
 
 /* Fork: Ukrainian translation completed */

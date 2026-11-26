@@ -141,3 +141,16 @@
 "Share Troubleshooting Log" = "Share Troubleshooting Log";
 "No troubleshooting information was recorded during the previous 24 hours." = "No troubleshooting information was recorded during the previous 24 hours.";
 "Opening backup…" = "Opening backup…";
+"Log carbs" = "Log carbs";
+"Log insulin" = "Log insulin";
+"Grams" = "Grams";
+"Treatments" = "Treatments";
+"Adds a carbs entry now, as the treatment editor does." = "Adds a carbs entry now, as the treatment editor does.";
+"Adds a bolus entry now, as the treatment editor does. It records a dose already given; it does not deliver insulin." = "Adds a bolus entry now, as the treatment editor does. It records a dose already given; it does not deliver insulin.";
+"Log ${grams} g of carbs" = "Log ${grams} g of carbs";
+"Log ${units} U of insulin" = "Log ${units} U of insulin";
+"Logged %@ g of carbs" = "Logged %@ g of carbs";
+"Logged %@ U of insulin" = "Logged %@ U of insulin";
+"Carbs must be between 1 and 300 g." = "Carbs must be between 1 and 300 g.";
+"Insulin must be between 0.1 and 50 U." = "Insulin must be between 0.1 and 50 U.";
+"The entry could not be saved." = "The entry could not be saved.";

@@ -790,6 +790,11 @@ final class RootHomeStateModel: ObservableObject {
                   transmitter.sensorWarmupConfirmationUntil(for: sensorStartDate) != nil {
             currentAge = ""
             maximumAge = Texts_Common.sensorWaitingForReading
+        } else if !countsDown, UserDefaults.standard.experimentalSensorDayCounter,
+                  let counter = SensorDayCounter.days(ageMinutes: sensorAgeInMinutes, lifetimeDays: maximumAgeInDays) {
+            // Experimental: JugglucoNG's "day N / T".
+            currentAge = String(format: ExperimentalTexts.text("sensorDay", "Day %ld"), counter.day)
+            maximumAge = " / \(counter.total)"
         } else {
             currentAge = countsDown
                 ? Texts_HomeView.sensorLifetimeRemaining(max(timeLeftInMinutes, 0).minutesToDaysAndHours())

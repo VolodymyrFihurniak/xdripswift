@@ -58,8 +58,9 @@ extension SettingsViewGroupedSettingsViewModel {
                     settingsScreen: { ExperimentalSettingsViewModel.powerSavingScreen }
                 )
             ],
-            leadingRows: { [ExperimentalSettingsViewModel.chartStyleRow(), ExperimentalSettingsViewModel.chartCursorRow(),
-                            ExperimentalSettingsViewModel.uncertaintyRibbonRow()] }
+            leadingRows: { [ExperimentalSettingsViewModel.recommendedSetRow(), ExperimentalSettingsViewModel.chartStyleRow(),
+                            ExperimentalSettingsViewModel.chartCursorRow(),
+                            ExperimentalSettingsViewModel.uncertaintyRibbonRow(), ExperimentalSettingsViewModel.sensorDayCounterRow()] }
         )
     }
 }
@@ -145,6 +146,21 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
     }
 
     /// JugglucoNG's cursor on the main chart: time, glucose and the insulin on board at that moment.
+    /// Turns on the experimental features that only show more, after a confirmation.
+    static func recommendedSetRow() -> SettingsRow {
+        SettingsRow(id: "experimental.recommended", title: ExperimentalTexts.text("recommendedTitle", "Recommended set"),
+                    detail: ExperimentalRecommendedSet.isApplied() ? Texts_Common.on : nil,
+                    control: .custom(content: { AnyView(ExperimentalRecommendedSetButton()) }))
+    }
+
+    /// JugglucoNG's "day N / T" for the sensor on Home.
+    static func sensorDayCounterRow() -> SettingsRow {
+        SettingsRow(id: "experimental.sensorDayCounter", title: ExperimentalTexts.text("sensorDayCounter", "Sensor day counter"),
+                    detail: ExperimentalTexts.text("sensorDayCounterDetail", "Day N / total on Home"),
+                    control: .toggle(isOn: { UserDefaults.standard.experimentalSensorDayCounter },
+                                     setIsOn: { UserDefaults.standard.experimentalSensorDayCounter = $0 }))
+    }
+
     static func chartCursorRow() -> SettingsRow {
         SettingsRow(id: "experimental.chartCursor", title: ExperimentalTexts.text("chartCursor", "Chart cursor"),
                     control: .toggle(isOn: { UserDefaults.standard.experimentalChartCursorEnabled },
@@ -200,7 +216,14 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                                      AdaptiveForecastStore.refreshIfDue(coreDataManager: coreDataManager)
                                                  }
                                              }),
-                            isEnabled: defaults.experimentalPredictionEnabled, reloadScope: .all)
+                            isEnabled: defaults.experimentalPredictionEnabled, reloadScope: .all),
+                SettingsRow(id: "experimental.prediction.blend", title: ExperimentalTexts.text("predictionBlend", "Combine by accuracy"),
+                            detail: defaults.experimentalPredictionAccuracyEnabled ? nil
+                                : ExperimentalTexts.text("predictionNeedsAccuracy", "Needs Record accuracy"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalPredictionBlend },
+                                             setIsOn: { UserDefaults.standard.experimentalPredictionBlend = $0 }),
+                            isEnabled: defaults.experimentalPredictionEnabled && defaults.experimentalPredictionAdaptive
+                                && defaults.experimentalPredictionAccuracyEnabled)
             ]
             if defaults.experimentalPredictionAdaptive || AdaptiveForecastStore.model() != nil {
                 rows.append(SettingsRow(id: "experimental.prediction.adaptiveStatus",
@@ -253,7 +276,13 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                 bodyWeightRow(),
                 SettingsRow(id: "experimental.prediction.macros", title: ExperimentalTexts.text("predictionMacros", "Protein and fat"),
                             control: .toggle(isOn: { UserDefaults.standard.experimentalPredictionMacrosEnabled },
-                                             setIsOn: { UserDefaults.standard.experimentalPredictionMacrosEnabled = $0 }))
+                                             setIsOn: { UserDefaults.standard.experimentalPredictionMacrosEnabled = $0 })),
+                SettingsRow(id: "experimental.prediction.suggest", title: ExperimentalTexts.text("suggestTitle", "Suggest from history"),
+                            control: .custom(content: {
+                                AnyView(NavigationLink(ExperimentalTexts.text("suggestTitle", "Suggest from history")) {
+                                    ExperimentalParameterSuggestionsView()
+                                })
+                            }))
             ]
         case .predictionAlert:
             return [
@@ -268,7 +297,21 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                             })),
                 SettingsRow(id: "experimental.predictedLow.evidence", title: ExperimentalTexts.text("predictedLowEvidence", "Consider IOB and recent glucose"),
                             control: .toggle(isOn: { UserDefaults.standard.experimentalPredictedLowEvidence },
-                                             setIsOn: { UserDefaults.standard.experimentalPredictedLowEvidence = $0 }))
+                                             setIsOn: { UserDefaults.standard.experimentalPredictedLowEvidence = $0 })),
+                SettingsRow(id: "experimental.predictedHigh.lead",
+                            title: Texts_Alerts.predictedHighAlertTitle + ": " + ExperimentalTexts.text("predictedLowLead", "Warn ahead by"), accessory: .none,
+                            control: .menu(options: {
+                                let selected = UserDefaults.standard.experimentalPredictedHighLeadMinutes
+                                return PredictedLowAlert.leadChoices.map { SettingsMenuOption(title: Self.minutesText($0), isSelected: $0 == selected) }
+                            }, selectOption: { index in
+                                let choices = PredictedLowAlert.leadChoices
+                                guard choices.indices.contains(index) else { return }
+                                UserDefaults.standard.experimentalPredictedHighLeadMinutes = choices[index]
+                            })),
+                SettingsRow(id: "experimental.predictedHigh.iobCoverage",
+                            title: ExperimentalTexts.text("predictedHighIobCoverage", "Quiet while insulin covers the rise"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalPredictedHighIobCoverage },
+                                             setIsOn: { UserDefaults.standard.experimentalPredictedHighIobCoverage = $0 }))
             ]
         case .predictionNightscout:
             return [
@@ -281,7 +324,12 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return [
                 SettingsRow(id: "experimental.accuracy.enabled", title: ExperimentalTexts.text("accuracyRecord", "Record accuracy"),
                             control: .toggle(isOn: { UserDefaults.standard.experimentalPredictionAccuracyEnabled },
-                                             setIsOn: { UserDefaults.standard.experimentalPredictionAccuracyEnabled = $0 })),
+                                             setIsOn: { UserDefaults.standard.experimentalPredictionAccuracyEnabled = $0 }),
+                            reloadScope: .all),
+                SettingsRow(id: "experimental.accuracy.range", title: ExperimentalTexts.text("predictionRange", "Show likely range"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalPredictionRange },
+                                             setIsOn: { UserDefaults.standard.experimentalPredictionRange = $0 }),
+                            isEnabled: defaults.experimentalPredictionEnabled && defaults.experimentalPredictionAccuracyEnabled),
                 SettingsRow(id: "experimental.accuracy.show", title: ExperimentalTexts.text("accuracyShow", "Prediction accuracy"),
                             control: .custom(content: {
                                 AnyView(NavigationLink(ExperimentalTexts.text("accuracyShow", "Prediction accuracy")) { ExperimentalPredictionAccuracyView() })
@@ -512,9 +560,10 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         switch status {
         case .learning:
             return ExperimentalTexts.text("predictionAdaptiveLearning", "Learning, needs 2 days of readings")
-        case .ready(let trainingDays, _):
-            return String(format: ExperimentalTexts.text("predictionAdaptiveReady", "Learned from %@ days of readings"),
-                          numberText(trainingDays, fractionDigits: 0))
+        case .ready(let trainingDays, _, let readsTreatments):
+            let learned = String(format: ExperimentalTexts.text("predictionAdaptiveReady", "Learned from %@ days of readings"),
+                                 numberText(trainingDays, fractionDigits: 0))
+            return readsTreatments ? learned + ", " + ExperimentalTexts.text("predictionAdaptiveReadsTreatments", "with insulin and carbs") : learned
         case .notBetter:
             return ExperimentalTexts.text("predictionAdaptiveNotBetter", "Not better than no change yet, standard shown")
         }
@@ -553,7 +602,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         case .doseHints: return ExperimentalTexts.text("doseHintsTitle", "Dose hints")
         case .predictionAdaptive: return ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction")
         case .predictionModel: return ExperimentalTexts.text("predictionModel", "Model")
-        case .predictionAlert: return Texts_Alerts.predictedLowAlertTitle
+        case .predictionAlert: return ExperimentalTexts.text("predictedAlertsTitle", "Predicted alerts")
         case .predictionAccuracy: return ExperimentalTexts.text("accuracyShow", "Prediction accuracy")
         case .predictionNightscout: return "Nightscout"
         }
@@ -564,16 +613,19 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         case .predictionMain:
             return ExperimentalTexts.text("predictionMainFooter", "Follow the trend continues the recent rise or fall that your treatments do not explain, fading over about an hour. The forecast starts only from a reading at most 15 minutes old.")
         case .predictionAdaptive:
-            return ExperimentalTexts.text("predictionAdaptiveFooter", "Draws a forecast learned from your own readings instead of the standard one, dotted, up to two hours. It learns from the last four weeks, relearns once a day and needs two days of readings; it ignores logged insulin and carbs. Until it is ready, after a gap or a new sensor's first hour, or while it is not better than no change, the standard forecast without the trend is drawn. The predicted low alert and Nightscout keep using the standard forecast.")
+            return ExperimentalTexts.text("predictionAdaptiveFooter", "Draws a forecast learned from your own readings instead of the standard one, dotted, up to two hours. It learns from the last four weeks, relearns once a day and needs two days of readings; it reads logged insulin and carbs only when that makes it more accurate on your own last two days. Until it is ready, after a gap or a new sensor's first hour, or while it is not better than no change, the standard forecast without the trend is drawn. The predicted low alert and Nightscout keep using the standard forecast.")
+                + "\n\n" + ExperimentalTexts.text("predictionBlendFooter", "Combine by accuracy mixes the adaptive and the standard forecast, horizon by horizon, giving more weight to the one whose recorded error has been smaller. It needs Record accuracy and at least 36 compared forecasts of each at 15, 30, 60 and 120 minutes; until then the adaptive forecast alone is drawn.")
         case .predictionModel:
             return ExperimentalTexts.text("predictionModelFooter", "Insulin sensitivity: how far one unit lowers glucose. Carb ratio: grams covered by one unit. Absorption sets how long carbs take to act. Periods change these by time of day; each treatment uses the values in force when it was logged. Body weight sharpens curves measured per kilogram (Fiasp, Levemir, regular insulin). Protein and fat add a late rise for carb entries that list them. Basal and premixed insulins are not part of the forecast, as in JugglucoNG.")
         case .predictionAlert:
             return ExperimentalTexts.text("predictedLowFooter", "Warns when the forecast falls below the alarm value within this time while glucose is still above it. Turn it on and set the value, sound and snooze in Settings > Alerts > Predicted Low. It uses the model above even when the prediction is not drawn.")
+                + "\n\n" + ExperimentalTexts.text("predictedHighFooter", "Predicted High warns when the forecast rises above its value within its own time while glucose is still below it; set it in Settings > Alerts > Predicted High. Quiet while insulin covers the rise keeps it silent while the insulin still to act (all of it, including a bolus that has not started working) times the sensitivity is at least the rise above the value: what it would announce is already treated. This never applies to Predicted Low, where insulin makes a low more likely.")
                 + "\n\n" + ExperimentalTexts.text("predictedLowEvidenceFooter", "Consider IOB and recent glucose cuts false warnings: the alert then needs a falling trend and carbs on board that do not cover the drop. It warns at once when glucose is within 15 mg/dL (0.8 mmol/L) of the value, would reach it within 10 minutes, or insulin acting in the next 30 minutes explains the drop. With no insulin on board, a fall that only returns from a recent rise waits. Otherwise a second reading must confirm it. The Low and Very Low alarms are not affected.")
         case .predictionNightscout:
             return ExperimentalTexts.text("predictionNightscoutFooter", "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.")
         case .predictionAccuracy:
             return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
+                + "\n\n" + ExperimentalTexts.text("predictionRangeFooter", "Show likely range draws a faint band around the forecast: where glucose ended up eight times in ten after this kind of forecast, from the recorded errors at 15, 30, 60 and 120 minutes (beyond two hours it keeps widening as an estimate). It appears once every horizon has at least 36 compared forecasts and is updated every hour.")
         case .restricted, .pens, .meters: return nil
         case .quietWindow:
             return ExperimentalTexts.text("quietFooter", "For the cinema or a lecture: alarms are still raised and shown, only their sound (and, with Notification only, vibration) is held back. The window always ends, after 24 hours at the most. An alarm that stays raised for the break-through time sounds anyway: a low always, the other alarms as chosen above. Snoozes and thresholds work as usual.")
@@ -690,6 +742,7 @@ struct ExperimentalPredictionPeriodsView: View {
 struct ExperimentalPredictionAccuracyView: View {
     @State private var report: [HorizonAccuracy] = []
     @State private var adaptiveReport: [HorizonAccuracy] = []
+    @State private var blendReport: [HorizonAccuracy] = []
     @State private var forecastCount = 0
     @State private var forecasts: [RecordedForecast] = []
     @State private var readings: [(date: Date, mgDl: Double)] = []
@@ -715,6 +768,12 @@ struct ExperimentalPredictionAccuracyView: View {
                         horizonRows(adaptiveReport)
                     }
                 }
+                if !blendReport.isEmpty {
+                    Section(header: Text(ExperimentalTexts.text("accuracyBlend", "Combined forecast")),
+                            footer: Text(ExperimentalTexts.text("accuracyBlendFooter", "The adaptive and the standard forecast mixed by their recorded accuracy, recorded whenever both could answer."))) {
+                        horizonRows(blendReport)
+                    }
+                }
                 Section {
                     NavigationLink(ExperimentalTexts.text("inspectorTitle", "Past forecasts")) {
                         ExperimentalPredictionInspectorView(moments: PredictionInspector.moments(forecasts), readings: readings)
@@ -726,6 +785,8 @@ struct ExperimentalPredictionAccuracyView: View {
                         forecasts = []
                         report = []
                         adaptiveReport = []
+                        blendReport = []
+                        PredictionAccuracySummary.clear()
                         forecastCount = 0
                     }
                 }
@@ -765,7 +826,7 @@ struct ExperimentalPredictionAccuracyView: View {
     private func load() async {
         let forecasts = PredictionAccuracyRecorder.load()
         self.forecasts = forecasts
-        forecastCount = forecasts.filter { !$0.isAdaptive }.count
+        forecastCount = forecasts.filter(\.isStandard).count
         guard let earliest = forecasts.map(\.origin).min(), let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager else {
             isLoading = false
             return
@@ -774,10 +835,128 @@ struct ExperimentalPredictionAccuracyView: View {
             .getLatestBgReadings(limit: nil, fromDate: earliest.addingTimeInterval(-60), forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
             .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
         self.readings = readings.filter { $0.mgDl > 0 }.sorted { $0.date < $1.date }
-        report = PredictionAccuracy.report(forecasts: forecasts.filter { !$0.isAdaptive }, readings: readings)
+        report = PredictionAccuracy.report(forecasts: forecasts.filter(\.isStandard), readings: readings)
         let adaptive = forecasts.filter(\.isAdaptive)
         adaptiveReport = adaptive.isEmpty ? [] : PredictionAccuracy.report(forecasts: adaptive, readings: readings)
+        let blend = forecasts.filter(\.isBlend)
+        blendReport = blend.isEmpty ? [] : PredictionAccuracy.report(forecasts: blend, readings: readings)
         isLoading = false
+    }
+}
+
+/// The button of the recommended set, with its confirmation.
+struct ExperimentalRecommendedSetButton: View {
+    @State private var isConfirming = false
+    @State private var isApplied = ExperimentalRecommendedSet.isApplied()
+
+    var body: some View {
+        Button(isApplied ? Texts_Common.on : ExperimentalTexts.text("recommendedTurnOn", "Turn on")) {
+            isConfirming = true
+        }
+        .disabled(isApplied)
+        .alert(ExperimentalTexts.text("recommendedConfirmTitle", "Turn on the recommended set?"), isPresented: $isConfirming) {
+            Button(ExperimentalTexts.text("recommendedTurnOn", "Turn on")) {
+                ExperimentalRecommendedSet.apply()
+                if let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager {
+                    AdaptiveForecastStore.refreshIfDue(coreDataManager: coreDataManager)
+                }
+                isApplied = true
+            }
+            Button(Texts_Common.Cancel, role: .cancel) {}
+        } message: {
+            Text(ExperimentalTexts.text("recommendedConfirmMessage", "Turns on the glucose prediction with the adaptive forecast, accuracy recording, combining by accuracy and the likely range; the insulin activity on the chart; the chart cursor; the likely range around Sibionics Adaptive V2 readings; Consider IOB and recent glucose for the predicted low alert; and automatic power saving. Alarms, dose hints, Nightscout uploads and the chart style stay as they are. Each can be switched off again below."))
+        }
+    }
+}
+
+/// Sensitivity and carb ratio estimated from the person's own history (`TherapyParameterEstimator`),
+/// per period of the prediction model, each with a button that writes it into the settings.
+struct ExperimentalParameterSuggestionsView: View {
+    @State private var suggestions: [TherapyParameterEstimator.Suggestion] = []
+    @State private var corrections = 0
+    @State private var meals = 0
+    @State private var applied: Set<TherapyParameterEstimator.Suggestion> = []
+    @State private var isLoading = true
+    private let isMgDl = UserDefaults.standard.bloodGlucoseUnitIsMgDl
+
+    var body: some View {
+        List {
+            if isLoading {
+                ProgressView()
+            } else {
+                Section(footer: Text(String(format: ExperimentalTexts.text("suggestFound", "Found %ld corrections and %ld meals in the last 28 days that are clean enough to read."),
+                                            corrections, meals))) {
+                    if suggestions.isEmpty {
+                        Text(String(format: ExperimentalTexts.text("suggestNone", "Not enough yet: each period needs at least %ld corrections or %ld meals."),
+                                    TherapyParameterEstimator.minimumEvents, TherapyParameterEstimator.minimumEvents))
+                    }
+                    ForEach(suggestions, id: \.self) { suggestion in
+                        row(suggestion)
+                    }
+                }
+                Section(footer: Text(ExperimentalTexts.text("suggestFooter", "NOT MEDICAL ADVICE. Estimated only from quiet stretches of your own logged history. A correction is a lone bolus of at least 0.5 U from at least 120 mg/dL (6.7 mmol/L) with no carbs, exercise or other insulin from three hours before to four hours after; a meal is carbs bolused within 30 minutes with nothing else for five hours. Readings must run throughout and stay above 70 mg/dL (3.9 mmol/L). Unlogged food, exercise, illness, stress, sensor error and a wrong basal all bend the numbers. Use changes only the prediction model; discuss your real doses with your care team."))) {
+                    EmptyView()
+                }
+            }
+        }
+        .navigationTitle(ExperimentalTexts.text("suggestTitle", "Suggest from history"))
+        .task { await load() }
+    }
+
+    private func row(_ suggestion: TherapyParameterEstimator.Suggestion) -> some View {
+        let isSensitivity = suggestion.parameter == .sensitivity
+        let title = isSensitivity ? ExperimentalTexts.text("predictionSensitivity", "Insulin sensitivity (per unit)")
+            : ExperimentalTexts.text("predictionCarbRatio", "Carb ratio (grams per unit)")
+        let format = isSensitivity ? ExperimentalTexts.text("suggestSensitivityLine", "Suggested %@, now %@, from %ld corrections")
+            : ExperimentalTexts.text("suggestCarbRatioLine", "Suggested %@, now %@, from %ld meals")
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(periodText(suggestion.periodStartMinute)).font(.caption).foregroundStyle(.secondary)
+            Text(title).font(.headline)
+            Text(String(format: format, valueText(suggestion.suggested, suggestion.parameter), valueText(suggestion.current, suggestion.parameter),
+                        suggestion.events))
+                .font(.subheadline)
+            if applied.contains(suggestion) {
+                Text(ExperimentalTexts.text("suggestApplied", "Applied")).font(.subheadline).foregroundStyle(.green)
+            } else {
+                Button(ExperimentalTexts.text("suggestUse", "Use")) {
+                    TherapyParameterEstimator.apply(suggestion)
+                    applied.insert(suggestion)
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+    }
+
+    private func periodText(_ start: Int?) -> String {
+        guard let start else {
+            return UserDefaults.standard.experimentalPredictionPeriods.isEmpty
+                ? ExperimentalTexts.text("suggestAllDay", "Whole day") : ExperimentalTexts.text("suggestFromMidnight", "From midnight")
+        }
+        return String(format: ExperimentalTexts.text("suggestFrom", "From %@"), String(format: "%02d:%02d", start / 60, start % 60))
+    }
+
+    private func valueText(_ value: Double, _ parameter: TherapyParameterEstimator.Parameter) -> String {
+        switch parameter {
+        case .sensitivity:
+            let shown = isMgDl ? value : value * ConstantsBloodGlucose.mgDlToMmoll
+            return ExperimentalSettingsViewModel.numberText(shown, fractionDigits: isMgDl ? 0 : 1) + " " + (isMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
+        case .carbRatio:
+            return ExperimentalSettingsViewModel.numberText(value, fractionDigits: 1) + " g"
+        }
+    }
+
+    @MainActor
+    private func load() async {
+        defer { isLoading = false }
+        guard let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager,
+              let history = await TherapyParameterEstimator.load(coreDataManager: coreDataManager) else { return }
+        let model = ExperimentalPredictionModel(defaults: .standard)
+        let events = await Task.detached(priority: .userInitiated) {
+            TherapyParameterEstimator.events(readings: history.readings, treatments: history.treatments, model: model)
+        }.value
+        corrections = events.filter { $0.parameter == .sensitivity }.count
+        meals = events.filter { $0.parameter == .carbRatio }.count
+        suggestions = TherapyParameterEstimator.suggestions(events: events, model: model)
     }
 }
 

@@ -511,6 +511,11 @@ final class SettingsActionPresenter: ObservableObject {
         router.show(.settingsScreen(settingsScreen))
     }
 
+    /// Replaces the Settings path with a chain of screens, root first (Settings search).
+    func show(settingsScreens: [SettingsScreen]) {
+        router.path = settingsScreens.map { SettingsRoute(.settingsScreen($0)) }
+    }
+
     /// Pushes one of the native Data Management workflows.
     func show(dataManagementFlow: DataManagementFlow) {
         router.show(.dataManagement(dataManagementFlow))
