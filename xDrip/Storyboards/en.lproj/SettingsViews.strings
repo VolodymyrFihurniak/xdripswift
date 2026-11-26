@@ -671,6 +671,9 @@
 "experimental.predictedAlertsTitle" = "Predicted alerts";
 "experimental.predictedHighFooter" = "Predicted High warns when the forecast rises above its value within its own time while glucose is still below it; set it in Settings > Alerts > Predicted High. Quiet while insulin covers the rise keeps it silent while the insulin still to act (all of it, including a bolus that has not started working) times the sensitivity is at least the rise above the value: what it would announce is already treated. This never applies to Predicted Low, where insulin makes a low more likely.";
 "experimental.recommendedTitle" = "Recommended set";
+"experimental.sensorDayCounter" = "Sensor day counter";
+"experimental.sensorDayCounterDetail" = "Day N / total on Home";
+"experimental.sensorDay" = "Day %ld";
 "experimental.recommendedTurnOn" = "Turn on";
 "experimental.recommendedConfirmTitle" = "Turn on the recommended set?";
 "experimental.recommendedConfirmMessage" = "Turns on the glucose prediction with the adaptive forecast, accuracy recording, combining by accuracy and the likely range; the insulin activity on the chart; the chart cursor; the likely range around Sibionics Adaptive V2 readings; Consider IOB and recent glucose for the predicted low alert; and automatic power saving. Alarms, dose hints, Nightscout uploads and the chart style stay as they are. Each can be switched off again below.";

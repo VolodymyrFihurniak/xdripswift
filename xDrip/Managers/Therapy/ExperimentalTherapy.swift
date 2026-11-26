@@ -126,6 +126,30 @@ enum ExperimentalRecommendedSet {
     }
 }
 
+/// JugglucoNG `ManagedSensorStatusPolicy.resolveLifecycleSummary`: the sensor card's "day N / T".
+/// The lifetime is rounded to the nearest whole day (a Libre 2 Plus's 15 days + 12 hours reads
+/// 16, 14 days + 12 hours reads 15); the day counts whole days used, where the time used is the
+/// lifetime minus the remaining whole hours, so the day turns over up to an hour early, as there.
+enum SensorDayCounter {
+    static func days(ageMinutes: Double, lifetimeDays: Double) -> (day: Int, total: Int)? {
+        guard ageMinutes.isFinite, lifetimeDays.isFinite, lifetimeDays > 0 else { return nil }
+        let totalMinutes = max(lifetimeDays * 1440, 1)
+        let total = max(Int(((totalMinutes + 720) / 1440).rounded(.down)), 1)
+        let remainingHours = (max(totalMinutes - ageMinutes, 0) / 60).rounded(.down)
+        let used = min(max(totalMinutes - remainingHours * 60, 0), totalMinutes)
+        let day = min(max(Int((used / 1440).rounded(.down)) + 1, 1), total)
+        return (day, total)
+    }
+}
+
+extension UserDefaults {
+    /// Home shows the sensor's age as JugglucoNG's "day N / T" instead of days and hours. Off by default.
+    var experimentalSensorDayCounter: Bool {
+        get { bool(forKey: "experimentalSensorDayCounter") }
+        set { set(newValue, forKey: "experimentalSensorDayCounter") }
+    }
+}
+
 /// Prediction horizons offered in Settings. JugglucoNG clamps the horizon to 30...360 minutes.
 enum ExperimentalPredictionHorizon {
     static let choices = [60, 90, 120, 180, 240]

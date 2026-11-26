@@ -772,7 +772,7 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertLessThan(index, aboutIndex)
         XCTAssertEqual(sections[index].section().rows.map(\.id),
                        ["experimental.recommended", "experimental.chartStyle", "experimental.chartCursor", "experimental.uncertaintyRibbon",
-                        "experimental.prediction",
+                        "experimental.sensorDayCounter", "experimental.prediction",
                         "experimental.insulins", "experimental.pens", "experimental.meters", "experimental.alerts",
                         "experimental.restricted", "experimental.powerSaving"])
     }
@@ -1856,6 +1856,38 @@ final class TherapyParameterEstimatorTests: XCTestCase {
         let model = model(periods: [ExperimentalPredictionPeriod(startMinute: 360, carbRatio: 10, insulinSensitivityMgDl: 54, carbAbsorption: 35)])
         XCTAssertNil(TherapyParameterEstimator.periodStart(of: midnight.addingTimeInterval(5 * hour), model: model))
         XCTAssertEqual(TherapyParameterEstimator.periodStart(of: midnight.addingTimeInterval(7 * hour), model: model), 360)
+    }
+}
+
+// MARK: - Sensor day counter
+
+/// JugglucoNG `ManagedSensorStatusPolicy.resolveLifecycleSummary`, values worked by hand from its
+/// integer arithmetic.
+final class SensorDayCounterTests: XCTestCase {
+    private let day = 1440.0
+
+    func testLifetimeRoundsToTheNearestDay() throws {
+        XCTAssertEqual(try XCTUnwrap(SensorDayCounter.days(ageMinutes: 0, lifetimeDays: 15.5)).total, 16, "Libre 2 Plus: 15 d + 12 h")
+        XCTAssertEqual(try XCTUnwrap(SensorDayCounter.days(ageMinutes: 0, lifetimeDays: 14.5)).total, 15)
+        XCTAssertEqual(try XCTUnwrap(SensorDayCounter.days(ageMinutes: 0, lifetimeDays: 15 + 30 / day)).total, 15, "15 d + 30 min stays 15")
+        XCTAssertEqual(try XCTUnwrap(SensorDayCounter.days(ageMinutes: 0, lifetimeDays: 0.2)).total, 1)
+        XCTAssertNil(SensorDayCounter.days(ageMinutes: 0, lifetimeDays: 0))
+    }
+
+    func testDayCountsWholeDaysUsedAndStaysInRange() throws {
+        func counter(_ age: Double) throws -> [Int] {
+            let value = try XCTUnwrap(SensorDayCounter.days(ageMinutes: age, lifetimeDays: 15.5))
+            return [value.day, value.total]
+        }
+        XCTAssertEqual(try counter(0), [1, 16])
+        XCTAssertEqual(try counter(-30), [1, 16])
+        // The remaining time counts in whole hours, so 22 h 59 min used reads 23 h: still day 1.
+        XCTAssertEqual(try counter(22 * 60 + 59), [1, 16])
+        // 23 h 1 min used: 348 whole hours remain, so 24 h count as used: day 2 (as in JugglucoNG).
+        XCTAssertEqual(try counter(23 * 60 + 1), [2, 16])
+        XCTAssertEqual(try counter(7.5 * day), [8, 16])
+        XCTAssertEqual(try counter(15.4 * day), [16, 16])
+        XCTAssertEqual(try counter(20 * day), [16, 16])
     }
 }
 

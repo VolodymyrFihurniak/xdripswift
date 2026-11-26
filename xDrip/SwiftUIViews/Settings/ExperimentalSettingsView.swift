@@ -60,7 +60,7 @@ extension SettingsViewGroupedSettingsViewModel {
             ],
             leadingRows: { [ExperimentalSettingsViewModel.recommendedSetRow(), ExperimentalSettingsViewModel.chartStyleRow(),
                             ExperimentalSettingsViewModel.chartCursorRow(),
-                            ExperimentalSettingsViewModel.uncertaintyRibbonRow()] }
+                            ExperimentalSettingsViewModel.uncertaintyRibbonRow(), ExperimentalSettingsViewModel.sensorDayCounterRow()] }
         )
     }
 }
@@ -151,6 +151,14 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         SettingsRow(id: "experimental.recommended", title: ExperimentalTexts.text("recommendedTitle", "Recommended set"),
                     detail: ExperimentalRecommendedSet.isApplied() ? Texts_Common.on : nil,
                     control: .custom(content: { AnyView(ExperimentalRecommendedSetButton()) }))
+    }
+
+    /// JugglucoNG's "day N / T" for the sensor on Home.
+    static func sensorDayCounterRow() -> SettingsRow {
+        SettingsRow(id: "experimental.sensorDayCounter", title: ExperimentalTexts.text("sensorDayCounter", "Sensor day counter"),
+                    detail: ExperimentalTexts.text("sensorDayCounterDetail", "Day N / total on Home"),
+                    control: .toggle(isOn: { UserDefaults.standard.experimentalSensorDayCounter },
+                                     setIsOn: { UserDefaults.standard.experimentalSensorDayCounter = $0 }))
     }
 
     static func chartCursorRow() -> SettingsRow {

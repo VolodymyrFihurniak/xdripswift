@@ -13,6 +13,14 @@ by accuracy, Show likely range, the insulin activity, the chart cursor, the unce
 Consider IOB and recent glucose for the predicted low, and Automatic power saving. Alarms, dose
 hints, Nightscout uploads, the chart style, quiet window and restricted mode are left alone.
 
+## Sensor day counter
+
+**Sensor day counter** (`SensorDayCounter`, JugglucoNG `ManagedSensorStatusPolicy`) shows the
+sensor's age on Home as "Day N / T" instead of days and hours (not while Home counts down). T is
+the lifetime rounded to the nearest whole day, so a Libre 2 Plus (15 days + 12 hours) reads 16
+and a Libre 2 (14 days + 12 hours) 15, as in JugglucoNG; the real end is unchanged. A reminder
+before the end already exists: Settings → Alerts → Sensor ending soon (24 hours by default).
+
 ## Glucose on the chart
 
 **Points** is xDrip's usual one dot per reading. **Line** joins the readings in their range
