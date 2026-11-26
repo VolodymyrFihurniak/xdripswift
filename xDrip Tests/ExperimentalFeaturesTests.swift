@@ -739,8 +739,9 @@ final class ExperimentalFeaturesTests: XCTestCase {
         let aboutIndex = try XCTUnwrap(sections.firstIndex { $0.id == SettingsRootSection.about.rawValue * 10 })
         XCTAssertLessThan(index, aboutIndex)
         XCTAssertEqual(sections[index].section().rows.map(\.id),
-                       ["experimental.chartStyle", "experimental.chartCursor", "experimental.prediction", "experimental.insulins",
-                        "experimental.pens", "experimental.alerts", "experimental.restricted", "experimental.powerSaving"])
+                       ["experimental.chartStyle", "experimental.chartCursor", "experimental.uncertaintyRibbon", "experimental.prediction",
+                        "experimental.insulins", "experimental.pens", "experimental.meters", "experimental.alerts",
+                        "experimental.restricted", "experimental.powerSaving"])
     }
 }
 

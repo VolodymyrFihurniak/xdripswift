@@ -569,7 +569,8 @@ private struct SibionicsTrackerWriter {
         data.appendUInt32BE(UInt32(truncatingIfNeeded: UInt64(bitPattern: value) >> 32))
         data.appendUInt32BE(UInt32(truncatingIfNeeded: UInt64(bitPattern: value)))
     }
-    mutating func bool(_ value: Bool) { data.append(value ? 1 : 0) }
+    // A typed byte: an untyped literal here selects Data.append<Int> and writes eight bytes.
+    mutating func bool(_ value: Bool) { data.append(UInt8(value ? 1 : 0)) }
 }
 
 private struct SibionicsTrackerReader {

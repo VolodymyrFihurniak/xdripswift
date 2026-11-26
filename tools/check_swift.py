@@ -14,7 +14,9 @@ uncommitted changes). Two checks:
             * `super.` inside an escaping closure ("using 'super' in a closure where 'self' is
               explicitly captured is not yet supported") - call it from a private method instead;
             * `%` in a Double context (Date(timeIntervalSince1970:), TimeInterval(...)) - '%' is
-              unavailable for floating point; precompute the value or use truncatingRemainder.
+              unavailable for floating point; precompute the value or use truncatingRemainder;
+            * `data.append(1)` / `data.append(flag ? 1 : 0)` on a Data value: the untyped literal
+              selects Data.append<Int> and writes eight bytes, not one - write `UInt8(...)`.
 
 The parser is installed on first use with pip into tools/.tslib (git-ignored):
 tree-sitter 0.26.0 and tree-sitter-swift 0.7.4.
@@ -95,12 +97,18 @@ def modulo_in_double_argument(code):
     return False
 
 
+DATA_LITERAL_APPEND = re.compile(
+    r"\b\w*[dD]ata\.append\(\s*(0x[0-9A-Fa-f]+|\d+|[^()]*\?\s*(0x[0-9A-Fa-f]+|\d+)\s*:\s*(0x[0-9A-Fa-f]+|\d+))\s*\)")
+
+
 def pitfalls(lines):
     found = []
     for number, line in enumerate(lines):
         code = line.split("//")[0]
         if modulo_in_double_argument(code):
             found.append((number + 1, "'%' in a Double context"))
+        if DATA_LITERAL_APPEND.search(code):
+            found.append((number + 1, "Data.append with an untyped integer literal writes eight bytes"))
         if CLOSURE_START.search(code):
             depth = 0
             for offset, inner in enumerate(lines[number:number + 80]):

@@ -58,12 +58,13 @@ source set and `println` from a test (`gradle jvmTest -i | grep YOUR_TAG`).
 
 ## Mistakes that broke the CI build
 
-Each of these passed every local check and failed on macOS. `check_swift.py` detects the first two.
+Each of these passed every local check and failed on macOS. `check_swift.py` detects the first three.
 
 | Mistake | Fix |
 |---|---|
 | `super.method()` inside an escaping closure (`{ [self] in ... }`): "using 'super' in a closure where 'self' is explicitly captured is not yet supported" | call `super` from a small private method and call that from the closure |
 | `%` on a `Double`, e.g. `Date(timeIntervalSince1970: 1_800_000_000 - 1_800_000_000 % 86_400)` ("'%' is unavailable") | precompute the literal, or `truncatingRemainder(dividingBy:)` |
+| `data.append(flag ? 1 : 0)` or `data.append(1)` on a `Data`: compiles, but the untyped literal picks `Data.append<Int>` and writes **eight** bytes, so a binary snapshot no longer reads back (failed tests, not the build) | `data.append(UInt8(...))` |
 | `UNUserNotificationCenter.add(request)` without `withCompletionHandler:` in a context that is not async | `add(request, withCompletionHandler: nil)` |
 | `@State` declared in a struct other than the view that uses it | keep `@State` in the `View` whose `body` reads it |
 | a long `[...] + [...] + [...]` chain of array literals in a test ("unable to type-check in reasonable time") | build the array with a helper or `append(contentsOf:)` |
