@@ -135,6 +135,7 @@ watch and notification extensions. A treatment's insulin is named in its `notes`
 (`InsulinProfile.matching(notes:)`); every per-dose choice must round-trip through its
 `shortName`. All off by default; IOB/COB is untouched. Also: `AlertKind.predictedLow` (raw 16),
 prediction periods/body weight/protein-fat/intensity (notes tokens `P:20 F:15`, `intensity:light`),
+`AlertKind.predictedHigh` (raw 17, `PredictedHighAlert`, JugglucoNG PRE_HIGH + `ForecastIobCoverage`),
 accuracy recorder (Application Support JSON, 14 days; `PredictionInspector` + `ExperimentalPredictionInspectorView` = JugglucoNG prediction inspector), Nightscout devicestatus forecast
 (`openaps.suggested.predBGs.IOB`, only when no AID status is followed), and
 `ExperimentalCompanionForecast` for widgets, Live Activity and watch (optional fields).

@@ -344,6 +344,22 @@ extension UserDefaults {
         set { set(newValue, forKey: "experimentalPredictedLowLeadMinutes") }
     }
 
+    /// How far ahead the predicted high alert looks, in minutes.
+    var experimentalPredictedHighLeadMinutes: Int {
+        get {
+            let stored = integer(forKey: "experimentalPredictedHighLeadMinutes")
+            return PredictedLowAlert.leadChoices.contains(stored) ? stored : PredictedHighAlert.defaultLeadMinutes
+        }
+        set { set(newValue, forKey: "experimentalPredictedHighLeadMinutes") }
+    }
+
+    /// JugglucoNG `iobCoverageFactor` 1 (on) or 0 (off): the predicted high alert stays quiet while
+    /// the insulin still to act covers the projected overshoot. Off by default, as in JugglucoNG.
+    var experimentalPredictedHighIobCoverage: Bool {
+        get { bool(forKey: "experimentalPredictedHighIobCoverage") }
+        set { set(newValue, forKey: "experimentalPredictedHighIobCoverage") }
+    }
+
     /// Draws each insulin's activity along the bottom of the main chart.
     var experimentalInsulinsEnabled: Bool {
         get { bool(forKey: ExperimentalKey.insulinsEnabled) }
@@ -978,6 +994,33 @@ enum PredictedLowAlert {
                                                  policy: UserDefaults.standard.dataFlowPolicy) ?? []
         }
         return result
+    }
+}
+
+/// The experimental alert that warns before the forecast reaches the high value (JugglucoNG PRE_HIGH).
+enum PredictedHighAlert {
+    static let defaultLeadMinutes = 30
+
+    /// The first forecast point within `leadMinutes` above the threshold, while the current reading
+    /// is still at or below it (a current high is the high alert's job).
+    static func crossing(forecast: [GlucosePredictionPoint], currentMgDl: Double, thresholdMgDl: Double,
+                         leadMinutes: Int) -> (minutes: Int, mgDl: Double)? {
+        guard currentMgDl <= thresholdMgDl, let baseline = forecast.first?.date else { return nil }
+        let limit = baseline.addingTimeInterval(TimeInterval(leadMinutes * 60))
+        guard let point = forecast.dropFirst().first(where: { $0.date <= limit && $0.value > thresholdMgDl }) else { return nil }
+        return (Int((point.date.timeIntervalSince(baseline) / 60).rounded()), point.value)
+    }
+
+    /// JugglucoNG `ForecastIobCoverage.covered` with factor 1: the remaining effect of the insulin
+    /// on board (classic IOB × sensitivity, not eIOB, so a bolus that has not started acting
+    /// counts in full) is at least the projected overshoot. Missing or zero inputs never cover.
+    static func insulinCovers(projectedMgDl: Double, thresholdMgDl: Double, iobUnits: Double, insulinSensitivityMgDl: Double,
+                              coverageFactor: Double = 1) -> Bool {
+        guard coverageFactor.isFinite, coverageFactor > 0, iobUnits.isFinite, iobUnits > 0,
+              insulinSensitivityMgDl.isFinite, insulinSensitivityMgDl > 0, projectedMgDl.isFinite, thresholdMgDl.isFinite else { return false }
+        let overshoot = projectedMgDl - thresholdMgDl
+        guard overshoot > 0 else { return false }
+        return iobUnits * insulinSensitivityMgDl >= overshoot * coverageFactor
     }
 }
 

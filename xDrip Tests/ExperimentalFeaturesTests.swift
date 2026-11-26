@@ -708,6 +708,38 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertEqual(kinds.firstIndex(of: .predictedLow), (kinds.firstIndex(of: .low) ?? -2) + 1)
     }
 
+    func testPredictedHighFiresOnlyWithinTheLeadTimeAndWhileStillBelow() throws {
+        let points = forecast([150, 160, 170, 185, 190])
+        XCTAssertNil(PredictedHighAlert.crossing(forecast: points, currentMgDl: 150, thresholdMgDl: 180, leadMinutes: 10))
+        let crossing = try XCTUnwrap(PredictedHighAlert.crossing(forecast: points, currentMgDl: 150, thresholdMgDl: 180, leadMinutes: 15))
+        XCTAssertEqual(crossing.minutes, 15)
+        XCTAssertEqual(crossing.mgDl, 185)
+        // Already above: the ordinary high alert covers it.
+        XCTAssertNil(PredictedHighAlert.crossing(forecast: points, currentMgDl: 190, thresholdMgDl: 180, leadMinutes: 30))
+    }
+
+    func testInsulinOnBoardCoversOnlyARealOvershoot() {
+        // 0.5 U × 54 mg/dL = 27 mg/dL covers a 20 mg/dL overshoot; 0.3 U (16.2) does not.
+        XCTAssertTrue(PredictedHighAlert.insulinCovers(projectedMgDl: 200, thresholdMgDl: 180, iobUnits: 0.5, insulinSensitivityMgDl: 54))
+        XCTAssertFalse(PredictedHighAlert.insulinCovers(projectedMgDl: 200, thresholdMgDl: 180, iobUnits: 0.3, insulinSensitivityMgDl: 54))
+        // No overshoot, no insulin, no sensitivity or a zero factor never cover.
+        XCTAssertFalse(PredictedHighAlert.insulinCovers(projectedMgDl: 170, thresholdMgDl: 180, iobUnits: 5, insulinSensitivityMgDl: 54))
+        XCTAssertFalse(PredictedHighAlert.insulinCovers(projectedMgDl: 200, thresholdMgDl: 180, iobUnits: 0, insulinSensitivityMgDl: 54))
+        XCTAssertFalse(PredictedHighAlert.insulinCovers(projectedMgDl: 200, thresholdMgDl: 180, iobUnits: 1, insulinSensitivityMgDl: 0))
+        XCTAssertFalse(PredictedHighAlert.insulinCovers(projectedMgDl: 200, thresholdMgDl: 180, iobUnits: 1, insulinSensitivityMgDl: 54,
+                                                        coverageFactor: 0))
+    }
+
+    func testPredictedHighIsANewDisabledByDefaultGlucoseAlert() {
+        XCTAssertEqual(AlertKind.predictedHigh.rawValue, 17)
+        XCTAssertTrue(AlertKind.predictedHigh.defaultIsDisabled())
+        XCTAssertTrue(AlertKind.predictedHigh.valueIsABgValue())
+        XCTAssertEqual(AlertKind.predictedHigh.defaultAlertValue(), ConstantsDefaultAlertLevels.high)
+        XCTAssertEqual(SameDirectionAlertRule.direction(of: .predictedHigh), "rising")
+        let kinds = AlertKind.visibleAlertKinds(for: .Libre2)
+        XCTAssertEqual(kinds.firstIndex(of: .predictedHigh), (kinds.firstIndex(of: .high) ?? -2) + 1)
+    }
+
     // MARK: Settings
 
     func testSettingsDefaultsAndClamping() {

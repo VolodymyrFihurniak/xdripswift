@@ -156,6 +156,16 @@ Experimental features → Glucose prediction) while glucose is still above that 
 is below it, the ordinary Low alarm takes over. Sound, schedule and snooze work as for every alarm.
 The alert uses the prediction model even when the forecast is not drawn on the chart.
 
+### Predicted high alert
+
+Settings → Alerts → **Predicted High** (`AlertKind.predictedHigh`, raw value 17, off by default;
+JugglucoNG PRE_HIGH) is the mirror image: the forecast rises above the alarm value within its own
+lead time (default 30 minutes) while glucose is still at or below it. A current High or Very High
+wins. **Quiet while insulin covers the rise** (JugglucoNG `ForecastIobCoverage`, factor 1; off by
+default as there) keeps it silent while classic IOB (every unit still to act, a bolus before its
+onset included) × sensitivity is at least the projected overshoot. It never applies to the predicted
+low. Fast Rise and Predicted High share the same-direction rule as Fast Drop and Predicted Low.
+
 ## Insulins
 
 Each insulin has its own action curve from JugglucoNG's catalogue (model version 3): Fiasp,

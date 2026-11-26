@@ -80,6 +80,9 @@ public enum AlertKind: Int, CaseIterable {
     /// Experimental: the forecast reaches the alert value within the lead time set in
     /// Settings > Experimental features > Glucose prediction, while glucose is still above it.
     case predictedLow = 16
+    /// Experimental (JugglucoNG PRE_HIGH): the forecast rises above the alert value within the lead
+    /// time while glucose is still below it; optionally quiet while insulin on board covers the rise.
+    case predictedHigh = 17
 
     var isSensorExpiryReminder: Bool {
         self == .sensorEndingSoon || self == .sensorExpectedExpiry
@@ -137,6 +140,7 @@ public enum AlertKind: Int, CaseIterable {
             .predictedLow,
             .fastdrop,
             .high,
+            .predictedHigh,
             .veryhigh,
             .fastrise,
             .missedreading,
@@ -160,7 +164,7 @@ public enum AlertKind: Int, CaseIterable {
     /// if true, then this type of alert will (if raised) create an immediate notification which will have the current reading as text - simply means there's no need to create an additional notification with the current reading
     func createsImmediateNotificationWithBGReading() -> Bool {
         switch self {
-        case .low, .high, .verylow, .veryhigh, .fastdrop, .fastrise, .predictedLow:
+        case .low, .high, .verylow, .veryhigh, .fastdrop, .fastrise, .predictedLow, .predictedHigh:
             return true
         default:
             return false
@@ -200,7 +204,7 @@ public enum AlertKind: Int, CaseIterable {
     /// will only be useful in UI
     func valueIsABgValue() -> Bool {
         switch self {
-        case .low, .high, .verylow, .veryhigh, .fastdrop, .fastrise, .predictedLow:
+        case .low, .high, .verylow, .veryhigh, .fastdrop, .fastrise, .predictedLow, .predictedHigh:
             return true
         default:
             return false
@@ -223,7 +227,7 @@ public enum AlertKind: Int, CaseIterable {
         switch self {
         case .low, .predictedLow:
             return ConstantsDefaultAlertLevels.low
-        case .high:
+        case .high, .predictedHigh:
             return ConstantsDefaultAlertLevels.high
         case .verylow:
             return ConstantsDefaultAlertLevels.veryLow
@@ -261,7 +265,7 @@ public enum AlertKind: Int, CaseIterable {
     /// default enabled state for newly introduced alert kinds.
     func defaultIsDisabled() -> Bool {
         switch self {
-        case .notlooping, .sensorEndingSoon, .sensorExpectedExpiry, .predictedLow:
+        case .notlooping, .sensorEndingSoon, .sensorExpectedExpiry, .predictedLow, .predictedHigh:
             return true
         default:
             return false
@@ -317,6 +321,8 @@ public enum AlertKind: Int, CaseIterable {
             return "sensorExpectedExpiry"
         case .predictedLow:
             return "predictedlow"
+        case .predictedHigh:
+            return "predictedhigh"
         }
     }
     
@@ -391,6 +397,18 @@ public enum AlertKind: Int, CaseIterable {
                   let crossing = PredictedLowAlert.crossing(forecast: forecast, currentMgDl: lastBgReading.finalValue,
                                                             thresholdMgDl: Double(currentAlertEntry.value),
                                                             leadMinutes: UserDefaults.standard.experimentalPredictedLowLeadMinutes)
+            else { return (false, nil, nil, nil) }
+            let body = createAlertBodyForBgReadingAlerts(bgReading: lastBgReading, alertKind: self) + " → "
+                + crossing.mgDl.mgDlToMmolAndToString(mgDl: isMgDl)
+                + " " + String(format: Texts_Alerts.predictedLowInMinutes, crossing.minutes)
+            return (true, body, createAlertTitleForBgReadingAlerts(alertKind: self), nil)
+
+        case .predictedHigh:
+            if !currentAlertEntry.alertType.enabled { return (false, nil, nil, nil) }
+            guard let lastBgReading = lastBgReading, lastBgReading.finalValue > 0, let forecast = forecast,
+                  let crossing = PredictedHighAlert.crossing(forecast: forecast, currentMgDl: lastBgReading.finalValue,
+                                                             thresholdMgDl: Double(currentAlertEntry.value),
+                                                             leadMinutes: UserDefaults.standard.experimentalPredictedHighLeadMinutes)
             else { return (false, nil, nil, nil) }
             let body = createAlertBodyForBgReadingAlerts(bgReading: lastBgReading, alertKind: self) + " → "
                 + crossing.mgDl.mgDlToMmolAndToString(mgDl: isMgDl)
@@ -684,6 +702,8 @@ public enum AlertKind: Int, CaseIterable {
             return "sensorExpiry.expectedExpiry"
         case .predictedLow:
             return ConstantsNotifications.NotificationIdentifiersForAlerts.predictedLowAlert
+        case .predictedHigh:
+            return ConstantsNotifications.NotificationIdentifiersForAlerts.predictedHighAlert
         }
     }
     
@@ -722,6 +742,8 @@ public enum AlertKind: Int, CaseIterable {
             return Texts_Alerts.sensorExpectedExpiry
         case .predictedLow:
             return Texts_Alerts.predictedLowAlertTitle
+        case .predictedHigh:
+            return Texts_Alerts.predictedHighAlertTitle
         }
     }
 
@@ -772,7 +794,7 @@ public enum AlertKind: Int, CaseIterable {
     /// What is this text ?
     func valueUnitText(transmitterType: CGMTransmitterType?) -> String {
         switch self {
-        case .verylow, .low, .high, .veryhigh, .fastdrop, .fastrise, .predictedLow:
+        case .verylow, .low, .high, .veryhigh, .fastdrop, .fastrise, .predictedLow, .predictedHigh:
             return UserDefaults.standard.bloodGlucoseUnitIsMgDl ? Texts_Common.mgdl : Texts_Common.mmol
         case .missedreading, .notlooping:
             return Texts_Common.minutes
@@ -843,7 +865,7 @@ public enum AlertKind: Int, CaseIterable {
         switch self {
         case .verylow, .veryhigh, .fastdrop:
             return .urgent
-        case .low, .high, .fastrise, .notlooping, .predictedLow:
+        case .low, .high, .fastrise, .notlooping, .predictedLow, .predictedHigh:
             return .warning
         default:
             return .normal
@@ -869,6 +891,8 @@ private func createAlertTitleForBgReadingAlerts(alertKind: AlertKind) -> String 
         return Texts_Alerts.fastRiseTitle
     case .predictedLow:
         return Texts_Alerts.predictedLowAlertTitle
+    case .predictedHigh:
+        return Texts_Alerts.predictedHighAlertTitle
     case .missedreading, .calibration, .batterylow, .dexcomG5BatteryLow, .dexcomG7BatteryLow,
          .phonebatterylow, .notlooping, .sensorTransmitterFailure, .sensorEndingSoon, .sensorExpectedExpiry:
         return ""
@@ -958,7 +982,7 @@ enum SameDirectionAlertRule {
     static func direction(of kind: AlertKind) -> String? {
         switch kind {
         case .fastdrop, .predictedLow: return "falling"
-        case .fastrise: return "rising"
+        case .fastrise, .predictedHigh: return "rising"
         default: return nil
         }
     }

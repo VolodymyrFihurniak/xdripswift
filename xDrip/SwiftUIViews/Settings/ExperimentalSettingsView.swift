@@ -275,7 +275,21 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                             })),
                 SettingsRow(id: "experimental.predictedLow.evidence", title: ExperimentalTexts.text("predictedLowEvidence", "Consider IOB and recent glucose"),
                             control: .toggle(isOn: { UserDefaults.standard.experimentalPredictedLowEvidence },
-                                             setIsOn: { UserDefaults.standard.experimentalPredictedLowEvidence = $0 }))
+                                             setIsOn: { UserDefaults.standard.experimentalPredictedLowEvidence = $0 })),
+                SettingsRow(id: "experimental.predictedHigh.lead",
+                            title: Texts_Alerts.predictedHighAlertTitle + ": " + ExperimentalTexts.text("predictedLowLead", "Warn ahead by"), accessory: .none,
+                            control: .menu(options: {
+                                let selected = UserDefaults.standard.experimentalPredictedHighLeadMinutes
+                                return PredictedLowAlert.leadChoices.map { SettingsMenuOption(title: Self.minutesText($0), isSelected: $0 == selected) }
+                            }, selectOption: { index in
+                                let choices = PredictedLowAlert.leadChoices
+                                guard choices.indices.contains(index) else { return }
+                                UserDefaults.standard.experimentalPredictedHighLeadMinutes = choices[index]
+                            })),
+                SettingsRow(id: "experimental.predictedHigh.iobCoverage",
+                            title: ExperimentalTexts.text("predictedHighIobCoverage", "Quiet while insulin covers the rise"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalPredictedHighIobCoverage },
+                                             setIsOn: { UserDefaults.standard.experimentalPredictedHighIobCoverage = $0 }))
             ]
         case .predictionNightscout:
             return [
@@ -566,7 +580,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         case .doseHints: return ExperimentalTexts.text("doseHintsTitle", "Dose hints")
         case .predictionAdaptive: return ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction")
         case .predictionModel: return ExperimentalTexts.text("predictionModel", "Model")
-        case .predictionAlert: return Texts_Alerts.predictedLowAlertTitle
+        case .predictionAlert: return ExperimentalTexts.text("predictedAlertsTitle", "Predicted alerts")
         case .predictionAccuracy: return ExperimentalTexts.text("accuracyShow", "Prediction accuracy")
         case .predictionNightscout: return "Nightscout"
         }
@@ -583,6 +597,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("predictionModelFooter", "Insulin sensitivity: how far one unit lowers glucose. Carb ratio: grams covered by one unit. Absorption sets how long carbs take to act. Periods change these by time of day; each treatment uses the values in force when it was logged. Body weight sharpens curves measured per kilogram (Fiasp, Levemir, regular insulin). Protein and fat add a late rise for carb entries that list them. Basal and premixed insulins are not part of the forecast, as in JugglucoNG.")
         case .predictionAlert:
             return ExperimentalTexts.text("predictedLowFooter", "Warns when the forecast falls below the alarm value within this time while glucose is still above it. Turn it on and set the value, sound and snooze in Settings > Alerts > Predicted Low. It uses the model above even when the prediction is not drawn.")
+                + "\n\n" + ExperimentalTexts.text("predictedHighFooter", "Predicted High warns when the forecast rises above its value within its own time while glucose is still below it; set it in Settings > Alerts > Predicted High. Quiet while insulin covers the rise keeps it silent while the insulin still to act (all of it, including a bolus that has not started working) times the sensitivity is at least the rise above the value: what it would announce is already treated. This never applies to Predicted Low, where insulin makes a low more likely.")
                 + "\n\n" + ExperimentalTexts.text("predictedLowEvidenceFooter", "Consider IOB and recent glucose cuts false warnings: the alert then needs a falling trend and carbs on board that do not cover the drop. It warns at once when glucose is within 15 mg/dL (0.8 mmol/L) of the value, would reach it within 10 minutes, or insulin acting in the next 30 minutes explains the drop. With no insulin on board, a fall that only returns from a recent rise waits. Otherwise a second reading must confirm it. The Low and Very Low alarms are not affected.")
         case .predictionNightscout:
             return ExperimentalTexts.text("predictionNightscoutFooter", "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.")
