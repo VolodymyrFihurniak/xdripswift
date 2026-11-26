@@ -89,7 +89,8 @@ struct DisableSpeakReadingsIntent: AppIntent {
 }
 
 /// Logs a treatment typed by the person, as the treatment editor does: a new entry, entered by
-/// xDrip, marked for the next Nightscout sync. Uses the app's store when the app is running.
+/// xDrip, saved to disk before returning, marked for the next Nightscout sync. Uses the app's
+/// store when the app is running.
 enum QuickTreatmentLog {
     static let carbRange = 1.0...300.0
     static let insulinRange = 0.1...50.0
@@ -104,7 +105,9 @@ enum QuickTreatmentLog {
         }
         _ = TreatmentEntry(date: date, value: value, treatmentType: type, nightscoutEventType: nil, enteredBy: nil,
                            nsManagedObjectContext: coreDataManager.mainManagedObjectContext)
-        guard coreDataManager.saveChanges() else { return false }
+        // An intent's process can end right after its dialog, so the entry must be on disk before
+        // success is reported and the Nightscout sync is requested.
+        guard coreDataManager.saveChangesSynchronously() else { return false }
         UserDefaults.standard.timeStampLatestNightscoutSyncRequest = .now
         UserDefaults.standard.nightscoutSyncRequired = true
         return true
