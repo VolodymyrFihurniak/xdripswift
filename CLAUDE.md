@@ -8,6 +8,11 @@ and match it rather than inventing. User-facing docs: `docs/sibionics2-troublesh
 
 ## Build and verification
 
+**New session? Read `docs/development-notes.md` first**: owner preferences (answer in Ukrainian,
+build fixes after a merged PR go straight to `master`), the verification tools, and the mistakes
+that broke the CI before. Before every commit: `python3 tools/check_swift.py` and
+`python3 tools/check_strings.py`.
+
 - No Swift/Xcode in cloud sessions: code cannot be compiled or tested locally. Build and tests run
   only in GitHub Actions (`.github/workflows/build_xdrip.yml`, macOS). Say so when reporting work.
 - `Sibionics2Core` is a Kotlin Multiplatform XCFramework (vendored JugglucoNG V116A/V115G stock

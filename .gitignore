@@ -122,3 +122,6 @@ xdripswift.wiki/
 commit.txt
 
 *.bak
+
+# Tools of tools/check_swift.py
+tools/.tslib/
