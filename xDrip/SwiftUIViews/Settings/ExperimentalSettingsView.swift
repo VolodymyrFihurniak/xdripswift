@@ -200,7 +200,14 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                                      AdaptiveForecastStore.refreshIfDue(coreDataManager: coreDataManager)
                                                  }
                                              }),
-                            isEnabled: defaults.experimentalPredictionEnabled, reloadScope: .all)
+                            isEnabled: defaults.experimentalPredictionEnabled, reloadScope: .all),
+                SettingsRow(id: "experimental.prediction.blend", title: ExperimentalTexts.text("predictionBlend", "Combine by accuracy"),
+                            detail: defaults.experimentalPredictionAccuracyEnabled ? nil
+                                : ExperimentalTexts.text("predictionNeedsAccuracy", "Needs Record accuracy"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalPredictionBlend },
+                                             setIsOn: { UserDefaults.standard.experimentalPredictionBlend = $0 }),
+                            isEnabled: defaults.experimentalPredictionEnabled && defaults.experimentalPredictionAdaptive
+                                && defaults.experimentalPredictionAccuracyEnabled)
             ]
             if defaults.experimentalPredictionAdaptive || AdaptiveForecastStore.model() != nil {
                 rows.append(SettingsRow(id: "experimental.prediction.adaptiveStatus",
@@ -281,7 +288,12 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return [
                 SettingsRow(id: "experimental.accuracy.enabled", title: ExperimentalTexts.text("accuracyRecord", "Record accuracy"),
                             control: .toggle(isOn: { UserDefaults.standard.experimentalPredictionAccuracyEnabled },
-                                             setIsOn: { UserDefaults.standard.experimentalPredictionAccuracyEnabled = $0 })),
+                                             setIsOn: { UserDefaults.standard.experimentalPredictionAccuracyEnabled = $0 }),
+                            reloadScope: .all),
+                SettingsRow(id: "experimental.accuracy.range", title: ExperimentalTexts.text("predictionRange", "Show likely range"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalPredictionRange },
+                                             setIsOn: { UserDefaults.standard.experimentalPredictionRange = $0 }),
+                            isEnabled: defaults.experimentalPredictionEnabled && defaults.experimentalPredictionAccuracyEnabled),
                 SettingsRow(id: "experimental.accuracy.show", title: ExperimentalTexts.text("accuracyShow", "Prediction accuracy"),
                             control: .custom(content: {
                                 AnyView(NavigationLink(ExperimentalTexts.text("accuracyShow", "Prediction accuracy")) { ExperimentalPredictionAccuracyView() })
@@ -565,7 +577,8 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         case .predictionMain:
             return ExperimentalTexts.text("predictionMainFooter", "Follow the trend continues the recent rise or fall that your treatments do not explain, fading over about an hour. The forecast starts only from a reading at most 15 minutes old.")
         case .predictionAdaptive:
-            return ExperimentalTexts.text("predictionAdaptiveFooter", "Draws a forecast learned from your own readings instead of the standard one, dotted, up to two hours. It learns from the last four weeks, relearns once a day and needs two days of readings; it ignores logged insulin and carbs. Until it is ready, after a gap or a new sensor's first hour, or while it is not better than no change, the standard forecast without the trend is drawn. The predicted low alert and Nightscout keep using the standard forecast.")
+            return ExperimentalTexts.text("predictionAdaptiveFooter", "Draws a forecast learned from your own readings instead of the standard one, dotted, up to two hours. It learns from the last four weeks, relearns once a day and needs two days of readings; it reads logged insulin and carbs only when that makes it more accurate on your own last two days. Until it is ready, after a gap or a new sensor's first hour, or while it is not better than no change, the standard forecast without the trend is drawn. The predicted low alert and Nightscout keep using the standard forecast.")
+                + "\n\n" + ExperimentalTexts.text("predictionBlendFooter", "Combine by accuracy mixes the adaptive and the standard forecast, horizon by horizon, giving more weight to the one whose recorded error has been smaller. It needs Record accuracy and at least 36 compared forecasts of each at 15, 30, 60 and 120 minutes; until then the adaptive forecast alone is drawn.")
         case .predictionModel:
             return ExperimentalTexts.text("predictionModelFooter", "Insulin sensitivity: how far one unit lowers glucose. Carb ratio: grams covered by one unit. Absorption sets how long carbs take to act. Periods change these by time of day; each treatment uses the values in force when it was logged. Body weight sharpens curves measured per kilogram (Fiasp, Levemir, regular insulin). Protein and fat add a late rise for carb entries that list them. Basal and premixed insulins are not part of the forecast, as in JugglucoNG.")
         case .predictionAlert:
@@ -575,6 +588,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("predictionNightscoutFooter", "Every five minutes the forecast is uploaded as an OpenAPS-style devicestatus, as AAPS does, so Nightscout's forecast lines show it (enable the openaps plugin). Not available while xDrip follows an AID's status from Nightscout. Boluses also upload their chosen insulin as notes, carb entries their protein and fat.")
         case .predictionAccuracy:
             return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
+                + "\n\n" + ExperimentalTexts.text("predictionRangeFooter", "Show likely range draws a faint band around the forecast: where glucose ended up eight times in ten after this kind of forecast, from the recorded errors at 15, 30, 60 and 120 minutes (beyond two hours it keeps widening as an estimate). It appears once every horizon has at least 36 compared forecasts and is updated every hour.")
         case .restricted, .pens, .meters: return nil
         case .quietWindow:
             return ExperimentalTexts.text("quietFooter", "For the cinema or a lecture: alarms are still raised and shown, only their sound (and, with Notification only, vibration) is held back. The window always ends, after 24 hours at the most. An alarm that stays raised for the break-through time sounds anyway: a low always, the other alarms as chosen above. Snoozes and thresholds work as usual.")
@@ -691,6 +705,7 @@ struct ExperimentalPredictionPeriodsView: View {
 struct ExperimentalPredictionAccuracyView: View {
     @State private var report: [HorizonAccuracy] = []
     @State private var adaptiveReport: [HorizonAccuracy] = []
+    @State private var blendReport: [HorizonAccuracy] = []
     @State private var forecastCount = 0
     @State private var forecasts: [RecordedForecast] = []
     @State private var readings: [(date: Date, mgDl: Double)] = []
@@ -716,6 +731,12 @@ struct ExperimentalPredictionAccuracyView: View {
                         horizonRows(adaptiveReport)
                     }
                 }
+                if !blendReport.isEmpty {
+                    Section(header: Text(ExperimentalTexts.text("accuracyBlend", "Combined forecast")),
+                            footer: Text(ExperimentalTexts.text("accuracyBlendFooter", "The adaptive and the standard forecast mixed by their recorded accuracy, recorded whenever both could answer."))) {
+                        horizonRows(blendReport)
+                    }
+                }
                 Section {
                     NavigationLink(ExperimentalTexts.text("inspectorTitle", "Past forecasts")) {
                         ExperimentalPredictionInspectorView(moments: PredictionInspector.moments(forecasts), readings: readings)
@@ -727,6 +748,8 @@ struct ExperimentalPredictionAccuracyView: View {
                         forecasts = []
                         report = []
                         adaptiveReport = []
+                        blendReport = []
+                        PredictionAccuracySummary.clear()
                         forecastCount = 0
                     }
                 }
@@ -766,7 +789,7 @@ struct ExperimentalPredictionAccuracyView: View {
     private func load() async {
         let forecasts = PredictionAccuracyRecorder.load()
         self.forecasts = forecasts
-        forecastCount = forecasts.filter { !$0.isAdaptive }.count
+        forecastCount = forecasts.filter(\.isStandard).count
         guard let earliest = forecasts.map(\.origin).min(), let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager else {
             isLoading = false
             return
@@ -775,9 +798,11 @@ struct ExperimentalPredictionAccuracyView: View {
             .getLatestBgReadings(limit: nil, fromDate: earliest.addingTimeInterval(-60), forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
             .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
         self.readings = readings.filter { $0.mgDl > 0 }.sorted { $0.date < $1.date }
-        report = PredictionAccuracy.report(forecasts: forecasts.filter { !$0.isAdaptive }, readings: readings)
+        report = PredictionAccuracy.report(forecasts: forecasts.filter(\.isStandard), readings: readings)
         let adaptive = forecasts.filter(\.isAdaptive)
         adaptiveReport = adaptive.isEmpty ? [] : PredictionAccuracy.report(forecasts: adaptive, readings: readings)
+        let blend = forecasts.filter(\.isBlend)
+        blendReport = blend.isEmpty ? [] : PredictionAccuracy.report(forecasts: blend, readings: readings)
         isLoading = false
     }
 }

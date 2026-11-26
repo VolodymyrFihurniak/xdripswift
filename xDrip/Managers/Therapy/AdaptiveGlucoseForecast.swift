@@ -678,15 +678,21 @@ enum AdaptiveForecastStore {
 
     /// Draws the adaptive forecast when it can answer, else the standard forecast without the
     /// trend momentum: on JugglucoNG's benchmark that fallback never did worse than "no change".
-    /// Returns the forecast and whether it is the adaptive one.
+    /// With "Combine by accuracy" on and enough records, the adaptive forecast is combined with the
+    /// standard one (`ForecastBlend`). Returns the forecast, whether it is the adaptive (or
+    /// combined) one, and which recorded model it is (`RecordedForecast.modelKey`).
     static func shownForecast(readings: AdaptiveReadings?, standard: (_ trendMomentum: Bool) -> [GlucosePredictionPoint],
                               horizonMinutes: Int, treatments: AdaptiveTreatmentFeatures? = nil, defaults: UserDefaults = .standard,
-                              now: Date = Date()) -> (points: [GlucosePredictionPoint], isAdaptive: Bool) {
+                              now: Date = Date()) -> (points: [GlucosePredictionPoint], isAdaptive: Bool, model: String) {
         if let readings, let adaptive = forecast(history: readings.history, horizonMinutes: horizonMinutes, treatments: treatments,
                                                  defaults: defaults, now: now) {
-            return (adaptive, true)
+            if defaults.experimentalPredictionBlend, let summary = PredictionAccuracySummary.stored(defaults: defaults),
+               let blended = ForecastBlend.blend(standard: standard(true), adaptive: adaptive, summary: summary) {
+                return (blended, true, RecordedForecast.blendModel)
+            }
+            return (adaptive, true, RecordedForecast.adaptiveModel)
         }
-        return (standard(false), false)
+        return (standard(false), false, RecordedForecast.standardModel)
     }
 
     /// The adaptive forecast from the newest reading of `history`, or nil when it cannot answer:

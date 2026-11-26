@@ -42,6 +42,8 @@ enum ConstantsGlucoseChartSwiftUI {
     static let experimentalPredictionColor = Color(red: 0.55, green: 0.65, blue: 0.95).opacity(0.9)
     /// JugglucoNG `UncertaintyBands.FILL_ALPHA` / `EDGE_ALPHA`.
     static let experimentalUncertaintyFillColor = Color.primary.opacity(0.13)
+    /// Likely range around the forecast: the forecast's colour, faint.
+    static let experimentalPredictionRangeColor = Color(red: 0.55, green: 0.65, blue: 0.95).opacity(0.2)
     static let experimentalUncertaintyEdgeColor = Color.primary.opacity(0.26)
     static let experimentalGlucoseLineWidth: CGFloat = 2.5
     /// Widgets, Live Activity and the watch draw smaller charts.

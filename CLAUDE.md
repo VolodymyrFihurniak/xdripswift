@@ -149,7 +149,10 @@ Adaptive prediction (`xDrip/Managers/Therapy/AdaptiveGlucoseForecast.swift`): Ju
 `BgReading` dictionaries; alerts and Nightscout stay on the standard forecast. Fork extension:
 `AdaptiveTreatmentFeatures` (insulin / carbs still to come, 30-minute treatment effect) as features
 9–11, kept only when they beat the CGM-only model on the holdout (`usesTreatments`); every forecast
-caller passes them, a treatment model without them has no answer.
+caller passes them, a treatment model without them has no answer. `PredictionAccuracySummary` (hourly, per
+recorded model and horizon: RMSE, 10th/90th residual percentiles) feeds `ForecastBlend` (inverse-MSE
+mix of adaptive and standard, recorded as model `blend`) and `PredictionRange` (band around the
+forecast, `GlucoseChartExperimentalPlots.predictionRange`).
 Power saving (`ExperimentalPowerSaving`, mode Off/On/Automatic, never while charging) throttles the
 "every reading" uploads, Live Activity/widget refresh (`allowsRefresh`, urgent out of range), the
 Home chart minute redraw and the adaptive refit — never readings or alarms. Alarms (`AlertKind.swift`/`AlertManager`):

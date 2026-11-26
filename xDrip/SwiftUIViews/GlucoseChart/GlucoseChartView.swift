@@ -717,6 +717,19 @@ struct GlucoseChartView: View {
         }
     }
 
+    /// The forecast's likely range: a faint band in the forecast's colour.
+    @ChartContentBuilder
+    private func predictionRangeMarks(endDate: Date, domain: ClosedRange<Double>) -> some ChartContent {
+        ForEach(experimentalPlotData.predictionRange.filter { $0.date <= endDate }) { point in
+            AreaMark(x: .value("Time", point.date),
+                     yStart: .value("Lower", min(max(point.lower, domain.lowerBound), domain.upperBound)),
+                     yEnd: .value("Upper", min(max(point.upper, domain.lowerBound), domain.upperBound)),
+                     series: .value("Series", "experimental-prediction-range"))
+                .interpolationMethod(.monotone)
+                .foregroundStyle(ConstantsGlucoseChartSwiftUI.experimentalPredictionRangeColor)
+        }
+    }
+
     /// JugglucoNG's uncertainty ribbon: a faint band with a slightly stronger edge, under the readings.
     @ChartContentBuilder
     private func uncertaintyMarks(domain: ClosedRange<Double>) -> some ChartContent {
@@ -1024,8 +1037,12 @@ struct GlucoseChartView: View {
                 }
             }
 
-            // Experimental forecast from the newest reading, kept inside the y-domain.
+            // Experimental forecast from the newest reading, kept inside the y-domain, over the
+            // band of where glucose usually ended up around it.
             if showsPrediction {
+                if usesMainChartYAxisContext, experimentalPlotData.predictionRange.count >= 2 {
+                    predictionRangeMarks(endDate: experimentalXScaleEndDate, domain: domain)
+                }
                 predictionMarks(endDate: experimentalXScaleEndDate, domain: domain)
             }
 
@@ -1782,6 +1799,8 @@ struct GlucoseChartExperimentalPlots {
     static let lineGapThreshold: TimeInterval = 17 * 60
 
     var prediction: [PredictionPoint] = []
+    /// Where glucose usually ended up around this forecast (`PredictionRange`); main chart only.
+    var predictionRange: [UncertaintyPoint] = []
     /// Intervals of the readings that have one (Sibionics Adaptive V2); drawn on the main chart only.
     var uncertainty: [UncertaintyPoint] = []
     var insulin: [InsulinLayer] = []

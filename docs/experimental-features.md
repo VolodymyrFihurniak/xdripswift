@@ -111,8 +111,20 @@ tends to carry on, and how strongly glucose drifts back toward your own average.
   forecast; the chart cursor reads whichever is drawn.
 - With **Record accuracy** on, the adaptive forecast from the same reading is recorded too, and
   **Prediction accuracy** shows the two side by side.
+- **Combine by accuracy** (fork extension, needs Record accuracy): the adaptive and the standard
+  forecast (with the trend, as recorded) are mixed horizon by horizon, each weighted by the
+  inverse of its recorded mean square error (`ForecastBlend`); weights between 15, 30, 60 and
+  120 minutes are interpolated, held flat outside. It needs 36 scored forecasts of each at every
+  horizon (`PredictionAccuracySummary`, recomputed at most hourly on the recorder's queue and kept
+  in UserDefaults `experimentalPredictionAccuracySummary`); until then the adaptive one alone is
+  drawn. The combined forecast is recorded as model `blend` and shown in Prediction accuracy.
 
 ### Prediction accuracy
+
+**Show likely range** (fork extension) draws a faint band around the drawn forecast: the forecast
+plus the 10th and 90th percentile of that forecast's recorded error (actual − forecast) at 15, 30,
+60 and 120 minutes, interpolated, growing from zero at the reading and with the square root of
+time beyond two hours (`PredictionRange`). Main chart only; needs 36 scored forecasts per horizon.
 
 **Record accuracy** keeps the forecast every five minutes for 14 days (a file in Application
 Support) and **Prediction accuracy** compares it with the glucose that followed, as JugglucoNG's

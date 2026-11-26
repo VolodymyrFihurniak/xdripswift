@@ -264,6 +264,20 @@ extension UserDefaults {
         set { set(newValue, forKey: ExperimentalKey.predictionAdaptive) }
     }
 
+    /// The adaptive and the standard forecast are combined, each weighted by its recorded accuracy
+    /// (`ForecastBlend`). Needs the adaptive forecast and Record accuracy. Off by default.
+    var experimentalPredictionBlend: Bool {
+        get { bool(forKey: "experimentalPredictionBlend") }
+        set { set(newValue, forKey: "experimentalPredictionBlend") }
+    }
+
+    /// A band of where glucose usually ends up around the forecast, from the recorded errors
+    /// (`PredictionRange`). Needs Record accuracy. Off by default.
+    var experimentalPredictionRange: Bool {
+        get { bool(forKey: "experimentalPredictionRange") }
+        set { set(newValue, forKey: "experimentalPredictionRange") }
+    }
+
     /// Grams of carbohydrate covered by one unit. JugglucoNG default 10, range 3...30.
     var experimentalPredictionCarbRatio: Double {
         get { Self.experimentalValue(object(forKey: ExperimentalKey.predictionCarbRatio), fallback: ExperimentalPredictionModel.defaultCarbRatio, range: ExperimentalPredictionModel.carbRatioRange) }
@@ -1603,7 +1617,14 @@ struct RecordedForecast: Codable, Hashable, Sendable {
     var model: String? = nil
 
     static let adaptiveModel = "adaptive"
+    /// The adaptive and the standard forecast combined by accuracy (`ForecastBlend`).
+    static let blendModel = "blend"
+    /// The key of the standard forecast in `PredictionAccuracySummary`.
+    static let standardModel = "standard"
     var isAdaptive: Bool { model == Self.adaptiveModel }
+    var isBlend: Bool { model == Self.blendModel }
+    var isStandard: Bool { model == nil }
+    var modelKey: String { model ?? Self.standardModel }
 }
 
 /// How the forecast fared at one horizon (JugglucoNG `HorizonAccuracy`).
@@ -1646,6 +1667,17 @@ enum PredictionAccuracy {
         let gaps = zip(readings, readings.dropFirst()).map { $1.date.timeIntervalSince($0.date) }.filter { $0 > 0 }.sorted()
         let cadence = gaps.isEmpty ? 5 * 60 : gaps[gaps.count / 2]
         return min(max(cadence * 2.5, 6 * 60), 20 * 60)
+    }
+
+    /// Forecast − actual of every forecast scored at `horizon`, mg/dL. `readings` sorted ascending.
+    static func errors(forecasts: [RecordedForecast], sortedReadings: [(date: Date, mgDl: Double)], horizon: Int) -> [Double] {
+        let gap = maximumGap(readings: sortedReadings)
+        return forecasts.compactMap { forecast in
+            guard let predicted = forecast.predicted[horizon],
+                  let actual = actual(at: forecast.origin.addingTimeInterval(TimeInterval(horizon * 60)), readings: sortedReadings, maximumGap: gap)
+            else { return nil }
+            return predicted - actual
+        }
     }
 
     static func report(forecasts: [RecordedForecast], readings: [(date: Date, mgDl: Double)], now: Date = Date()) -> [HorizonAccuracy] {
@@ -1696,7 +1728,7 @@ enum PredictionInspector {
     /// The standard and adaptive forecast of one reading together, newest first.
     static func moments(_ records: [RecordedForecast]) -> [Moment] {
         var byOrigin: [Int: Moment] = [:]
-        for record in records {
+        for record in records where !record.isBlend {
             let key = Int(record.origin.timeIntervalSince1970.rounded())
             var moment = byOrigin[key] ?? Moment(origin: record.origin, originMgDl: record.originMgDl)
             if record.isAdaptive { moment.adaptive = record.predicted } else { moment.standard = record.predicted }
@@ -1775,15 +1807,199 @@ enum PredictionAccuracyRecorder {
             adaptiveForecastRecord.model = RecordedForecast.adaptiveModel
             adaptiveRecord = adaptiveForecastRecord
         }
+        // The two combined by their accuracy so far, scored like the others.
+        var blendRecord: RecordedForecast?
+        if let adaptiveRecord, let summary = PredictionAccuracySummary.stored(defaults: defaults),
+           let blended = ForecastBlend.blend(standard: record.predicted, adaptive: adaptiveRecord.predicted, summary: summary) {
+            blendRecord = RecordedForecast(origin: record.origin, originMgDl: record.originMgDl, predicted: blended, model: RecordedForecast.blendModel)
+        }
         AdaptiveForecastStore.refreshIfDue(coreDataManager: coreDataManager, defaults: defaults, now: now)
         defaults.set(now, forKey: "experimentalPredictionAccuracyLastRecord")
+        let summaryDue = PredictionAccuracySummary.isDue(defaults: defaults, now: now)
+        let coordinator = coreDataManager.privateManagedObjectContext.persistentStoreCoordinator
         queue.async {
             var records = load().filter { now.timeIntervalSince($0.origin) < retention }
             records.append(record)
             if let adaptiveRecord { records.append(adaptiveRecord) }
-            guard let url = fileURL, let data = try? JSONEncoder().encode(records) else { return }
-            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? data.write(to: url, options: .atomic)
+            if let blendRecord { records.append(blendRecord) }
+            if let url = fileURL, let data = try? JSONEncoder().encode(records) {
+                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? data.write(to: url, options: .atomic)
+            }
+            guard summaryDue, let earliest = records.map(\.origin).min() else { return }
+            let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+            context.persistentStoreCoordinator = coordinator
+            var readings: AdaptiveReadings?
+            context.performAndWait { readings = AdaptiveForecastStore.fetchReadings(in: context, from: earliest.addingTimeInterval(-60), to: now) }
+            guard let readings else { return }
+            let sorted = zip(readings.times, readings.mgDl).map { (date: Date(timeIntervalSince1970: $0.0), mgDl: $0.1) }.filter { $0.mgDl > 0 }
+            PredictionAccuracySummary.compute(forecasts: records, sortedReadings: sorted, now: now).store(defaults: defaults)
+        }
+    }
+}
+
+// MARK: - Accuracy summary, blend and range (fork extension)
+
+/// Each forecast's recorded accuracy per scored horizon, computed at most once an hour on the
+/// recorder's queue and kept in the app's settings, so the chart can weigh and widen the forecast
+/// without reading 14 days of records on every redraw.
+struct PredictionAccuracySummary: Codable, Hashable, Sendable {
+    struct Horizon: Codable, Hashable, Sendable {
+        let minutes: Int
+        let count: Int
+        let rootMeanSquareError: Double
+        /// 10th and 90th percentile of actual − forecast, mg/dL: glucose ended up between
+        /// forecast + lowerResidual and forecast + upperResidual eight times in ten.
+        let lowerResidual: Double
+        let upperResidual: Double
+    }
+
+    static let key = "experimentalPredictionAccuracySummary"
+    static let refreshAfter: TimeInterval = 60 * 60
+    static let lowerQuantile = 0.1
+    static let upperQuantile = 0.9
+
+    let computedAt: Date
+    /// `RecordedForecast.modelKey` → one entry per `PredictionAccuracy.horizons` with any score.
+    let models: [String: [Horizon]]
+
+    static func compute(forecasts: [RecordedForecast], sortedReadings: [(date: Date, mgDl: Double)], now: Date) -> PredictionAccuracySummary {
+        var models: [String: [Horizon]] = [:]
+        for (key, group) in Dictionary(grouping: forecasts, by: \.modelKey) {
+            models[key] = PredictionAccuracy.horizons.compactMap { horizon in
+                let errors = PredictionAccuracy.errors(forecasts: group, sortedReadings: sortedReadings, horizon: horizon)
+                guard !errors.isEmpty else { return nil }
+                let residuals = errors.map { -$0 }.sorted()
+                let meanSquare = errors.reduce(0) { $0 + $1 * $1 } / Double(errors.count)
+                return Horizon(minutes: horizon, count: errors.count, rootMeanSquareError: sqrt(meanSquare),
+                               lowerResidual: quantile(residuals, lowerQuantile), upperResidual: quantile(residuals, upperQuantile))
+            }
+        }
+        return PredictionAccuracySummary(computedAt: now, models: models)
+    }
+
+    /// Linear interpolation between order statistics (the usual "type 7" quantile).
+    static func quantile(_ sorted: [Double], _ q: Double) -> Double {
+        guard let first = sorted.first else { return 0 }
+        guard sorted.count > 1 else { return first }
+        let position = min(max(q, 0), 1) * Double(sorted.count - 1)
+        let lower = Int(position.rounded(.down))
+        let upper = min(lower + 1, sorted.count - 1)
+        return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - Double(lower))
+    }
+
+    /// The model's horizons, only when every scored horizon has `minimumReliableCount` forecasts.
+    func reliableHorizons(_ model: String) -> [Horizon]? {
+        guard let horizons = models[model], horizons.count == PredictionAccuracy.horizons.count,
+              horizons.allSatisfy({ $0.count >= PredictionAccuracy.minimumReliableCount }) else { return nil }
+        return horizons.sorted { $0.minutes < $1.minutes }
+    }
+
+    /// Linear interpolation between points ascending by minutes, held flat outside them.
+    static func interpolate(_ points: [(minutes: Int, value: Double)], at minutes: Double) -> Double? {
+        guard let first = points.first, let last = points.last else { return nil }
+        if minutes <= Double(first.minutes) { return first.value }
+        if minutes >= Double(last.minutes) { return last.value }
+        for (lower, upper) in zip(points, points.dropFirst()) where minutes <= Double(upper.minutes) {
+            let fraction = (minutes - Double(lower.minutes)) / Double(upper.minutes - lower.minutes)
+            return lower.value + (upper.value - lower.value) * fraction
+        }
+        return last.value
+    }
+
+    static func isDue(defaults: UserDefaults, now: Date) -> Bool {
+        guard defaults.experimentalPredictionBlend || defaults.experimentalPredictionRange else { return false }
+        guard let summary = stored(defaults: defaults) else { return true }
+        return now.timeIntervalSince(summary.computedAt) >= refreshAfter || summary.computedAt > now
+    }
+
+    static func stored(defaults: UserDefaults = .standard) -> PredictionAccuracySummary? {
+        guard let data = defaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(PredictionAccuracySummary.self, from: data)
+    }
+
+    func store(defaults: UserDefaults) {
+        if let data = try? JSONEncoder().encode(self) { defaults.set(data, forKey: Self.key) }
+    }
+
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key)
+    }
+}
+
+/// The adaptive and the standard forecast combined, each weighted by the inverse of its recorded
+/// mean square error at that horizon (inverse-variance weighting), so the forecast that has been
+/// closer for this person counts more, horizon by horizon. Weights between the scored horizons
+/// are interpolated; both forecasts need `minimumReliableCount` scored forecasts at every horizon.
+enum ForecastBlend {
+    /// The adaptive forecast's share at `minutes` ahead, 0...1, or nil without enough records.
+    static func adaptiveShare(minutes: Double, summary: PredictionAccuracySummary) -> Double? {
+        guard let standard = summary.reliableHorizons(RecordedForecast.standardModel),
+              let adaptive = summary.reliableHorizons(RecordedForecast.adaptiveModel),
+              standard.map(\.minutes) == adaptive.map(\.minutes) else { return nil }
+        let shares = zip(standard, adaptive).map { standardHorizon, adaptiveHorizon -> (minutes: Int, value: Double) in
+            let standardSquare = max(standardHorizon.rootMeanSquareError * standardHorizon.rootMeanSquareError, 0.01)
+            let adaptiveSquare = max(adaptiveHorizon.rootMeanSquareError * adaptiveHorizon.rootMeanSquareError, 0.01)
+            return (standardHorizon.minutes, standardSquare / (standardSquare + adaptiveSquare))
+        }
+        return PredictionAccuracySummary.interpolate(shares, at: minutes)
+    }
+
+    /// The combined forecast from the same reading, at most as far as the adaptive one reaches;
+    /// nil when the two do not start at the same reading or there are too few records.
+    static func blend(standard: [GlucosePredictionPoint], adaptive: [GlucosePredictionPoint],
+                      summary: PredictionAccuracySummary) -> [GlucosePredictionPoint]? {
+        guard let origin = adaptive.first, let standardOrigin = standard.first,
+              abs(origin.date.timeIntervalSince(standardOrigin.date)) < 1 else { return nil }
+        var points = [origin]
+        for point in adaptive.dropFirst() {
+            guard let other = standard.first(where: { abs($0.date.timeIntervalSince(point.date)) < 1 }),
+                  let share = adaptiveShare(minutes: point.date.timeIntervalSince(origin.date) / 60, summary: summary) else { continue }
+            let value = share * point.unclampedValue + (1 - share) * other.unclampedValue
+            points.append(GlucosePredictionPoint(date: point.date, value: min(max(value, 18), 540), confidence: point.confidence, unclampedValue: value))
+        }
+        return points.count >= 2 ? points : nil
+    }
+
+    /// The same for recorded horizons (minutes → mg/dL).
+    static func blend(standard: [Int: Double], adaptive: [Int: Double], summary: PredictionAccuracySummary) -> [Int: Double]? {
+        var result: [Int: Double] = [:]
+        for (minutes, adaptiveValue) in adaptive {
+            guard let standardValue = standard[minutes], let share = adaptiveShare(minutes: Double(minutes), summary: summary) else { continue }
+            result[minutes] = share * adaptiveValue + (1 - share) * standardValue
+        }
+        return result.isEmpty ? nil : result
+    }
+}
+
+/// Where glucose usually ended up around this kind of forecast: the forecast plus the 10th and
+/// 90th percentile of its recorded error at each horizon, interpolated between the scored
+/// horizons and from zero at the reading. Past the last scored horizon (two hours) the band keeps
+/// widening with the square root of time, an assumption rather than a measurement.
+enum PredictionRange {
+    static func band(forecast: [GlucosePredictionPoint], model: String,
+                     summary: PredictionAccuracySummary) -> [GlucoseChartExperimentalPlots.UncertaintyPoint]? {
+        guard let origin = forecast.first, forecast.count >= 2, let horizons = summary.reliableHorizons(model),
+              let first = horizons.first, let last = horizons.last else { return nil }
+        let lowers = horizons.map { (minutes: $0.minutes, value: $0.lowerResidual) }
+        let uppers = horizons.map { (minutes: $0.minutes, value: $0.upperResidual) }
+        func residuals(_ minutes: Double) -> (lower: Double, upper: Double) {
+            if minutes <= 0 { return (0, 0) }
+            if minutes < Double(first.minutes) {
+                let fraction = minutes / Double(first.minutes)
+                return (first.lowerResidual * fraction, first.upperResidual * fraction)
+            }
+            if minutes > Double(last.minutes) {
+                let growth = sqrt(minutes / Double(last.minutes))
+                return (last.lowerResidual * growth, last.upperResidual * growth)
+            }
+            return (PredictionAccuracySummary.interpolate(lowers, at: minutes) ?? 0, PredictionAccuracySummary.interpolate(uppers, at: minutes) ?? 0)
+        }
+        return forecast.map { point in
+            let (lower, upper) = residuals(point.date.timeIntervalSince(origin.date) / 60)
+            let low = min(max(point.unclampedValue + min(lower, 0), 18), 540)
+            let high = min(max(point.unclampedValue + max(upper, 0), 18), 540)
+            return GlucoseChartExperimentalPlots.UncertaintyPoint(date: point.date, lower: low, upper: max(high, low))
         }
     }
 }
@@ -1990,7 +2206,8 @@ enum ExperimentalChartInputs {
                 model.bodyWeightKg?.description ?? "-", ExperimentalPredictionPeriod.encode(model.periods), model.macrosEnabled.description,
                 defaults.lowMarkValue.description, defaults.highMarkValue.description,
                 defaults.experimentalPredictionAdaptive.description, defaults.experimentalDoseHintsEnabled.description,
-                defaults.experimentalDoseTargetMgDl.description, defaults.experimentalDoseHintCorrectInRange.description].joined(separator: "|")
+                defaults.experimentalDoseTargetMgDl.description, defaults.experimentalDoseHintCorrectInRange.description,
+                defaults.experimentalPredictionBlend.description, defaults.experimentalPredictionRange.description].joined(separator: "|")
     }
 
     /// How far back insulin can still be acting: two days, or eight for a once-weekly basal.
@@ -2075,6 +2292,7 @@ enum ExperimentalChartInputs {
                                               targetLowMgDl: defaults.lowMarkValue, targetHighMgDl: defaults.highMarkValue, now: now)
             }
             var forecast = standard(trendMomentum: true)
+            var forecastModel = RecordedForecast.standardModel
             if defaults.experimentalPredictionAdaptive, let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager {
                 AdaptiveForecastStore.refreshIfDue(coreDataManager: coreDataManager, defaults: defaults, now: now)
                 var recent = await AdaptiveForecastStore.recentReadings(coreDataManager: coreDataManager, now: now)
@@ -2084,9 +2302,13 @@ enum ExperimentalChartInputs {
                                                                treatments: AdaptiveTreatmentFeatures(model: model, treatments: treatments),
                                                                defaults: defaults, now: now)
                 forecast = shown.points
+                forecastModel = shown.model
                 plots.predictionIsAdaptive = shown.isAdaptive
             }
             plots.prediction = forecast.map { GlucoseChartExperimentalPlots.PredictionPoint(date: $0.date, mgDl: $0.value) }
+            if defaults.experimentalPredictionRange, let summary = PredictionAccuracySummary.stored(defaults: defaults) {
+                plots.predictionRange = PredictionRange.band(forecast: forecast, model: forecastModel, summary: summary) ?? []
+            }
         }
 
         if wantsHint {

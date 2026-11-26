@@ -1711,6 +1711,105 @@ final class PredictionInspectorTests: XCTestCase {
     }
 }
 
+// MARK: - Accuracy summary, combined forecast and likely range
+
+/// Expected values from a Python port of the quantile and weighting arithmetic.
+final class ForecastBlendAndRangeTests: XCTestCase {
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    /// Glucose flat at 100; 40 forecasts of each kind, five minutes apart. The standard one is off
+    /// by (i mod 10) − 4.5 mg/dL at every horizon, the adaptive one by half of that.
+    private func summary(count: Int = 40) -> PredictionAccuracySummary {
+        let readings = (-2...(count + 30)).map { (date: start.addingTimeInterval(TimeInterval($0 * 300)), mgDl: 100.0) }
+        var forecasts: [RecordedForecast] = []
+        for index in 0..<count {
+            let error = Double(index % 10) - 4.5
+            let origin = start.addingTimeInterval(TimeInterval(index * 300))
+            forecasts.append(RecordedForecast(origin: origin, originMgDl: 100,
+                                              predicted: Dictionary(uniqueKeysWithValues: PredictionAccuracy.horizons.map { ($0, 100 + error) })))
+            forecasts.append(RecordedForecast(origin: origin, originMgDl: 100,
+                                              predicted: Dictionary(uniqueKeysWithValues: PredictionAccuracy.horizons.map { ($0, 100 + error / 2) }),
+                                              model: RecordedForecast.adaptiveModel))
+        }
+        return PredictionAccuracySummary.compute(forecasts: forecasts, sortedReadings: readings, now: start.addingTimeInterval(86_400))
+    }
+
+    func testQuantileInterpolatesBetweenOrderStatistics() {
+        XCTAssertEqual(PredictionAccuracySummary.quantile([1, 2, 3, 4, 5], 0.1), 1.4, accuracy: 1e-12)
+        XCTAssertEqual(PredictionAccuracySummary.quantile([1, 2, 3, 4, 5], 0.9), 4.6, accuracy: 1e-12)
+        XCTAssertEqual(PredictionAccuracySummary.quantile([7], 0.9), 7)
+        XCTAssertEqual(PredictionAccuracySummary.quantile([], 0.5), 0)
+    }
+
+    func testSummaryPerModelAndHorizon() throws {
+        let summary = summary()
+        let standard = try XCTUnwrap(summary.reliableHorizons(RecordedForecast.standardModel))
+        XCTAssertEqual(standard.map(\.minutes), PredictionAccuracy.horizons)
+        XCTAssertEqual(standard[0].count, 40)
+        XCTAssertEqual(standard[0].rootMeanSquareError, 2.8722813232690143, accuracy: 1e-9)
+        XCTAssertEqual(standard[0].lowerResidual, -3.6, accuracy: 1e-9)
+        XCTAssertEqual(standard[0].upperResidual, 3.6, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(summary.reliableHorizons(RecordedForecast.adaptiveModel))[3].rootMeanSquareError,
+                       1.4361406616345072, accuracy: 1e-9)
+        XCTAssertEqual(try JSONDecoder().decode(PredictionAccuracySummary.self, from: JSONEncoder().encode(summary)), summary)
+        // 35 forecasts are too few to rely on.
+        XCTAssertNil(self.summary(count: 35).reliableHorizons(RecordedForecast.standardModel))
+    }
+
+    func testTheMoreAccurateForecastWeighsMore() throws {
+        let summary = summary()
+        // Squared errors 4 : 1, so the adaptive forecast takes 80 %.
+        XCTAssertEqual(try XCTUnwrap(ForecastBlend.adaptiveShare(minutes: 45, summary: summary)), 0.8, accuracy: 1e-9)
+        let blended = try XCTUnwrap(ForecastBlend.blend(standard: [15: 120, 30: 130], adaptive: [15: 110], summary: summary))
+        XCTAssertEqual(blended.count, 1)
+        XCTAssertEqual(try XCTUnwrap(blended[15]), 112, accuracy: 1e-9)
+
+        let origin = GlucosePredictionPoint(date: start, value: 100, confidence: 1, unclampedValue: 100)
+        let later = start.addingTimeInterval(15 * 60)
+        let points = try XCTUnwrap(ForecastBlend.blend(
+            standard: [origin, GlucosePredictionPoint(date: later, value: 120, confidence: 0.7, unclampedValue: 120)],
+            adaptive: [origin, GlucosePredictionPoint(date: later, value: 110, confidence: 0.6, unclampedValue: 110)], summary: summary))
+        XCTAssertEqual(points.count, 2)
+        XCTAssertEqual(points[1].value, 112, accuracy: 1e-9)
+        XCTAssertEqual(points[1].confidence, 0.6)
+        // Too few records: nothing to combine.
+        XCTAssertNil(ForecastBlend.blend(standard: [15: 120], adaptive: [15: 110], summary: self.summary(count: 35)))
+    }
+
+    func testInterpolationIsHeldFlatOutsideTheHorizons() {
+        let points = [(minutes: 15, value: 0.0), (minutes: 30, value: 1.0)]
+        XCTAssertEqual(PredictionAccuracySummary.interpolate(points, at: 20) ?? .nan, 1.0 / 3, accuracy: 1e-12)
+        XCTAssertEqual(PredictionAccuracySummary.interpolate(points, at: 5), 0)
+        XCTAssertEqual(PredictionAccuracySummary.interpolate(points, at: 40), 1)
+    }
+
+    func testRangeWidensFromZeroAtTheReading() throws {
+        let forecast = [0, 5, 30, 180].map {
+            GlucosePredictionPoint(date: start.addingTimeInterval(TimeInterval($0 * 60)), value: 150, confidence: 0.5, unclampedValue: 150)
+        }
+        let band = try XCTUnwrap(PredictionRange.band(forecast: forecast, model: RecordedForecast.standardModel, summary: summary()))
+        XCTAssertEqual(band.count, 4)
+        XCTAssertEqual(band[0].lower, 150)
+        XCTAssertEqual(band[0].upper, 150)
+        XCTAssertEqual(band[1].lower, 148.8, accuracy: 1e-9)
+        XCTAssertEqual(band[1].upper, 151.2, accuracy: 1e-9)
+        XCTAssertEqual(band[2].lower, 146.4, accuracy: 1e-9)
+        XCTAssertEqual(band[2].upper, 153.6, accuracy: 1e-9)
+        // Past two hours it keeps widening with the square root of time.
+        XCTAssertEqual(band[3].lower, 145.5909184629903, accuracy: 1e-9)
+        XCTAssertEqual(band[3].upper, 154.4090815370097, accuracy: 1e-9)
+        XCTAssertNil(PredictionRange.band(forecast: forecast, model: RecordedForecast.blendModel, summary: summary()))
+    }
+
+    func testInspectorLeavesCombinedRecordsOut() {
+        let records = [
+            RecordedForecast(origin: start, originMgDl: 100, predicted: [15: 110]),
+            RecordedForecast(origin: start, originMgDl: 100, predicted: [15: 108], model: RecordedForecast.blendModel)
+        ]
+        XCTAssertEqual(PredictionInspector.moments(records).first?.standard, [15: 110])
+    }
+}
+
 // MARK: - Amount assist
 
 /// Expectations from a Python port of JugglucoNG `JournalAmountAssist`.

@@ -641,7 +641,14 @@
 "experimental.predictionAdaptiveReady" = "Learned from %@ days of readings";
 "experimental.predictionAdaptiveReadsTreatments" = "with insulin and carbs";
 "experimental.predictionAdaptiveNotBetter" = "Not better than no change yet, standard shown";
-"experimental.predictionAdaptiveFooter" = "Draws a forecast learned from your own readings instead of the standard one, dotted, up to two hours. It learns from the last four weeks, relearns once a day and needs two days of readings; it ignores logged insulin and carbs. Until it is ready, after a gap or a new sensor's first hour, or while it is not better than no change, the standard forecast without the trend is drawn. The predicted low alert and Nightscout keep using the standard forecast.";
+"experimental.predictionAdaptiveFooter" = "Draws a forecast learned from your own readings instead of the standard one, dotted, up to two hours. It learns from the last four weeks, relearns once a day and needs two days of readings; it reads logged insulin and carbs only when that makes it more accurate on your own last two days. Until it is ready, after a gap or a new sensor's first hour, or while it is not better than no change, the standard forecast without the trend is drawn. The predicted low alert and Nightscout keep using the standard forecast.";
+"experimental.predictionBlend" = "Combine by accuracy";
+"experimental.predictionNeedsAccuracy" = "Needs Record accuracy";
+"experimental.predictionBlendFooter" = "Combine by accuracy mixes the adaptive and the standard forecast, horizon by horizon, giving more weight to the one whose recorded error has been smaller. It needs Record accuracy and at least 36 compared forecasts of each at 15, 30, 60 and 120 minutes; until then the adaptive forecast alone is drawn.";
+"experimental.predictionRange" = "Show likely range";
+"experimental.predictionRangeFooter" = "Show likely range draws a faint band around the forecast: where glucose ended up eight times in ten after this kind of forecast, from the recorded errors at 15, 30, 60 and 120 minutes (beyond two hours it keeps widening as an estimate). It appears once every horizon has at least 36 compared forecasts and is updated every hour.";
+"experimental.accuracyBlend" = "Combined forecast";
+"experimental.accuracyBlendFooter" = "The adaptive and the standard forecast mixed by their recorded accuracy, recorded whenever both could answer.";
 "experimental.accuracyStandard" = "Standard forecast";
 "experimental.accuracyAdaptive" = "Adaptive forecast";
 "experimental.accuracyAdaptiveFooter" = "Recorded from the same readings whenever the adaptive model could answer, whether or not it is drawn.";
