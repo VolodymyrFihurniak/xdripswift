@@ -199,7 +199,9 @@ own hangup is never logged in); every link ends with a `Libre 2 link ended:` tra
 
 Statistics → CGM data: "Time in ranges by time of day" (JugglucoNG `StatsRangeFlow` + day-part strip):
 `GlucoseReportAnalytics.hourlyRanges` (24 × five bands, `GlucoseReportHourRanges`), blocks
-`GlucoseReportDayPart` combine by hour mask, none = whole day.
+`GlucoseReportDayPart` combine by hour mask, none = whole day. "Patterns" (fork extension, `GlucoseReportInsights`): low (< 70)
+and very high (> 250) episodes starting in the same two hours on ≥ 3 days, and the mean rise after
+breakfast / lunch / dinner (peak within 3 h − reading at the meal, ≥ 3 meals).
 
 Automatic backup (`AutomaticBackup` in `Utilities/Backup/BackupService.swift`, JugglucoNG
 `ScheduledBackupPolicy`; Settings → Data management toggle, off by default): at most once per 20 h on

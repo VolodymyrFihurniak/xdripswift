@@ -361,6 +361,34 @@ class Texts_Common {
         return NSLocalizedString("common_statistics_dayParts", tableName: filename, bundle: Bundle.main, value: "Time in ranges by time of day", comment: "statistics day parts card title")
     }()
 
+    static let statisticsPatterns = {
+        return NSLocalizedString("common_statistics_patterns", tableName: filename, bundle: Bundle.main, value: "Patterns", comment: "statistics card title: recurring lows/highs and the rise after meals")
+    }()
+
+    static let statisticsPatternsFooter = {
+        return NSLocalizedString("common_statistics_patternsFooter", tableName: filename, bundle: Bundle.main, value: "Counted from your readings and logged carbs in this period; a pattern to look at, not a diagnosis.", comment: "statistics patterns footer")
+    }()
+
+    static let statisticsRecurringLows = {
+        return NSLocalizedString("common_statistics_recurringLows", tableName: filename, bundle: Bundle.main, value: "Lows starting between %@ and %@ on %ld days", comment: "statistics pattern: low episodes starting in the same two hours on several days")
+    }()
+
+    static let statisticsRecurringHighs = {
+        return NSLocalizedString("common_statistics_recurringHighs", tableName: filename, bundle: Bundle.main, value: "Very highs starting between %@ and %@ on %ld days", comment: "statistics pattern: very high episodes starting in the same two hours on several days")
+    }()
+
+    static let statisticsRiseAfterBreakfast = {
+        return NSLocalizedString("common_statistics_riseAfterBreakfast", tableName: filename, bundle: Bundle.main, value: "After breakfast glucose rose by %@ on average (%ld meals)", comment: "statistics pattern: average rise after breakfast")
+    }()
+
+    static let statisticsRiseAfterLunch = {
+        return NSLocalizedString("common_statistics_riseAfterLunch", tableName: filename, bundle: Bundle.main, value: "After lunch glucose rose by %@ on average (%ld meals)", comment: "statistics pattern: average rise after lunch")
+    }()
+
+    static let statisticsRiseAfterDinner = {
+        return NSLocalizedString("common_statistics_riseAfterDinner", tableName: filename, bundle: Bundle.main, value: "After dinner glucose rose by %@ on average (%ld meals)", comment: "statistics pattern: average rise after dinner")
+    }()
+
     static let statisticsDayPartsNoData = {
         return NSLocalizedString("common_statistics_dayPartsNoData", tableName: filename, bundle: Bundle.main, value: "No readings at these hours.", comment: "statistics day parts without data")
     }()

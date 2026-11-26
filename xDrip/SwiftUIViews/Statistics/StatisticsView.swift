@@ -241,7 +241,74 @@ private struct StatisticsCGMDataPage: View {
                 StatisticsDayPartsCard(hourlyRanges: analytics.hourlyRanges, usesMgDl: analytics.usesMgDl)
             }
         }
+        if !analytics.insights.isEmpty {
+            StatisticsSection(title: Texts_Common.statisticsPatterns) {
+                StatisticsInsightsCard(insights: analytics.insights, usesMgDl: analytics.usesMgDl)
+            }
+        }
         StatisticsSummaryView(analytics: analytics)
+    }
+}
+
+/// Recurring lows and very highs by time of day and the average rise after meals (`GlucoseReportInsights`).
+private struct StatisticsInsightsCard: View {
+    let insights: GlucoseReportInsights
+    let usesMgDl: Bool
+
+    private struct Line: Identifiable {
+        let id: String
+        let symbol: String
+        let color: Color
+        let text: String
+    }
+
+    private var lines: [Line] {
+        func hours(_ start: Int) -> (String, String) {
+            (String(format: "%02d:00", start), String(format: "%02d:00", (start + GlucoseReportInsights.blockHours) % 24))
+        }
+        var lines: [Line] = insights.recurringLows.map { block in
+            let (from, to) = hours(block.startHour)
+            return Line(id: "low\(block.startHour)", symbol: "arrow.down.circle", color: GlucoseReportColors.low,
+                        text: String(format: Texts_Common.statisticsRecurringLows, from, to, block.days))
+        }
+        lines += insights.recurringHighs.map { block in
+            let (from, to) = hours(block.startHour)
+            return Line(id: "high\(block.startHour)", symbol: "arrow.up.circle", color: GlucoseReportColors.veryHigh,
+                        text: String(format: Texts_Common.statisticsRecurringHighs, from, to, block.days))
+        }
+        lines += insights.mealRises.map { rise in
+            let format: String
+            switch rise.meal {
+            case .breakfast: format = Texts_Common.statisticsRiseAfterBreakfast
+            case .lunch: format = Texts_Common.statisticsRiseAfterLunch
+            case .dinner: format = Texts_Common.statisticsRiseAfterDinner
+            }
+            let rise_ = rise.averageRiseMgDl.mgDlToMmolAndToString(mgDl: usesMgDl) + " " + (usesMgDl ? Texts_Common.mgdl : Texts_Common.mmol)
+            return Line(id: "meal\(rise.meal.rawValue)", symbol: "fork.knife.circle", color: GlucoseReportColors.high,
+                        text: String(format: format, rise_, rise.meals))
+        }
+        return lines
+    }
+
+    var body: some View {
+        StatisticsCard {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(lines) { line in
+                    Label {
+                        Text(line.text)
+                            .font(.subheadline)
+                            .foregroundStyle(Color(.colorPrimary))
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: line.symbol)
+                            .foregroundStyle(line.color)
+                    }
+                }
+                Text(Texts_Common.statisticsPatternsFooter)
+                    .font(.footnote)
+                    .foregroundStyle(Color(.colorSecondary))
+            }
+        }
     }
 }
 

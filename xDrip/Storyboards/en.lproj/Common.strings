@@ -84,6 +84,13 @@
 "common_statistics_dailyPattern" = "Daily Pattern";
 "common_statistics_dayParts" = "Time in ranges by time of day";
 "common_statistics_dayPartsNoData" = "No readings at these hours.";
+"common_statistics_patterns" = "Patterns";
+"common_statistics_patternsFooter" = "Counted from your readings and logged carbs in this period; a pattern to look at, not a diagnosis.";
+"common_statistics_recurringLows" = "Lows starting between %@ and %@ on %ld days";
+"common_statistics_recurringHighs" = "Very highs starting between %@ and %@ on %ld days";
+"common_statistics_riseAfterBreakfast" = "After breakfast glucose rose by %@ on average (%ld meals)";
+"common_statistics_riseAfterLunch" = "After lunch glucose rose by %@ on average (%ld meals)";
+"common_statistics_riseAfterDinner" = "After dinner glucose rose by %@ on average (%ld meals)";
 "common_statistics_veryHigh" = "Very high";
 "common_statistics_veryLow" = "Very low";
 "common_statistics_night" = "Night";

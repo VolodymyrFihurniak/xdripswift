@@ -1891,6 +1891,68 @@ final class SensorDayCounterTests: XCTestCase {
     }
 }
 
+// MARK: - Statistics patterns
+
+final class GlucoseReportInsightsTests: XCTestCase {
+    private let midnight = Date(timeIntervalSince1970: 1_799_971_200)
+    private var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    /// Four days of five-minute readings at 120 mg/dL with lows at 02:30–03:00 on days 0–2 and at
+    /// 05:00 on day 3, very highs at 20:00–20:30 on days 0–1, and breakfast at 08:00 on days 0–2
+    /// rising to a peak at 09:00 of +50, +60 and +70.
+    private func samples() -> [(date: Date, mgDl: Double)] {
+        var result: [(date: Date, mgDl: Double)] = []
+        for day in 0..<4 {
+            for step in 0..<288 {
+                let minute = Double(step * 5)
+                var value = 120.0
+                if day < 3, (150...180).contains(minute) { value = 60 }
+                if day == 3, minute == 300 { value = 60 }
+                if day < 2, (1200...1230).contains(minute) { value = 300 }
+                if day < 3, (480...600).contains(minute) {
+                    value = 120 + Double(50 + 10 * day) * (1 - abs(minute - 540) / 60)
+                }
+                result.append((midnight.addingTimeInterval(Double(day) * 86_400 + minute * 60), value))
+            }
+        }
+        return result
+    }
+
+    func testRecurringLowsAndMealRises() {
+        var carbs = (0..<3).map { (date: midnight.addingTimeInterval(Double($0) * 86_400 + 8 * 3600), grams: 40.0) }
+        // A second entry 20 minutes later belongs to the same breakfast; one lunch is not enough.
+        carbs.append((midnight.addingTimeInterval(8 * 3600 + 20 * 60), 10))
+        carbs.append((midnight.addingTimeInterval(13 * 3600), 50))
+        let insights = GlucoseReportInsights.make(samples: samples(), carbs: carbs, calendar: utc)
+        XCTAssertEqual(insights.recurringLows, [GlucoseReportInsights.RecurringEpisodes(startHour: 2, days: 3)])
+        XCTAssertTrue(insights.recurringHighs.isEmpty, "very highs on two days only")
+        XCTAssertEqual(insights.mealRises, [GlucoseReportInsights.MealRise(meal: .breakfast, averageRiseMgDl: 60, meals: 3)])
+        XCTAssertFalse(insights.isEmpty)
+        XCTAssertTrue(GlucoseReportInsights.make(samples: [], carbs: [], calendar: utc).isEmpty)
+    }
+
+    func testEpisodesContinueAcrossShortGapsOnly() {
+        let t = midnight
+        let readings = [(t, 60.0), (t.addingTimeInterval(600), 65), (t.addingTimeInterval(1200), 120),
+                        (t.addingTimeInterval(1500), 66), (t.addingTimeInterval(3600), 50)]
+        // 10 and 15 minutes apart continue the episode, 35 minutes apart start a new one.
+        XCTAssertEqual(GlucoseReportInsights.episodeStarts(readings.map { (date: $0.0, mgDl: $0.1) }, threshold: 70, isBelow: true),
+                       [t, t.addingTimeInterval(3600)])
+    }
+
+    func testMealTimes() {
+        XCTAssertNil(GlucoseReportInsights.Meal.at(hour: 4))
+        XCTAssertEqual(GlucoseReportInsights.Meal.at(hour: 5), .breakfast)
+        XCTAssertEqual(GlucoseReportInsights.Meal.at(hour: 11), .lunch)
+        XCTAssertEqual(GlucoseReportInsights.Meal.at(hour: 21), .dinner)
+        XCTAssertNil(GlucoseReportInsights.Meal.at(hour: 22))
+    }
+}
+
 // MARK: - Recommended set
 
 final class ExperimentalRecommendedSetTests: XCTestCase {
