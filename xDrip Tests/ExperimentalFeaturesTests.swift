@@ -933,6 +933,123 @@ final class AdaptiveGlucoseForecastTests: XCTestCase {
         XCTAssertEqual(askedMomentum, false)
         XCTAssertEqual(AdaptiveForecastStore.status(defaults: defaults), .learning)
     }
+
+    // MARK: Treatment features (fork extension)
+
+    private func smoothstep(_ x: Double) -> Double {
+        let clamped = min(max(x, 0), 1)
+        return clamped * clamped * (3 - 2 * clamped)
+    }
+
+    /// The history above plus a treatment every four hours whose effect builds up over two hours
+    /// (a smoothstep), with the treatment features that describe it: what the momentum features
+    /// cannot see yet, the treatment features already know.
+    private func treatedHistory(days: Double, seed: UInt64) -> (history: AdaptiveHistory, features: (TimeInterval) -> [Double]) {
+        var rng = SplitMix64(state: seed)
+        var eventRng = SplitMix64(state: seed + 100)
+        let count = Int(days * 24 * 12)
+        let duration: TimeInterval = 7200
+        let times = (0..<count).map { start + Double($0) * 5 * minute }
+        var events: [(time: TimeInterval, amount: Double)] = []
+        for index in 0..<count where index % 48 == 7 { events.append((times[index], eventRng.between(-60, 60))) }
+        func effect(_ t: TimeInterval) -> Double {
+            var total = 0.0
+            for event in events where event.time <= t { total += event.amount * smoothstep((t - event.time) / duration) }
+            return total
+        }
+        var glucose = 130.0, velocity = 0.0, previous = 0.0
+        var values: [Double] = []
+        for index in 0..<count {
+            velocity = 0.85 * velocity + 0.02 * (130.0 - glucose) + rng.between(-2.5, 2.5) + 1.5 * sin(2 * Double.pi * Double(index) / 288.0)
+            let current = effect(times[index])
+            glucose += velocity + (current - previous)
+            previous = current
+            values.append(min(max(glucose, 40), 400))
+        }
+        let features: (TimeInterval) -> [Double] = { t in
+            var insulin = 0.0, carbs = 0.0, near = 0.0
+            for event in events {
+                if event.time > t { break }
+                let remaining = event.amount * (1 - self.smoothstep((t - event.time) / duration))
+                if event.amount < 0 { insulin += remaining } else { carbs += remaining }
+                near += event.amount * (self.smoothstep((t + 1800 - event.time) / duration) - self.smoothstep((t - event.time) / duration))
+            }
+            return [insulin, carbs, near]
+        }
+        return (AdaptiveHistory.of(times: times, mgDl: values, sensors: times.map { _ in "A" }), features)
+    }
+
+    func testTreatmentFeaturesAreKeptWhenTheyBeatTheCGMOnlyModel() throws {
+        let train = treatedHistory(days: 10, seed: 5)
+        let now = date(try XCTUnwrap(train.history.times.last))
+        let model = try XCTUnwrap(AdaptiveGlucoseForecast.fit(train.history, now: now, timeZone: utc,
+                                                              treatmentFeatures: train.features, treatmentSignature: "s"))
+        XCTAssertEqual(model.usesTreatments, true)
+        XCTAssertEqual(model.featureCount, 11)
+        XCTAssertEqual(model.treatmentSignature, "s")
+        // The Python port measures 9.65 against 10.18 mg/dL on the held-back days.
+        let holdout = try XCTUnwrap(model.holdoutRMSE), cgmOnly = try XCTUnwrap(model.holdoutCGMOnlyRMSE)
+        XCTAssertLessThan(holdout, cgmOnly * 0.97)
+        XCTAssertEqual(try XCTUnwrap(AdaptiveForecastModel.decode(model.encoded())), model)
+        let cgmModel = try XCTUnwrap(AdaptiveGlucoseForecast.fit(train.history, now: now, timeZone: utc))
+
+        // Fresh data from the same process: the treatment model's 30-minute error is lower.
+        let test = treatedHistory(days: 3, seed: 11)
+        let k30 = try XCTUnwrap(model.horizons.firstIndex(of: 30))
+        var squaredTreated = 0.0, squaredCGM = 0.0, count = 0
+        for index in 24..<(test.history.count - 6) {
+            let origin = date(test.history.times[index])
+            guard let treated = AdaptiveGlucoseForecast.forecastDeltas(model, history: test.history, origin: origin, timeZone: utc,
+                                                                       treatmentFeatures: test.features)?[k30],
+                  let cgm = AdaptiveGlucoseForecast.forecastDeltas(cgmModel, history: test.history, origin: origin, timeZone: utc)?[k30]
+            else { continue }
+            let actual = test.history.mgDl[index + 6] - test.history.mgDl[index]
+            squaredTreated += (treated - actual) * (treated - actual)
+            squaredCGM += (cgm - actual) * (cgm - actual)
+            count += 1
+        }
+        XCTAssertEqual(count, 834)
+        // The Python port measures 0.915.
+        XCTAssertLessThan(squaredTreated, squaredCGM * 0.95)
+        // Without its treatment features the treatment model has no answer.
+        XCTAssertNil(AdaptiveGlucoseForecast.forecastDeltas(model, history: test.history, origin: date(test.history.times[100]), timeZone: utc))
+    }
+
+    func testWithoutAnyTreatmentTheModelIsJugglucoNGsOwn() throws {
+        let past = history(days: 6)
+        let now = date(start + 6 * day - 10 * minute)
+        let plain = try XCTUnwrap(AdaptiveGlucoseForecast.fit(past, now: now, timeZone: utc))
+        let zeros = try XCTUnwrap(AdaptiveGlucoseForecast.fit(past, now: now, timeZone: utc, treatmentFeatures: { _ in [0, 0, 0] },
+                                                              treatmentSignature: "s"))
+        XCTAssertEqual(zeros, plain)
+        XCTAssertNil(zeros.usesTreatments)
+        XCTAssertEqual(zeros.featureCount, 8)
+    }
+
+    func testTreatmentFeaturesReadTheStandardTreatmentModel() {
+        let t0 = date(start)
+        let treatments = [
+            ExperimentalTreatment(date: t0, amount: 30, kind: .carbs, notes: nil),
+            ExperimentalTreatment(date: t0, amount: 30, kind: .exercise, notes: nil),
+            // Basal insulin does not count toward the forecast; a meal logged for later is not known yet.
+            ExperimentalTreatment(date: t0, amount: 20, kind: .basalInjection, notes: nil),
+            ExperimentalTreatment(date: t0.addingTimeInterval(20 * minute), amount: 50, kind: .carbs, notes: nil)
+        ]
+        // Default model: carb ratio 10, sensitivity 54 mg/dL, 35 g/h; values from a Python port.
+        let features = AdaptiveTreatmentFeatures(model: ExperimentalPredictionModel(), treatments: treatments)
+            .features(at: start + 10 * minute)
+        XCTAssertEqual(features.count, AdaptiveGlucoseForecast.treatmentFeatureCount)
+        XCTAssertEqual(features[0], 0, accuracy: 1e-9)
+        XCTAssertEqual(features[1], 146.00694444444446, accuracy: 1e-9)
+        XCTAssertEqual(features[2], 123.58250000000002, accuracy: 1e-9)
+
+        let bolus = AdaptiveTreatmentFeatures(model: ExperimentalPredictionModel(),
+                                              treatments: [ExperimentalTreatment(date: t0, amount: 2, kind: .bolus, notes: nil)])
+            .features(at: start + 10 * minute)
+        XCTAssertLessThan(bolus[0], 0, "insulin still to act lowers glucose")
+        XCTAssertEqual(bolus[1], 0)
+        XCTAssertLessThan(bolus[2], 0)
+    }
 }
 
 // MARK: - Food library

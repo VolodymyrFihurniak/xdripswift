@@ -512,9 +512,10 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         switch status {
         case .learning:
             return ExperimentalTexts.text("predictionAdaptiveLearning", "Learning, needs 2 days of readings")
-        case .ready(let trainingDays, _):
-            return String(format: ExperimentalTexts.text("predictionAdaptiveReady", "Learned from %@ days of readings"),
-                          numberText(trainingDays, fractionDigits: 0))
+        case .ready(let trainingDays, _, let readsTreatments):
+            let learned = String(format: ExperimentalTexts.text("predictionAdaptiveReady", "Learned from %@ days of readings"),
+                                 numberText(trainingDays, fractionDigits: 0))
+            return readsTreatments ? learned + ", " + ExperimentalTexts.text("predictionAdaptiveReadsTreatments", "with insulin and carbs") : learned
         case .notBetter:
             return ExperimentalTexts.text("predictionAdaptiveNotBetter", "Not better than no change yet, standard shown")
         }

@@ -1755,8 +1755,10 @@ enum PredictionAccuracyRecorder {
         let readings = BgReadingsAccessor(coreDataManager: coreDataManager)
             .getLatestBgReadings(limit: nil, fromDate: now.addingTimeInterval(-2 * 60 * 60), forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
             .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
-        let forecast = ExperimentalPredictionModel(defaults: defaults).forecast(
-            readings: readings, treatments: PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext, now: now),
+        let predictionModel = ExperimentalPredictionModel(defaults: defaults)
+        let treatments = PredictedLowAlert.treatments(in: coreDataManager.mainManagedObjectContext, now: now)
+        let forecast = predictionModel.forecast(
+            readings: readings, treatments: treatments,
             isMmol: false, targetLowMgDl: defaults.lowMarkValue, targetHighMgDl: defaults.highMarkValue, now: now)
         guard let record = record(from: forecast) else { return }
         // The adaptive forecast from the same reading, when its model can answer, to compare the two.
@@ -1767,7 +1769,8 @@ enum PredictionAccuracyRecorder {
             recent?.appendNewer(dates: readings.map { $0.date }, values: readings.map { $0.mgDl }, until: now)
         }
         if let recent, let adaptive = AdaptiveForecastStore.forecast(history: recent.history, horizonMinutes: PredictionAccuracy.horizons.max() ?? 120,
-                                                         defaults: defaults, now: now),
+                                                                     treatments: AdaptiveTreatmentFeatures(model: predictionModel, treatments: treatments),
+                                                                     defaults: defaults, now: now),
            var adaptiveForecastRecord = self.record(from: adaptive), adaptiveForecastRecord.origin == record.origin {
             adaptiveForecastRecord.model = RecordedForecast.adaptiveModel
             adaptiveRecord = adaptiveForecastRecord
@@ -2014,7 +2017,10 @@ enum ExperimentalChartInputs {
             var recent = AdaptiveForecastStore.recentReadingsOnMainContext(coreDataManager: coreDataManager, now: now)
             recent?.appendNewer(dates: readings.map { $0.date }, values: readings.map { $0.mgDl }, until: now)
             let shown = AdaptiveForecastStore.shownForecast(readings: recent, standard: { standard(trendMomentum: $0) },
-                                                           horizonMinutes: model.horizonMinutes, defaults: defaults, now: now)
+                                                           horizonMinutes: model.horizonMinutes,
+                                                           treatments: AdaptiveTreatmentFeatures(model: ExperimentalPredictionModel(defaults: defaults),
+                                                                                                 treatments: treatments),
+                                                           defaults: defaults, now: now)
             forecast = shown.points
             isAdaptive = shown.isAdaptive
         }
@@ -2074,7 +2080,9 @@ enum ExperimentalChartInputs {
                 var recent = await AdaptiveForecastStore.recentReadings(coreDataManager: coreDataManager, now: now)
                 recent?.appendNewer(dates: chartState.bgReadingDates, values: chartState.bgReadingValues, until: now)
                 let shown = AdaptiveForecastStore.shownForecast(readings: recent, standard: { standard(trendMomentum: $0) },
-                                                               horizonMinutes: model.horizonMinutes, defaults: defaults, now: now)
+                                                               horizonMinutes: model.horizonMinutes,
+                                                               treatments: AdaptiveTreatmentFeatures(model: model, treatments: treatments),
+                                                               defaults: defaults, now: now)
                 forecast = shown.points
                 plots.predictionIsAdaptive = shown.isAdaptive
             }

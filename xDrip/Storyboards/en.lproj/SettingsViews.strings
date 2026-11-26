@@ -639,6 +639,7 @@
 "experimental.predictionAdaptiveRelearn" = "Relearn now";
 "experimental.predictionAdaptiveLearning" = "Learning, needs 2 days of readings";
 "experimental.predictionAdaptiveReady" = "Learned from %@ days of readings";
+"experimental.predictionAdaptiveReadsTreatments" = "with insulin and carbs";
 "experimental.predictionAdaptiveNotBetter" = "Not better than no change yet, standard shown";
 "experimental.predictionAdaptiveFooter" = "Draws a forecast learned from your own readings instead of the standard one, dotted, up to two hours. It learns from the last four weeks, relearns once a day and needs two days of readings; it ignores logged insulin and carbs. Until it is ready, after a gap or a new sensor's first hour, or while it is not better than no change, the standard forecast without the trend is drawn. The predicted low alert and Nightscout keep using the standard forecast.";
 "experimental.accuracyStandard" = "Standard forecast";

@@ -146,7 +146,10 @@ fields and the landscape AGP chart through `AGPChartView(drawsGlucoseAsLine:)`. 
 Adaptive prediction (`xDrip/Managers/Therapy/AdaptiveGlucoseForecast.swift`): JugglucoNG
 `AdaptiveGlucoseForecast` + `AdaptivePredictionStore`; model JSON in UserDefaults
 (`experimentalAdaptiveForecastModel`), daily refit on a private-queue context over 29 days of
-`BgReading` dictionaries; alerts and Nightscout stay on the standard forecast.
+`BgReading` dictionaries; alerts and Nightscout stay on the standard forecast. Fork extension:
+`AdaptiveTreatmentFeatures` (insulin / carbs still to come, 30-minute treatment effect) as features
+9–11, kept only when they beat the CGM-only model on the holdout (`usesTreatments`); every forecast
+caller passes them, a treatment model without them has no answer.
 Power saving (`ExperimentalPowerSaving`, mode Off/On/Automatic, never while charging) throttles the
 "every reading" uploads, Live Activity/widget refresh (`allowsRefresh`, urgent out of range), the
 Home chart minute redraw and the adaptive refit — never readings or alarms. Alarms (`AlertKind.swift`/`AlertManager`):

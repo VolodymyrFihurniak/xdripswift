@@ -9,9 +9,15 @@
 //
 //  What it learns, per horizon, is how much of the recent movement tends to carry on for this
 //  person on their sensors, and how strongly glucose drifts back toward their own recent
-//  average: one ridge regression per horizon over eight features from CGM history. It does not
-//  read treatments, and it never decides anything clinical: the predicted low alert and the
-//  Nightscout forecast keep using the standard model.
+//  average: one ridge regression per horizon over eight features from CGM history. It never
+//  decides anything clinical: the predicted low alert and the Nightscout forecast keep using the
+//  standard model.
+//
+//  Fork extension (not in JugglucoNG): three more features from logged treatments, read through
+//  the standard model's treatment curves (`AdaptiveTreatmentFeatures`): the insulin effect still
+//  to come, the carb effect still to come, and the treatments' effect over the next 30 minutes.
+//  A model with them is kept only when it beats the CGM-only model on the held-back days, so a
+//  person who logs nothing, or logs badly, keeps exactly JugglucoNG's model.
 //
 
 import Foundation
@@ -142,6 +148,20 @@ struct AdaptiveForecastModel: Codable, Hashable, Sendable {
     /// nil when there was not enough history to hold any back.
     let holdoutRMSE: Double?
     let holdoutNoChangeRMSE: Double?
+    /// Whether the model reads the three treatment features after the eight CGM ones. Nil in
+    /// models stored before treatments were read: those have eight.
+    var usesTreatments: Bool? = nil
+    /// `AdaptiveTreatmentFeatures.signature` of the prediction settings the treatment features
+    /// were computed with; a change of carb ratio or sensitivity makes the model due for a refit.
+    var treatmentSignature: String? = nil
+    /// 30-minute holdout error of the CGM-only model, when the treatment model was compared with it.
+    var holdoutCGMOnlyRMSE: Double? = nil
+
+    /// Number of features the weights read.
+    var featureCount: Int {
+        usesTreatments == true ? AdaptiveGlucoseForecast.featureCount + AdaptiveGlucoseForecast.treatmentFeatureCount
+            : AdaptiveGlucoseForecast.featureCount
+    }
 
     /// Whether the model earned its place on held-back recent data. A model that could not be
     /// checked yet counts as reliable; one that lost to "no change" does not.
@@ -156,8 +176,8 @@ struct AdaptiveForecastModel: Codable, Hashable, Sendable {
     static func decode(_ data: Data?) -> AdaptiveForecastModel? {
         guard let data, let model = try? JSONDecoder().decode(AdaptiveForecastModel.self, from: data),
               model.version == AdaptiveGlucoseForecast.modelVersion, model.weights.count == model.horizons.count,
-              model.means.count == AdaptiveGlucoseForecast.featureCount, model.scales.count == AdaptiveGlucoseForecast.featureCount,
-              model.weights.allSatisfy({ $0 == nil || $0?.count == AdaptiveGlucoseForecast.featureCount + 1 }) else { return nil }
+              model.means.count == model.featureCount, model.scales.count == model.featureCount,
+              model.weights.allSatisfy({ $0 == nil || $0?.count == model.featureCount + 1 }) else { return nil }
         return model
     }
 }
@@ -170,7 +190,11 @@ struct AdaptiveForecastModel: Codable, Hashable, Sendable {
 /// (median −12 % RMSE at 30 minutes) and on 15-minute Libre 2 (−16 %).
 enum AdaptiveGlucoseForecast {
     static let modelVersion = 1
+    /// CGM features, JugglucoNG's eight.
     static let featureCount = 8
+    /// Treatment features after them (fork extension): insulin effect to come, carb effect to come,
+    /// treatment effect over the next 30 minutes, all mg/dL.
+    static let treatmentFeatureCount = 3
     /// One point every 5 minutes out to two hours.
     static let horizons = (1...24).map { $0 * 5 }
     /// Two days of rows on the 5-minute grid.
@@ -208,45 +232,73 @@ enum AdaptiveGlucoseForecast {
     /// Fits a model on `history` as of `now`. Only outcomes at or before `now` are used, so a
     /// replay that hands this the past alone gets exactly what the phone would have learned.
     /// Nil with fewer than `minimumTrainingRows` usable rows.
-    static func fit(_ history: AdaptiveHistory, now: Date, timeZone: TimeZone = .current) -> AdaptiveForecastModel? {
+    ///
+    /// - Parameter treatmentFeatures: the treatment features at a time (`treatmentFeatureCount`
+    ///   values, mg/dL), or nil to fit JugglucoNG's CGM-only model. With them, the model that reads
+    ///   them is kept only when its holdout error is lower than the CGM-only model's; without
+    ///   enough history for a holdout, or with no treatment in the window, the CGM-only model is kept.
+    static func fit(_ history: AdaptiveHistory, now: Date, timeZone: TimeZone = .current,
+                    treatmentFeatures: ((TimeInterval) -> [Double])? = nil, treatmentSignature: String? = nil) -> AdaptiveForecastModel? {
         let nowSeconds = now.timeIntervalSince1970
-        let rows = trainingRows(history, now: nowSeconds, timeZone: timeZone)
+        let rows = trainingRows(history, now: nowSeconds, timeZone: timeZone, treatmentFeatures: treatmentFeatures)
         guard rows.count30 >= minimumTrainingRows, let firstRow = rows.times.first else { return nil }
         let spanDays = (nowSeconds - firstRow) / day
 
         // Hold the most recent days back once, to check the model against "no change".
-        var holdoutRMSE: Double?
-        var holdoutNoChangeRMSE: Double?
-        if spanDays >= Double(minimumDaysForHoldout) {
-            let cut = nowSeconds - Double(holdoutDays) * day
-            // Training rows whose outcome lies past the cut would see the holdout.
-            let longest = Double(horizons.last ?? 120) * 60
-            if let early = solve(rows, mask: rows.times.map { $0 + longest <= cut }), let k30 = horizons.firstIndex(of: 30) {
-                var squaredError = 0.0, squaredNoChange = 0.0, count = 0
-                for row in rows.times.indices where rows.times[row] >= cut {
-                    guard let target = rows.targets[row][k30], let predicted = early.predictDelta(rows.features[row], horizon: k30) else { continue }
-                    squaredError += (predicted - target) * (predicted - target)
-                    squaredNoChange += target * target
-                    count += 1
-                }
-                if count >= 100 {
-                    holdoutRMSE = sqrt(squaredError / Double(count))
-                    holdoutNoChangeRMSE = sqrt(squaredNoChange / Double(count))
-                }
+        let cgmOnly = spanDays >= Double(minimumDaysForHoldout) ? holdout(rows, now: nowSeconds, featureCount: featureCount) : nil
+        var count = featureCount
+        var chosen = cgmOnly
+        if treatmentFeatures != nil, rows.hasTreatments, let cgmOnly {
+            let withTreatments = featureCount + treatmentFeatureCount
+            if let treated = holdout(rows, now: nowSeconds, featureCount: withTreatments), treated.rmse < cgmOnly.rmse {
+                count = withTreatments
+                chosen = treated
             }
         }
-        guard let full = solve(rows, mask: rows.times.map { _ in true }) else { return nil }
-        return AdaptiveForecastModel(version: modelVersion, trainedAt: now, horizons: horizons, means: full.means, scales: full.scales,
-                                     weights: full.weights, trainingRows: rows.count30, trainingDays: spanDays,
-                                     holdoutRMSE: holdoutRMSE, holdoutNoChangeRMSE: holdoutNoChangeRMSE)
+        guard let full = solve(rows, mask: rows.times.map { _ in true }, featureCount: count) else { return nil }
+        var model = AdaptiveForecastModel(version: modelVersion, trainedAt: now, horizons: horizons, means: full.means, scales: full.scales,
+                                          weights: full.weights, trainingRows: rows.count30, trainingDays: spanDays,
+                                          holdoutRMSE: chosen?.rmse, holdoutNoChangeRMSE: chosen?.noChange)
+        if count > featureCount {
+            model.usesTreatments = true
+            model.treatmentSignature = treatmentSignature
+            model.holdoutCGMOnlyRMSE = cgmOnly?.rmse
+        }
+        return model
+    }
+
+    /// The 30-minute error, on the last `holdoutDays`, of a model fitted on the days before them,
+    /// and of "no change" on the same rows; nil with fewer than 100 scored rows.
+    private static func holdout(_ rows: Rows, now: TimeInterval, featureCount count: Int) -> (rmse: Double, noChange: Double)? {
+        let cut = now - Double(holdoutDays) * day
+        // Training rows whose outcome lies past the cut would see the holdout.
+        let longest = Double(horizons.last ?? 120) * 60
+        guard let early = solve(rows, mask: rows.times.map { $0 + longest <= cut }, featureCount: count),
+              let k30 = horizons.firstIndex(of: 30) else { return nil }
+        var squaredError = 0.0, squaredNoChange = 0.0, scored = 0
+        for row in rows.times.indices where rows.times[row] >= cut {
+            guard let target = rows.targets[row][k30], let predicted = early.predictDelta(rows.features[row], horizon: k30) else { continue }
+            squaredError += (predicted - target) * (predicted - target)
+            squaredNoChange += target * target
+            scored += 1
+        }
+        guard scored >= 100 else { return nil }
+        return (sqrt(squaredError / Double(scored)), sqrt(squaredNoChange / Double(scored)))
     }
 
     /// The forecast at `origin` as changes from the reading there, one per horizon (nil where the
     /// model has no weights), or nil when the features cannot be formed: a new sensor's first
     /// hour, a gap, no reading at `origin`.
+    /// A model that reads treatments needs `treatmentFeatures`; without them it has no answer.
     static func forecastDeltas(_ model: AdaptiveForecastModel, history: AdaptiveHistory, origin: Date,
-                               timeZone: TimeZone = .current) -> [Double?]? {
-        guard let features = features(history, at: origin.timeIntervalSince1970, timeZone: timeZone) else { return nil }
+                               timeZone: TimeZone = .current, treatmentFeatures: ((TimeInterval) -> [Double])? = nil) -> [Double?]? {
+        guard var features = features(history, at: origin.timeIntervalSince1970, timeZone: timeZone) else { return nil }
+        if model.usesTreatments == true {
+            guard let treatmentFeatures else { return nil }
+            let extra = treatmentFeatures(origin.timeIntervalSince1970)
+            guard extra.count == treatmentFeatureCount, extra.allSatisfy(\.isFinite) else { return nil }
+            features += extra
+        }
         let fitted = Fitted(means: model.means, scales: model.scales, weights: model.weights)
         return model.horizons.indices.map { fitted.predictDelta(features, horizon: $0) }
     }
@@ -275,6 +327,8 @@ enum AdaptiveGlucoseForecast {
         var features: [[Double]] = []
         /// targets[row][k]: change at horizons[k], nil where unobserved.
         var targets: [[Double?]] = []
+        /// Whether any row has a treatment feature other than zero.
+        var hasTreatments = false
 
         var count30: Int {
             guard let k30 = AdaptiveGlucoseForecast.horizons.firstIndex(of: 30) else { return 0 }
@@ -282,16 +336,26 @@ enum AdaptiveGlucoseForecast {
         }
     }
 
-    private static func trainingRows(_ history: AdaptiveHistory, now: TimeInterval, timeZone: TimeZone) -> Rows {
+    /// Rows on the 5-minute grid; with `treatmentFeatures` each row carries them after the CGM
+    /// features (zeros where they are not finite).
+    private static func trainingRows(_ history: AdaptiveHistory, now: TimeInterval, timeZone: TimeZone,
+                                     treatmentFeatures: ((TimeInterval) -> [Double])? = nil) -> Rows {
         var rows = Rows()
         guard let firstReading = history.times.first else { return rows }
         let first = max(firstReading + 60 * 60, now - Double(trainingWindowDays) * day)
         var t = first - floorMod(first, grid) + grid
         let last = now - Double(horizons.first ?? 5) * 60
         while t <= last {
-            if let features = features(history, at: t, timeZone: timeZone), let index = history.indexAtOrBefore(t) {
+            if var features = features(history, at: t, timeZone: timeZone), let index = history.indexAtOrBefore(t) {
                 let segment = history.segment[index]
                 let level = features[5]
+                if let treatmentFeatures {
+                    var extra = treatmentFeatures(t)
+                    if extra.count != treatmentFeatureCount { extra = [Double](repeating: 0, count: treatmentFeatureCount) }
+                    extra = extra.map { $0.isFinite ? $0 : 0 }
+                    if extra.contains(where: { $0 != 0 }) { rows.hasTreatments = true }
+                    features += extra
+                }
                 rows.times.append(t)
                 rows.features.append(features)
                 rows.targets.append(horizons.map { minutes in
@@ -313,14 +377,15 @@ enum AdaptiveGlucoseForecast {
         let weights: [[Double]?]
 
         func predictDelta(_ features: [Double], horizon k: Int) -> Double? {
-            guard k < weights.count, let w = weights[k] else { return nil }
+            guard k < weights.count, let w = weights[k], w.count == means.count + 1, features.count >= means.count else { return nil }
             var y = w[0]
-            for c in 0..<AdaptiveGlucoseForecast.featureCount { y += w[c + 1] * (features[c] - means[c]) / scales[c] }
+            for c in 0..<means.count { y += w[c + 1] * (features[c] - means[c]) / scales[c] }
             return y
         }
     }
 
-    private static func solve(_ rows: Rows, mask: [Bool]) -> Fitted? {
+    /// Ridge regression per horizon over the first `featureCount` features of each row.
+    private static func solve(_ rows: Rows, mask: [Bool], featureCount: Int) -> Fitted? {
         let used = rows.times.indices.filter { mask[$0] }
         guard !used.isEmpty else { return nil }
         var means = [Double](repeating: 0, count: featureCount)
@@ -403,6 +468,72 @@ struct AdaptiveReadings: Sendable {
     }
 }
 
+// MARK: - Treatment features
+
+/// The treatment features of the adaptive forecast (fork extension), read through the standard
+/// forecast's treatment model so a bolus, a meal or exercise means the same to both forecasts:
+///
+/// 0. insulin effect still to come within six hours, mg/dL (negative), of the insulins that count
+///    toward the forecast;
+/// 1. carb effect still to come within six hours, mg/dL (positive), protein and fat included when
+///    the forecast reads them;
+/// 2. every treatment's effect over the next 30 minutes, mg/dL, exercise included.
+///
+/// Only treatments logged at or before the moment count, so training stays causal: a meal logged
+/// for later is not known to the row before it.
+struct AdaptiveTreatmentFeatures: Sendable {
+    static let remainingHorizon: TimeInterval = 6 * 60 * 60
+    static let nearHorizon: TimeInterval = 30 * 60
+
+    let model: ExperimentalPredictionModel
+    /// Ascending by date.
+    let treatments: [ExperimentalTreatment]
+
+    init(model: ExperimentalPredictionModel, treatments: [ExperimentalTreatment]) {
+        self.model = model
+        self.treatments = treatments.sorted { $0.date < $1.date }
+    }
+
+    func features(at t: TimeInterval) -> [Double] {
+        let moment = Date(timeIntervalSince1970: t)
+        let earliest = moment.addingTimeInterval(-ExperimentalPredictionModel.lookBack)
+        // First treatment inside the look-back, by binary search.
+        var low = 0, high = treatments.count
+        while low < high {
+            let middle = (low + high) / 2
+            if treatments[middle].date < earliest { low = middle + 1 } else { high = middle }
+        }
+        var insulin = 0.0, carbs = 0.0, near = 0.0
+        let remainingEnd = moment.addingTimeInterval(Self.remainingHorizon)
+        let nearEnd = moment.addingTimeInterval(Self.nearHorizon)
+        var index = low
+        while index < treatments.count, treatments[index].date <= moment {
+            let treatment = treatments[index]
+            switch treatment.kind {
+            case .bolus, .basalInjection:
+                insulin += model.treatmentDelta(treatment, at: remainingEnd, baseline: moment)
+            case .carbs:
+                carbs += model.treatmentDelta(treatment, at: remainingEnd, baseline: moment)
+            case .exercise:
+                break
+            }
+            near += model.treatmentDelta(treatment, at: nearEnd, baseline: moment)
+            index += 1
+        }
+        return [insulin, carbs, near]
+    }
+
+    /// `features(at:)` as the function `AdaptiveGlucoseForecast` takes.
+    var function: (TimeInterval) -> [Double] { { features(at: $0) } }
+
+    /// The prediction settings the features depend on; a model fitted under other settings is refitted.
+    static func signature(_ model: ExperimentalPredictionModel) -> String {
+        [model.carbRatio.description, model.insulinSensitivityMgDl.description, model.carbAbsorption.description,
+         model.bolusInsulin.rawValue, model.basalInsulin.rawValue, model.bodyWeightKg?.description ?? "-",
+         ExperimentalPredictionPeriod.encode(model.periods), model.macrosEnabled.description].joined(separator: "|")
+    }
+}
+
 // MARK: - Store
 
 /// The phone's adaptive forecast: the fitted model and when to refresh it (JugglucoNG
@@ -428,7 +559,7 @@ enum AdaptiveForecastStore {
     /// The model's state, for the settings row.
     enum Status: Equatable {
         case learning
-        case ready(trainingDays: Double, trainedAt: Date)
+        case ready(trainingDays: Double, trainedAt: Date, readsTreatments: Bool)
         /// It lost to "no change" on its own recent holdout, so the fallback is drawn instead.
         case notBetter(trainingDays: Double)
     }
@@ -444,7 +575,8 @@ enum AdaptiveForecastStore {
 
     static func status(defaults: UserDefaults = .standard) -> Status {
         guard let model = model(defaults: defaults) else { return .learning }
-        return model.isReliable ? .ready(trainingDays: model.trainingDays, trainedAt: model.trainedAt) : .notBetter(trainingDays: model.trainingDays)
+        return model.isReliable ? .ready(trainingDays: model.trainingDays, trainedAt: model.trainedAt,
+                                                readsTreatments: model.usesTreatments == true) : .notBetter(trainingDays: model.trainingDays)
     }
 
     /// Forgets the model; the next request trains a new one.
@@ -461,9 +593,12 @@ enum AdaptiveForecastStore {
     /// Starts a fit on the background queue when one is due. Never blocks the caller.
     static func refreshIfDue(coreDataManager: CoreDataManager, defaults: UserDefaults = .standard, now: Date = Date()) {
         guard isNeeded(defaults: defaults) else { return }
+        let predictionModel = ExperimentalPredictionModel(defaults: defaults)
+        let signature = AdaptiveTreatmentFeatures.signature(predictionModel)
         let due: Bool
         if let current = model(defaults: defaults) {
             due = now.timeIntervalSince(current.trainedAt) >= refitAfter
+                || (current.usesTreatments == true && current.treatmentSignature != signature)
         } else if let attempt = defaults.object(forKey: lastAttemptKey) as? Date {
             due = now.timeIntervalSince(attempt) >= retryAfter
         } else {
@@ -477,14 +612,24 @@ enum AdaptiveForecastStore {
         lock.unlock()
         defaults.set(now, forKey: lastAttemptKey)
         let coordinator = coreDataManager.privateManagedObjectContext.persistentStoreCoordinator
+        let policy = defaults.dataFlowPolicy
         queue.async {
             defer { lock.lock(); isFitting = false; lock.unlock() }
             let span = TimeInterval(AdaptiveGlucoseForecast.trainingWindowDays + 1) * 24 * 60 * 60
             let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
             context.persistentStoreCoordinator = coordinator
             var readings: AdaptiveReadings?
-            context.performAndWait { readings = fetchReadings(in: context, from: now.addingTimeInterval(-span), to: now) }
-            guard let readings, let model = AdaptiveGlucoseForecast.fit(readings.history, now: now), let data = model.encoded() else { return }
+            var treatments: [ExperimentalTreatment]?
+            context.performAndWait {
+                readings = fetchReadings(in: context, from: now.addingTimeInterval(-span), to: now)
+                treatments = ExperimentalTreatment.fetch(from: now.addingTimeInterval(-span - ExperimentalPredictionModel.lookBack), to: now,
+                                                         in: context, policy: policy)
+            }
+            let features = treatments.map { AdaptiveTreatmentFeatures(model: predictionModel, treatments: $0) }
+            guard let readings,
+                  let model = AdaptiveGlucoseForecast.fit(readings.history, now: now, treatmentFeatures: features?.function,
+                                                          treatmentSignature: signature),
+                  let data = model.encoded() else { return }
             defaults.set(data, forKey: modelKey)
         }
     }
@@ -535,8 +680,10 @@ enum AdaptiveForecastStore {
     /// trend momentum: on JugglucoNG's benchmark that fallback never did worse than "no change".
     /// Returns the forecast and whether it is the adaptive one.
     static func shownForecast(readings: AdaptiveReadings?, standard: (_ trendMomentum: Bool) -> [GlucosePredictionPoint],
-                              horizonMinutes: Int, defaults: UserDefaults = .standard, now: Date = Date()) -> (points: [GlucosePredictionPoint], isAdaptive: Bool) {
-        if let readings, let adaptive = forecast(history: readings.history, horizonMinutes: horizonMinutes, defaults: defaults, now: now) {
+                              horizonMinutes: Int, treatments: AdaptiveTreatmentFeatures? = nil, defaults: UserDefaults = .standard,
+                              now: Date = Date()) -> (points: [GlucosePredictionPoint], isAdaptive: Bool) {
+        if let readings, let adaptive = forecast(history: readings.history, horizonMinutes: horizonMinutes, treatments: treatments,
+                                                 defaults: defaults, now: now) {
             return (adaptive, true)
         }
         return (standard(false), false)
@@ -545,13 +692,15 @@ enum AdaptiveForecastStore {
     /// The adaptive forecast from the newest reading of `history`, or nil when it cannot answer:
     /// no reliable model yet, or the last hour does not support the features. The caller then
     /// draws the fallback.
-    static func forecast(history: AdaptiveHistory, horizonMinutes: Int, defaults: UserDefaults = .standard, now: Date = Date(),
-                         timeZone: TimeZone = .current) -> [GlucosePredictionPoint]? {
+    static func forecast(history: AdaptiveHistory, horizonMinutes: Int, treatments: AdaptiveTreatmentFeatures? = nil,
+                         defaults: UserDefaults = .standard, now: Date = Date(), timeZone: TimeZone = .current) -> [GlucosePredictionPoint]? {
         guard let model = model(defaults: defaults), model.isReliable, let last = history.times.last,
               now.timeIntervalSince1970 - last <= ExperimentalPredictionModel.maximumBaselineAge,
               let baselineValue = history.mgDl.last else { return nil }
         let origin = Date(timeIntervalSince1970: last)
-        guard let deltas = AdaptiveGlucoseForecast.forecastDeltas(model, history: history, origin: origin, timeZone: timeZone) else { return nil }
+        guard let deltas = AdaptiveGlucoseForecast.forecastDeltas(model, history: history, origin: origin, timeZone: timeZone,
+                                                                  treatmentFeatures: treatments?.function)
+        else { return nil }
         return AdaptiveGlucoseForecast.points(baseline: (origin, baselineValue), deltas: deltas, horizons: model.horizons, horizonMinutes: horizonMinutes)
     }
 }

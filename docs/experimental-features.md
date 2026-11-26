@@ -85,7 +85,16 @@ tends to carry on, and how strongly glucose drifts back toward your own average.
 - One ridge regression (λ = 1) per horizon, every 5 minutes out to 2 hours, predicting the
   change from the current reading. Eight features from CGM history only: the change over the
   last 5, 15, 30 and 60 minutes, the distance from the 24-hour mean, the level and the time of
-  day. Logged insulin and carbs are not used (on JugglucoNG's data they made it worse).
+  day.
+- Fork extension: three more features from logged treatments, read through the standard
+  model's treatment curves and settings (`AdaptiveTreatmentFeatures`): the insulin effect still
+  to come within 6 hours, the carb effect still to come (protein and fat when those are on), and
+  every treatment's effect over the next 30 minutes, all in mg/dL. Only treatments logged at or
+  before the moment count. On JugglucoNG's data treatments made the model worse, so the model
+  with them is kept only when its holdout error beats the CGM-only model's; with less than four
+  days, or no treatment in the window, the CGM-only model is kept. Changing the carb ratio,
+  sensitivity, absorption, insulins, body weight, periods or macros relearns a model that reads
+  treatments. **Learned model** then says "with insulin and carbs".
 - Trained on the last 28 days on a 5-minute grid, from the displayed value; it needs 576 rows
   (two days) before it answers. A value is never read across a sensor change or a gap longer
   than 2.5 readings, and the hour behind a reading must be continuous, so a new sensor's first
