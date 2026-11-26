@@ -771,7 +771,8 @@ final class ExperimentalFeaturesTests: XCTestCase {
         let aboutIndex = try XCTUnwrap(sections.firstIndex { $0.id == SettingsRootSection.about.rawValue * 10 })
         XCTAssertLessThan(index, aboutIndex)
         XCTAssertEqual(sections[index].section().rows.map(\.id),
-                       ["experimental.chartStyle", "experimental.chartCursor", "experimental.uncertaintyRibbon", "experimental.prediction",
+                       ["experimental.recommended", "experimental.chartStyle", "experimental.chartCursor", "experimental.uncertaintyRibbon",
+                        "experimental.prediction",
                         "experimental.insulins", "experimental.pens", "experimental.meters", "experimental.alerts",
                         "experimental.restricted", "experimental.powerSaving"])
     }
@@ -1855,6 +1856,26 @@ final class TherapyParameterEstimatorTests: XCTestCase {
         let model = model(periods: [ExperimentalPredictionPeriod(startMinute: 360, carbRatio: 10, insulinSensitivityMgDl: 54, carbAbsorption: 35)])
         XCTAssertNil(TherapyParameterEstimator.periodStart(of: midnight.addingTimeInterval(5 * hour), model: model))
         XCTAssertEqual(TherapyParameterEstimator.periodStart(of: midnight.addingTimeInterval(7 * hour), model: model), 360)
+    }
+}
+
+// MARK: - Recommended set
+
+final class ExperimentalRecommendedSetTests: XCTestCase {
+    func testRecommendedSetTurnsOnOnlyWhatShowsMore() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "ExperimentalRecommendedSetTests"))
+        defaults.removePersistentDomain(forName: "ExperimentalRecommendedSetTests")
+        XCTAssertFalse(ExperimentalRecommendedSet.isApplied(defaults: defaults))
+        ExperimentalRecommendedSet.apply(defaults: defaults)
+        XCTAssertTrue(ExperimentalRecommendedSet.isApplied(defaults: defaults))
+        XCTAssertTrue(defaults.experimentalPredictionAdaptive)
+        XCTAssertEqual(defaults.experimentalPowerSavingMode, .automatic)
+        // Alarms, dose hints and uploads are left alone.
+        XCTAssertFalse(defaults.experimentalDoseHintsEnabled)
+        XCTAssertFalse(defaults.experimentalMuteHighWhileFalling)
+        XCTAssertFalse(defaults.experimentalPredictedHighIobCoverage)
+        defaults.experimentalPredictionRange = false
+        XCTAssertFalse(ExperimentalRecommendedSet.isApplied(defaults: defaults))
     }
 }
 

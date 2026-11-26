@@ -58,7 +58,8 @@ extension SettingsViewGroupedSettingsViewModel {
                     settingsScreen: { ExperimentalSettingsViewModel.powerSavingScreen }
                 )
             ],
-            leadingRows: { [ExperimentalSettingsViewModel.chartStyleRow(), ExperimentalSettingsViewModel.chartCursorRow(),
+            leadingRows: { [ExperimentalSettingsViewModel.recommendedSetRow(), ExperimentalSettingsViewModel.chartStyleRow(),
+                            ExperimentalSettingsViewModel.chartCursorRow(),
                             ExperimentalSettingsViewModel.uncertaintyRibbonRow()] }
         )
     }
@@ -145,6 +146,13 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
     }
 
     /// JugglucoNG's cursor on the main chart: time, glucose and the insulin on board at that moment.
+    /// Turns on the experimental features that only show more, after a confirmation.
+    static func recommendedSetRow() -> SettingsRow {
+        SettingsRow(id: "experimental.recommended", title: ExperimentalTexts.text("recommendedTitle", "Recommended set"),
+                    detail: ExperimentalRecommendedSet.isApplied() ? Texts_Common.on : nil,
+                    control: .custom(content: { AnyView(ExperimentalRecommendedSetButton()) }))
+    }
+
     static func chartCursorRow() -> SettingsRow {
         SettingsRow(id: "experimental.chartCursor", title: ExperimentalTexts.text("chartCursor", "Chart cursor"),
                     control: .toggle(isOn: { UserDefaults.standard.experimentalChartCursorEnabled },
@@ -825,6 +833,31 @@ struct ExperimentalPredictionAccuracyView: View {
         let blend = forecasts.filter(\.isBlend)
         blendReport = blend.isEmpty ? [] : PredictionAccuracy.report(forecasts: blend, readings: readings)
         isLoading = false
+    }
+}
+
+/// The button of the recommended set, with its confirmation.
+struct ExperimentalRecommendedSetButton: View {
+    @State private var isConfirming = false
+    @State private var isApplied = ExperimentalRecommendedSet.isApplied()
+
+    var body: some View {
+        Button(isApplied ? Texts_Common.on : ExperimentalTexts.text("recommendedTurnOn", "Turn on")) {
+            isConfirming = true
+        }
+        .disabled(isApplied)
+        .alert(ExperimentalTexts.text("recommendedConfirmTitle", "Turn on the recommended set?"), isPresented: $isConfirming) {
+            Button(ExperimentalTexts.text("recommendedTurnOn", "Turn on")) {
+                ExperimentalRecommendedSet.apply()
+                if let coreDataManager = TherapyMetricsManager.shared.configuredCoreDataManager {
+                    AdaptiveForecastStore.refreshIfDue(coreDataManager: coreDataManager)
+                }
+                isApplied = true
+            }
+            Button(Texts_Common.Cancel, role: .cancel) {}
+        } message: {
+            Text(ExperimentalTexts.text("recommendedConfirmMessage", "Turns on the glucose prediction with the adaptive forecast, accuracy recording, combining by accuracy and the likely range; the insulin activity on the chart; the chart cursor; the likely range around Sibionics Adaptive V2 readings; Consider IOB and recent glucose for the predicted low alert; and automatic power saving. Alarms, dose hints, Nightscout uploads and the chart style stay as they are. Each can be switched off again below."))
+        }
     }
 }
 

@@ -101,6 +101,31 @@ enum ExperimentalPowerSaving {
     }
 }
 
+/// The experimental features that only show more or check more, turned on together from
+/// Settings → Experimental features → Recommended set. Alarms, dose hints, uploads, the chart
+/// style and anything that locks or silences are left alone.
+enum ExperimentalRecommendedSet {
+    static func apply(defaults: UserDefaults = .standard) {
+        defaults.experimentalPredictionEnabled = true
+        defaults.experimentalPredictionAdaptive = true
+        defaults.experimentalPredictionAccuracyEnabled = true
+        defaults.experimentalPredictionBlend = true
+        defaults.experimentalPredictionRange = true
+        defaults.experimentalPredictedLowEvidence = true
+        defaults.experimentalInsulinsEnabled = true
+        defaults.experimentalChartCursorEnabled = true
+        defaults.experimentalUncertaintyRibbonEnabled = true
+        defaults.experimentalPowerSavingMode = .automatic
+    }
+
+    static func isApplied(defaults: UserDefaults = .standard) -> Bool {
+        defaults.experimentalPredictionEnabled && defaults.experimentalPredictionAdaptive && defaults.experimentalPredictionAccuracyEnabled
+            && defaults.experimentalPredictionBlend && defaults.experimentalPredictionRange && defaults.experimentalPredictedLowEvidence
+            && defaults.experimentalInsulinsEnabled && defaults.experimentalChartCursorEnabled && defaults.experimentalUncertaintyRibbonEnabled
+            && defaults.experimentalPowerSavingMode == .automatic
+    }
+}
+
 /// Prediction horizons offered in Settings. JugglucoNG clamps the horizon to 30...360 minutes.
 enum ExperimentalPredictionHorizon {
     static let choices = [60, 90, 120, 180, 240]

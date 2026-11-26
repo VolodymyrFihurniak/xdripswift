@@ -5,6 +5,14 @@ and mostly changes the main chart on the Home screen; where a feature reaches wi
 watch, alerts or Nightscout, its section says so. AID sharing is never affected. The models are
 ported from JugglucoNG (see `THIRD_PARTY_NOTICES.md`).
 
+## Recommended set
+
+**Recommended set → Turn on** (`ExperimentalRecommendedSet`, after a confirmation) switches on
+what only shows or checks more: prediction with the adaptive forecast, Record accuracy, Combine
+by accuracy, Show likely range, the insulin activity, the chart cursor, the uncertainty ribbon,
+Consider IOB and recent glucose for the predicted low, and Automatic power saving. Alarms, dose
+hints, Nightscout uploads, the chart style, quiet window and restricted mode are left alone.
+
 ## Glucose on the chart
 
 **Points** is xDrip's usual one dot per reading. **Line** joins the readings in their range
