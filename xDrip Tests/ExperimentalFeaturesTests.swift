@@ -2890,3 +2890,393 @@ final class PenManualMergeTests: XCTestCase {
         XCTAssertTrue(plan([dose(100, 4, atMinute: 0)], [entry(1, 4, atMinute: 1)], penInsulin: nil).merges.isEmpty)
     }
 }
+
+
+// MARK: - Trend engine (JugglucoNG TrendEngine, CausalGlucoseFilter, TrendWindows)
+
+/// Every expected number in this class was printed by JugglucoNG's own Kotlin (`TrendEngine.kt`,
+/// `CausalGlucoseFilter.kt`, `TrendWindows.kt`, copied unchanged and run on the JVM) over the series
+/// built below. The series use values that are exact in `Float`, so the Kotlin and Swift inputs are the
+/// same numbers; velocities are compared to 1e-5, filter estimates to 1e-9.
+final class TrendEngineTests: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func point(_ minute: Double, _ value: Double) -> TrendEngine.Point {
+        TrendEngine.Point(date: t0.addingTimeInterval(minute * 60), mgDl: value)
+    }
+
+    private func series(_ minutes: [Double], _ values: [Double]) -> [TrendEngine.Point] {
+        zip(minutes, values).map { TrendEngine.Point(date: t0.addingTimeInterval($0 * 60), mgDl: $1) }
+    }
+
+    private func everyMinute(_ count: Int, _ value: (Int) -> Double) -> [TrendEngine.Point] {
+        (0..<count).map { point(Double($0), value($0)) }
+    }
+
+    private func jitter(_ i: Int) -> Double { 120.0 - 0.5 * Double(i) + Double((i * 7) % 5 - 2) * 1.5 }
+
+    /// 100 + (i % 11) * 3 - (i % 7) * 2 + i / 3, integer arithmetic as in the Kotlin that produced the vectors.
+    private func pattern(_ i: Int) -> Double {
+        let value: Int = (i % 11) * 3 - (i % 7) * 2 + i / 3
+        return 100.0 + Double(value)
+    }
+
+    private func assertTrend(_ points: [TrendEngine.Point], _ state: TrendEngine.TrendState, _ velocity: Float,
+                             file: StaticString = #filePath, line: UInt = #line) {
+        let result = TrendEngine.calculateTrend(history: points)
+        XCTAssertEqual(result.state, state, file: file, line: line)
+        XCTAssertEqual(result.velocity, velocity, accuracy: 1e-5, file: file, line: line)
+        XCTAssertEqual(result.confidence, 1, file: file, line: line)
+        XCTAssertEqual(result.acceleration, 0, file: file, line: line)
+    }
+
+    // MARK: Velocity
+
+    func testSteadyFallReadsItsRate() {
+        assertTrend(everyMinute(20) { 150.0 - 0.75 * Double($0) }, .fortyFiveDown, -0.75)
+    }
+
+    func testTurnOffAPlateauIsFollowed() {
+        // 20 flat minutes, then +3 mg/dL per minute for ten: the weighting keeps most of the turn.
+        assertTrend(everyMinute(30) { $0 < 20 ? 100.0 : 100.0 + 3.0 * Double($0 - 19) }, .doubleUp, 2.9441721)
+    }
+
+    func testJitterReadsAsFlatAndOrderDoesNotMatter() {
+        let ascending = everyMinute(30) { jitter($0) }
+        assertTrend(ascending, .flat, -0.36880907)
+        assertTrend(Array(ascending.reversed()), .flat, -0.36880907)
+    }
+
+    func testFiveMinuteSensorUsesTwentyMinutes() {
+        let values = [100.0, 102, 106, 112, 120, 130, 142, 156, 172, 190, 210]
+        assertTrend(series((0...10).map { Double($0) * 5 }, values), .doubleUp, 3.4560812)
+    }
+
+    func testAJumpFasterThanTwentyPerMinuteEndsTheWindow() {
+        // 100 for twelve minutes, +80 in one, then +1 per minute: only the segment after the jump counts.
+        assertTrend(everyMinute(25) { $0 < 12 ? 100.0 : 180.0 + Double($0 - 12) }, .fortyFiveUp, 1.0)
+    }
+
+    func testValuesThatAreNotReadingsAreDroppedBeforeMeasuring() {
+        let values = (0..<20).map { i -> Double in
+            switch i {
+            case 4: return 700
+            case 8, 9: return 0
+            default: return 110.0 + Double(i)
+            }
+        }
+        assertTrend(series((0..<20).map { Double($0) }, values), .fortyFiveUp, 1.0)
+    }
+
+    func testTooFewReadingsGiveNoTrend() {
+        let single = TrendEngine.calculateTrend(history: [point(0, 100)])
+        XCTAssertEqual(single, TrendEngine.TrendResult.noTrend)
+        XCTAssertEqual(single.state, .flat)
+        XCTAssertEqual(single.confidence, 0)
+        XCTAssertEqual(TrendEngine.calculateTrend(history: []), TrendEngine.TrendResult.noTrend)
+        // All but one dropped as not a value.
+        XCTAssertEqual(TrendEngine.calculateTrend(history: [point(0, 100), point(1, 0), point(2, 800)]), TrendEngine.TrendResult.noTrend)
+        assertTrend([point(0, 100), point(1, 101)], .fortyFiveUp, 1.0)
+    }
+
+    func testSlowAndMixedCadences() {
+        // 15-minute readings: the window is capped at 25 minutes, so two readings carry it.
+        assertTrend(series([0, 15, 30, 45, 60], [100, 110, 125, 145, 170]), .singleUp, 1.6666666)
+        // 15-minute history followed by one reading a minute: the median interval is one minute.
+        let minutes = [0.0, 15, 30, 45] + (46...60).map { Double($0) }
+        assertTrend(series(minutes, minutes.map { 100.0 + 0.75 * $0 }), .fortyFiveUp, 0.75)
+    }
+
+    // MARK: Arrow thresholds
+
+    func testArrowThresholds() {
+        let expected: [(Float, TrendEngine.TrendState)] = [
+            (-2.5, .doubleDown), (-2.0, .doubleDown), (-1.9, .singleDown), (-1.0, .singleDown),
+            (-0.75, .fortyFiveDown), (-0.5, .fortyFiveDown), (-0.25, .flat), (0, .flat), (0.25, .flat),
+            (0.5, .flat), (0.75, .fortyFiveUp), (1.0, .fortyFiveUp), (1.5, .singleUp), (2.0, .singleUp),
+            (2.5, .doubleUp)
+        ]
+        for (velocity, state) in expected {
+            XCTAssertEqual(TrendEngine.state(forVelocity: velocity), state, "velocity \(velocity)")
+        }
+    }
+
+    // MARK: Cadence and window
+
+    func testWindowScalesWithTheCadenceAndIsClamped() {
+        // cadence in minutes, then the window in milliseconds (Kotlin: 20 min * cbrt(cadence / 5), 8...25 min).
+        let expected: [(Double, Int64)] = [
+            (0.5, 556_990), (1, 701_764), (2, 884_167), (5, 1_200_000), (10, 1_500_000), (15, 1_500_000), (30, 1_500_000)
+        ]
+        for (cadence, windowMs) in expected {
+            let newestFirst = (0..<20).map { point(-Double($0) * cadence, 100) }
+            XCTAssertEqual(TrendEngine.cadenceMinutes(newestFirst: newestFirst), cadence, accuracy: 1e-9)
+            XCTAssertEqual(Double(TrendEngine.trendWindowMillis(newestFirst: newestFirst)), Double(windowMs), accuracy: 1, "cadence \(cadence)")
+        }
+    }
+
+    func testOneDisconnectDoesNotStretchTheWindow() {
+        // Five readings a minute apart, a 21 minute hole, then more readings a minute apart.
+        let newestFirst = (0..<30).map { point(-Double($0 < 5 ? $0 : $0 + 20), 100) }
+        XCTAssertEqual(TrendEngine.cadenceMinutes(newestFirst: newestFirst), 1, accuracy: 1e-9)
+        XCTAssertEqual(Double(TrendEngine.trendWindowMillis(newestFirst: newestFirst)), 701_764, accuracy: 1)
+        XCTAssertEqual(TrendEngine.cadenceMinutes(newestFirst: []), 5, accuracy: 1e-9)
+    }
+
+    func testRecencyWeightedSlopeOverTheUsableReadings() throws {
+        let values = [30.0, 27, 24, 27, 24, 21, 24, 21, 18, 21, 18, 15]
+        let newestFirst = values.enumerated().map { point(-Double($0.offset), $0.element) }
+        XCTAssertEqual(try XCTUnwrap(TrendEngine.recencyWeightedSlope(newestFirst: newestFirst)), 1.1433672, accuracy: 1e-5)
+        XCTAssertEqual(try XCTUnwrap(TrendEngine.recencyWeightedSlope(newestFirst: newestFirst, usableCount: 5)), 1.3337764, accuracy: 1e-5)
+        XCTAssertNil(TrendEngine.recencyWeightedSlope(newestFirst: newestFirst, usableCount: 1))
+        XCTAssertNil(TrendEngine.recencyWeightedSlope(newestFirst: newestFirst, usableCount: 0))
+        XCTAssertNil(TrendEngine.recencyWeightedSlope(newestFirst: []))
+        XCTAssertNil(TrendEngine.recencyWeightedSlope(newestFirst: [point(0, .nan), point(-1, 100)]))
+    }
+
+    // MARK: Rows of a list (TrendWindows)
+
+    private let jitterVelocities: [Float] = [
+        0.0, 2.5, 2.5, -0.05919641, 0.11884706, -0.78232205, -0.5747263, -0.12466263, -0.45307648, -0.32747543,
+        -0.64570034, -0.57295555, -0.3650081, -0.5334994, -0.36880907, -0.65972793, -0.57295555, -0.3650081,
+        -0.5334994, -0.36880907, -0.65972793, -0.57295555, -0.3650081, -0.5334994, -0.36880907, -0.65972793,
+        -0.57295555, -0.3650081, -0.5334994, -0.36880907
+    ]
+
+    func testSweepMatchesJugglucoVelocitiesAndTheObviousPerRowWindow() throws {
+        let history = everyMinute(30) { jitter($0) }
+        for windowMs in [TrendEngine.defaultWindowMs, TrendEngine.supplyWindowMs] {
+            let trends = TrendEngine.trends(historyAscending: history, rows: history, windowMs: windowMs)
+            XCTAssertEqual(trends.count, history.count)
+            for (index, row) in history.enumerated() {
+                let trend = trends[row.millis]
+                XCTAssertEqual(try XCTUnwrap(trend).velocity, jitterVelocities[index], accuracy: 1e-5, "row \(index)")
+                // The straightforward implementation: filter the history to the window ending at the row.
+                let window = history.filter { $0.millis >= row.millis - windowMs && $0.millis <= row.millis }
+                let naive = window.count >= 2 ? TrendEngine.calculateTrend(history: window) : TrendEngine.TrendResult.noTrend
+                XCTAssertEqual(trend, naive, "row \(index)")
+            }
+        }
+        XCTAssertTrue(TrendEngine.trends(historyAscending: [], rows: history).isEmpty)
+        XCTAssertTrue(TrendEngine.trends(historyAscending: history, rows: []).isEmpty)
+    }
+
+    // MARK: Causal filter
+
+    private func minutes(_ count: Int, step: Int64 = 1) -> [Int64] { (0..<count).map { Int64($0) * step * 60_000 } }
+
+    private func estimate(_ times: [Int64], _ values: [Double], at: Int? = nil) -> CausalGlucoseFilter.Estimate? {
+        CausalGlucoseFilter.estimateAt(timesMs: times, mgDl: values, at: at ?? times.count - 1)
+    }
+
+    private func assertEstimate(_ times: [Int64], _ values: [Double], at: Int? = nil, _ mgDl: Double, _ rate: Double,
+                                file: StaticString = #filePath, line: UInt = #line) {
+        guard let result = estimate(times, values, at: at) else { return XCTFail("no estimate", file: file, line: line) }
+        XCTAssertEqual(result.mgDl, mgDl, accuracy: 1e-9, file: file, line: line)
+        XCTAssertEqual(result.rateMgDlPerMin, rate, accuracy: 1e-9, file: file, line: line)
+    }
+
+    func testFilterEstimatesMatchJugglucoKotlin() {
+        assertEstimate(minutes(30), [Double](repeating: 120, count: 30), 120.0, 0.0)
+        assertEstimate(minutes(40), (0..<40).map { 100.0 + Double($0) }, 138.47003982330656, 0.80816291055923)
+        let sawtooth = (0..<40).map { 100.0 + Double($0 % 7) * 3 }
+        assertEstimate(minutes(40), sawtooth, at: 25, 108.48980763684162, -0.03636826762231937)
+        assertEstimate(minutes(40), sawtooth, 108.48722333309638, -0.01352237556166025)
+        var spike = [Double](repeating: 100, count: 31)
+        spike[29] = 160
+        assertEstimate(minutes(31), spike, at: 29, 102.28472711918177, 0.31519718089996746)
+        assertEstimate(minutes(31), spike, at: 30, 101.76942044284391, 0.19421163047772638)
+        let fall = (0..<50).map { $0 < 20 ? 120.0 : 120.0 - Double($0 - 20 + 1) * 2 }
+        assertEstimate(minutes(50), fall, 61.00253250075449, -1.62488858134874)
+        let patternValues = (0..<90).map { pattern($0) }
+        assertEstimate(minutes(90), patternValues, 137.99827242308785, -0.1025112963091791)
+        assertEstimate(minutes(90), patternValues, at: 70, 127.14538814051082, -0.3792280233607436)
+        let step = (0..<23).map { $0 < 20 ? 100.0 : 300.0 }
+        assertEstimate(minutes(23), step, at: 20, 104.4373445286226, 0.6108193996261302)
+        assertEstimate(minutes(23), step, at: 21, 110.69667939122355, 1.3410569517153559)
+        assertEstimate(minutes(23), step, at: 22, 118.97232262646263, 2.169828416584016)
+        assertEstimate(minutes(40, step: 2), (0..<40).map { 90.0 + Double($0 % 5) * 4 + Double($0) }, 140.31178404406745, 0.837016430032155)
+        assertEstimate(minutes(24, step: 5), (0..<24).map { 140.0 - Double($0) * 2 + Double($0 % 3) * 3 }, 98.95312838647905, -0.12058387613102628)
+        assertEstimate(minutes(1), [95], 95.0, 0.0)
+        // A repeated timestamp keeps the first sample.
+        assertEstimate([0, 60_000, 60_000, 120_000], [100, 110, 150, 120], 112.40897304625574, 2.2529394754126604)
+    }
+
+    func testAHoleRestartsTheFilterAtTheFirstSampleAfterIt() {
+        // Twenty readings, then one 30 minutes after the last: not bridged by prediction.
+        let times = minutes(20) + [49 * 60_000]
+        assertEstimate(times, [Double](repeating: 100, count: 20) + [200], 200.0, 0.0)
+    }
+
+    func testInvalidSamplesAreSkippedAndAnInvalidTargetHasNoEstimate() {
+        var values = [Double](repeating: 110, count: 10)
+        values[5] = 0
+        values[6] = .nan
+        assertEstimate(minutes(10), values, 110.0, 0.0)
+        XCTAssertNil(estimate(minutes(10), values, at: 5))
+        XCTAssertNil(estimate(minutes(10), values, at: 6))
+        XCTAssertNil(CausalGlucoseFilter.estimateAt(timesMs: minutes(3), mgDl: [100, 100, 100], at: 3))
+        XCTAssertNil(CausalGlucoseFilter.estimateAt(timesMs: minutes(3), mgDl: [100, 100, 100], at: -1))
+    }
+
+    func testFilterOnlyReadsThePastAndOnlyTheLastHour() {
+        let values = (0..<40).map { 100.0 + Double($0 % 7) * 3 }
+        let full = estimate(minutes(40), values, at: 25)
+        let truncated = estimate(Array(minutes(40).prefix(26)), Array(values.prefix(26)), at: 25)
+        XCTAssertEqual(full, truncated)
+
+        // Two hours of one-minute samples; the first 50 minutes are far outside the one hour window.
+        let a = (0..<120).map { 100.0 + Double($0 % 5) * 2 }
+        var b = a
+        for i in 0..<50 { b[i] = 300 }
+        XCTAssertEqual(estimate(minutes(120), a)?.mgDl, estimate(minutes(120), b)?.mgDl)
+    }
+
+    func testALoneSpikeBarelyMovesTheEstimateAndASustainedFallIsFollowed() throws {
+        var spike = [Double](repeating: 100, count: 31)
+        spike[29] = 160
+        XCTAssertLessThan(try XCTUnwrap(estimate(minutes(31), spike, at: 29)).mgDl, 110)
+        XCTAssertEqual(try XCTUnwrap(estimate(minutes(31), spike, at: 30)).mgDl, 100, accuracy: 5)
+        let fall = (0..<50).map { $0 < 20 ? 120.0 : 120.0 - Double($0 - 20 + 1) * 2 }
+        let end = try XCTUnwrap(estimate(minutes(50), fall))
+        XCTAssertEqual(end.mgDl, 60, accuracy: 5)
+        XCTAssertLessThan(end.rateMgDlPerMin, -1.5)
+    }
+
+    func testFilteredLane() {
+        // Kotlin filterLane over 100 + (i % 6) * 4, as Float.
+        let expected: [Double] = [
+            100.0, 102.15498, 104.96359, 108.58898, 112.73241, 117.056, 111.86582, 109.54127, 109.22421, 110.29133,
+            112.32293, 115.04115, 111.27608, 109.3558, 108.90724, 109.64733, 111.351074, 113.83198, 110.51318,
+            108.75807, 108.36437, 109.13311, 110.87297, 113.404945, 110.18119, 108.494225, 108.1566, 108.97392,
+            110.75567, 113.322754, 110.12844, 108.464745, 108.14481, 108.97498, 110.76558, 113.33835, 110.14824,
+            108.48639, 108.16663, 108.99587, 110.784836, 113.35557, 110.16335, 108.49929, 108.17736, 109.004555,
+            110.79168, 113.3608, 110.167206, 108.50198, 108.17911, 109.005554, 110.7921, 113.360794, 110.16689,
+            108.50147, 108.178474, 109.00487, 110.791405, 113.36012
+        ]
+        let values = (0..<60).map { 100.0 + Double($0 % 6) * 4 }
+        let lane = CausalGlucoseFilter.filterLane(timesMs: minutes(60), mgDl: values)
+        XCTAssertEqual(lane.count, expected.count)
+        for index in expected.indices { XCTAssertEqual(lane[index], expected[index], accuracy: 1e-4, "index \(index)") }
+    }
+
+    func testLaneKeepsAnInvalidPointAndRestartsAtASourceChange() {
+        XCTAssertEqual(CausalGlucoseFilter.filterLane(timesMs: minutes(5), mgDl: [100, 100, 0, 100, 100]), [100, 100, 0, 100, 100])
+        let values = (0..<12).map { $0 < 6 ? 100.0 : 200.0 }
+        let split = CausalGlucoseFilter.filterLane(timesMs: minutes(12), mgDl: values, sameSource: { ($0 < 6) == ($1 < 6) })
+        XCTAssertEqual(split, values)
+        // Without the source change the second sensor is pulled toward the first one's level.
+        XCTAssertLessThan(CausalGlucoseFilter.filterLane(timesMs: minutes(12), mgDl: values)[7], 200)
+    }
+
+    // MARK: How the fork applies it
+
+    func testCausalOptionFeedsTheRegressionTheFilteredSeriesOnly() throws {
+        // Kotlin: filterLane, then TrendWindows.velocities over the lane with a 25 minute window.
+        let composedJitter: [Float] = [
+            0.0, 1.3468628, 1.5647378, 0.686523, 0.43108, -0.06794824, -0.26196837, -0.21111794, -0.2955593,
+            -0.30936733, -0.41824177, -0.47203255, -0.489281, -0.5265134, -0.49023247, -0.5403697, -0.55202174,
+            -0.513599, -0.52412254, -0.482455, -0.52830714, -0.5423961, -0.50146705, -0.51102835, -0.4737711,
+            -0.5206305, -0.53692037, -0.49527198, -0.50460374, -0.4685994
+        ]
+        let readings = (0..<30).map { (date: t0.addingTimeInterval(Double($0) * 60), mgDl: jitter($0)) }
+        let causal = ExperimentalTrendEngine.velocities(readings: readings, causalFilter: true)
+        let plain = ExperimentalTrendEngine.velocities(readings: readings, causalFilter: false)
+        XCTAssertEqual(causal.count, 30)
+        XCTAssertNil(causal[0])
+        XCTAssertNil(plain[0])
+        for index in 1..<30 {
+            XCTAssertEqual(try XCTUnwrap(causal[index]), composedJitter[index], accuracy: 1e-4, "causal row \(index)")
+            XCTAssertEqual(try XCTUnwrap(plain[index]), jitterVelocities[index], accuracy: 1e-5, "plain row \(index)")
+        }
+
+        // 90 readings: the causal window (one hour) and the trend window (25 minutes) both clip.
+        let composed90: [Float] = [0.12391342, -0.25407156, -0.49473614, -0.60258377, -0.29723054, 0.22954415, 0.842684, 1.475252, 1.5931967, 1.1373682]
+        let long = (0..<90).map { (date: t0.addingTimeInterval(Double($0) * 60), mgDl: pattern($0)) }
+        let causalLong = ExperimentalTrendEngine.velocities(readings: long, causalFilter: true)
+        for (offset, expected) in composed90.enumerated() {
+            XCTAssertEqual(try XCTUnwrap(causalLong[80 + offset]), expected, accuracy: 1e-4, "causal row \(80 + offset)")
+        }
+        XCTAssertTrue(ExperimentalTrendEngine.velocities(readings: [], causalFilter: true).isEmpty)
+    }
+
+    func testOnlyASibionicsSensorOnThisPhoneIsAffectedAndItIsOffByDefault() throws {
+        XCTAssertTrue(ExperimentalTrendEngine.appliesTo(isMaster: true, cgmTransmitterType: .sibionics2))
+        XCTAssertFalse(ExperimentalTrendEngine.appliesTo(isMaster: false, cgmTransmitterType: .sibionics2))
+        XCTAssertFalse(ExperimentalTrendEngine.appliesTo(isMaster: true, cgmTransmitterType: .Libre2))
+        XCTAssertFalse(ExperimentalTrendEngine.appliesTo(isMaster: true, cgmTransmitterType: .dexcomG7))
+        XCTAssertFalse(ExperimentalTrendEngine.appliesTo(isMaster: true, cgmTransmitterType: nil))
+
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "TrendEngineSettingsTests"))
+        defaults.removePersistentDomain(forName: "TrendEngineSettingsTests")
+        defaults.cgmTransmitterTypeAsString = CGMTransmitterType.sibionics2.rawValue
+        XCTAssertFalse(defaults.experimentalTrendEngine)
+        XCTAssertFalse(defaults.experimentalTrendEngineCausalFilter)
+        XCTAssertFalse(ExperimentalTrendEngine.isActive(defaults: defaults))
+        defaults.experimentalTrendEngine = true
+        XCTAssertTrue(ExperimentalTrendEngine.isActive(defaults: defaults))
+        defaults.cgmTransmitterTypeAsString = CGMTransmitterType.Libre2.rawValue
+        XCTAssertFalse(ExperimentalTrendEngine.isActive(defaults: defaults))
+    }
+}
+
+/// `ExperimentalTrendEngine.apply` on stored readings: only the slope of visible readings changes.
+final class TrendEngineStoredReadingsTests: XCTestCase {
+    private let start = Date(timeIntervalSince1970: 2_000_000_000)
+    private var coreDataManager: CoreDataManager!
+
+    override func setUp() {
+        super.setUp()
+        coreDataManager = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
+    }
+
+    override func tearDown() {
+        coreDataManager = nil
+        super.tearDown()
+    }
+
+    private func reading(minute: Int, value: Double) -> BgReading {
+        let bgReading = BgReading(timeStamp: start.addingTimeInterval(Double(minute) * 60), sensor: nil, calibration: nil, rawData: value,
+                                  deviceName: nil, nsManagedObjectContext: coreDataManager.mainManagedObjectContext)
+        bgReading.calculatedValue = value
+        return bgReading
+    }
+
+    private func jitter(_ i: Int) -> Double { 120.0 - 0.5 * Double(i) + Double((i * 7) % 5 - 2) * 1.5 }
+
+    func testSlopeOfVisibleReadingsIsTheEnginesAndValuesAreUntouched() {
+        // Kotlin TrendWindows.velocities (25 minute window) over the same 15 values.
+        let expected: [Double] = [0.0, 2.5, 2.5, -0.05919641, 0.11884706, -0.78232205, -0.5747263, -0.12466263, -0.45307648,
+                                  -0.32747543, -0.64570034, -0.57295555, -0.3650081, -0.5334994, -0.36880907]
+        let readings = (0..<15).map { reading(minute: $0, value: jitter($0)) }
+        // A slope xDrip had calculated before; the first reading has no engine trend and keeps it.
+        for bgReading in readings { bgReading.calculatedValueSlope = 0.001; bgReading.hideSlope = true }
+        // Minutes the five-minute cadence hides keep their slope but still feed the engine.
+        for index in [3, 4, 6] { readings[index].isSuppressedByFiveMinuteCadence = true }
+
+        ExperimentalTrendEngine.apply(to: readings, causalFilter: false)
+
+        for (index, bgReading) in readings.enumerated() {
+            XCTAssertEqual(bgReading.calculatedValue, jitter(index), "the value never changes")
+            if index == 0 || [3, 4, 6].contains(index) {
+                XCTAssertEqual(bgReading.calculatedValueSlope, 0.001, "reading \(index) keeps its slope")
+                XCTAssertTrue(bgReading.hideSlope, "reading \(index) keeps its slope")
+            } else {
+                XCTAssertEqual(bgReading.calculatedValueSlope * 60_000, expected[index], accuracy: 1e-5, "reading \(index)")
+                XCTAssertFalse(bgReading.hideSlope, "reading \(index)")
+            }
+        }
+    }
+
+    func testTheArrowKeepsXDripsThresholds() {
+        // A turn off a plateau: the engine reads 2.944 mg/dL per minute (JugglucoNG's double arrow), and the
+        // stored slope turns that into xDrip's single arrow up (2 < rate <= 3.5).
+        let readings = (0..<30).map { reading(minute: $0, value: $0 < 20 ? 100.0 : 100.0 + 3.0 * Double($0 - 19)) }
+        ExperimentalTrendEngine.apply(to: readings, causalFilter: false)
+        let last = readings[29]
+        XCTAssertEqual(last.calculatedValueSlope * 60_000, 2.9441721, accuracy: 1e-5)
+        XCTAssertEqual(last.slopeArrow(), "\u{2191}")
+        XCTAssertEqual(last.slopeName, "SingleUp")
+        XCTAssertEqual(last.finalValue, 100 + 3 * 10)
+    }
+}

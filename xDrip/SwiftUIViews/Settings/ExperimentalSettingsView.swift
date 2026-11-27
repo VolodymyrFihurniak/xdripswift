@@ -66,7 +66,8 @@ extension SettingsViewGroupedSettingsViewModel {
             ],
             leadingRows: { [ExperimentalSettingsViewModel.recommendedSetRow(), ExperimentalSettingsViewModel.chartStyleRow(),
                             ExperimentalSettingsViewModel.chartCursorRow(),
-                            ExperimentalSettingsViewModel.uncertaintyRibbonRow(), ExperimentalSettingsViewModel.sensorDayCounterRow()] }
+                            ExperimentalSettingsViewModel.uncertaintyRibbonRow(), ExperimentalSettingsViewModel.sensorDayCounterRow(),
+                            ExperimentalSettingsViewModel.trendEngineRow(), ExperimentalSettingsViewModel.trendEngineCausalFilterRow()] }
         )
     }
 }
@@ -171,6 +172,22 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                     detail: ExperimentalTexts.text("sensorDayCounterDetail", "Day N / total on Home"),
                     control: .toggle(isOn: { UserDefaults.standard.experimentalSensorDayCounter },
                                      setIsOn: { UserDefaults.standard.experimentalSensorDayCounter = $0 }))
+    }
+
+    /// JugglucoNG's trend engine for the slope and arrow of Sibionics readings. Values are untouched.
+    static func trendEngineRow() -> SettingsRow {
+        SettingsRow(id: "experimental.trendEngine", title: ExperimentalTexts.text("trendEngine", "Trend engine"),
+                    detail: ExperimentalTexts.text("trendEngineDetail", "Sibionics 1 and 2, trend only"),
+                    control: .toggle(isOn: { UserDefaults.standard.experimentalTrendEngine },
+                                     setIsOn: { UserDefaults.standard.experimentalTrendEngine = $0 }))
+    }
+
+    /// The trend engine reads the readings as JugglucoNG's causal filter estimates them. Needs the trend engine.
+    static func trendEngineCausalFilterRow() -> SettingsRow {
+        SettingsRow(id: "experimental.trendEngineCausalFilter", title: ExperimentalTexts.text("trendEngineCausalFilter", "Trend engine: causal filter"),
+                    detail: ExperimentalTexts.text("trendEngineCausalFilterDetail", "Smooths what the trend reads"),
+                    control: .toggle(isOn: { UserDefaults.standard.experimentalTrendEngineCausalFilter },
+                                     setIsOn: { UserDefaults.standard.experimentalTrendEngineCausalFilter = $0 }))
     }
 
     static func chartCursorRow() -> SettingsRow {

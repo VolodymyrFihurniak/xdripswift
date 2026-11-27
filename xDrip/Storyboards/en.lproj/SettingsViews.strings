@@ -685,6 +685,10 @@
 "experimental.recommendedTitle" = "Recommended set";
 "experimental.sensorDayCounter" = "Sensor day counter";
 "experimental.sensorDayCounterDetail" = "Day N / total on Home";
+"experimental.trendEngine" = "Trend engine";
+"experimental.trendEngineDetail" = "Sibionics 1 and 2, trend only";
+"experimental.trendEngineCausalFilter" = "Trend engine: causal filter";
+"experimental.trendEngineCausalFilterDetail" = "Smooths what the trend reads";
 "experimental.sensorDay" = "Day %ld";
 "experimental.recommendedTurnOn" = "Turn on";
 "experimental.recommendedConfirmTitle" = "Turn on the recommended set?";

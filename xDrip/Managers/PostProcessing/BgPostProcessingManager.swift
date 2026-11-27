@@ -1061,6 +1061,12 @@ class BgPostProcessingManager {
 
             previousVisibleBgReadings.append(bgReading)
         }
+
+        // Experimental (JugglucoNG TrendEngine, Sibionics only, off by default): the trend comes from a
+        // weighted regression over the recent readings instead of one older reading. Values are untouched.
+        if ExperimentalTrendEngine.isActive() {
+            ExperimentalTrendEngine.apply(to: bgReadings, causalFilter: UserDefaults.standard.experimentalTrendEngineCausalFilter)
+        }
     }
 
     /// preview smoothing uses the same grouped path as stored processing so
