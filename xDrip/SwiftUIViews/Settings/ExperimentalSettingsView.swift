@@ -412,6 +412,16 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                             }, selectOption: { index in
                                 guard Self.sameDirectionChoices.indices.contains(index) else { return }
                                 UserDefaults.standard.experimentalSameDirectionSuppressionMinutes = Self.sameDirectionChoices[index]
+                            })),
+                SettingsRow(id: "experimental.alerts.persistentHigh",
+                            title: Texts_Alerts.persistentHighAlertTitle + ": " + ExperimentalTexts.text("persistentHighDuration", "Alarm after"), accessory: .none,
+                            control: .menu(options: {
+                                let selected = UserDefaults.standard.experimentalPersistentHighMinutes
+                                return PersistentHighAlert.durationChoices.map { SettingsMenuOption(title: Self.minutesText($0), isSelected: $0 == selected) }
+                            }, selectOption: { index in
+                                let choices = PersistentHighAlert.durationChoices
+                                guard choices.indices.contains(index) else { return }
+                                UserDefaults.standard.experimentalPersistentHighMinutes = choices[index]
                             }))
             ]
         case .quietWindow:
@@ -635,6 +645,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("alertsFooter", "No High alarm while falling: the High alarm stays quiet while glucose is already falling by at least 0.5 mg/dL (0.03 mmol/L) a minute; Very High always alarms. Notify when signal is restored: one silent notification when readings come back after a gap at least as long as the Missed Reading alarm's delay (30 minutes when that alarm is off).")
                 + "\n\n" + ExperimentalTexts.text("alertsEpisodeFooter", "End snooze when back in range: a snoozed Low, Very Low, High or Very High alarm is unsnoozed once glucose is at least 9 mg/dL (0.5 mmol/L) back on the safe side of its value, so a new episode alarms at once instead of waiting out the old snooze. Snooze All is not affected. Fast change alarms once per episode: Fast Drop and Fast Rise alarm once and then stay quiet until a reading no longer meets their condition.")
                 + "\n\n" + ExperimentalTexts.text("alertsDeltaFooter", "Fast change over 5-minute intervals (GDH, as in JugglucoNG): Fast Drop and Fast Rise alarm when the change per 5 minutes has passed their value for this many intervals in a row, past their trigger level. The change is measured over 5 minutes, so it means the same for a sensor that reads every minute and one that reads every 5 minutes; a change the other way or a gap starts over. Off keeps the comparison of the last two readings. Fast Drop and predicted low, one alarm: once one of them has been snoozed, the other stays quiet for this long.")
+                + "\n\n" + ExperimentalTexts.text("alertsPersistentHighFooter", "Persistent High (JugglucoNG): alarms when glucose has stayed above its value for this long without a break, the sign that a correction was not enough. Turn it on and set the value, sound and snooze in Settings > Alerts > Persistent High. It stays quiet while glucose falls by at least 1 mg/dL (0.06 mmol/L) a minute, but a fall that stays above the value does not restart the count. A reading at or below the value, or a gap of more than 30 minutes in the readings, does. A snoozed High alarm does not hold it back.")
         case .powerSaving:
             return ExperimentalTexts.text("powerSavingFooter", "While it saves: Nightscout, Apple Health and Dexcom Share get one reading every five minutes instead of every reading; the Live Activity and widgets refresh at most every five minutes, at once when glucose leaves the target range; the Home chart redraws its forecast and insulin every five minutes; the adaptive prediction relearns only while charging. Automatic saves while iPhone Low Power Mode is on or the battery is at 25 % or less. Nothing is saved while the phone charges.")
         case .insulins:

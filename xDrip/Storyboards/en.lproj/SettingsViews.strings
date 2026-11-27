@@ -804,6 +804,8 @@
 "experimental.deltaRunOff" = "Off (last two readings)";
 "experimental.sameDirection" = "Fast Drop and predicted low: one alarm";
 "experimental.alertsDeltaFooter" = "Fast change over 5-minute intervals (GDH, as in JugglucoNG): Fast Drop and Fast Rise alarm when the change per 5 minutes has passed their value for this many intervals in a row, past their trigger level. The change is measured over 5 minutes, so it means the same for a sensor that reads every minute and one that reads every 5 minutes; a change the other way or a gap starts over. Off keeps the comparison of the last two readings. Fast Drop and predicted low, one alarm: once one of them has been snoozed, the other stays quiet for this long.";
+"experimental.persistentHighDuration" = "Alarm after";
+"experimental.alertsPersistentHighFooter" = "Persistent High (JugglucoNG): alarms when glucose has stayed above its value for this long without a break, the sign that a correction was not enough. Turn it on and set the value, sound and snooze in Settings > Alerts > Persistent High. It stays quiet while glucose falls by at least 1 mg/dL (0.06 mmol/L) a minute, but a fall that stays above the value does not restart the count. A reading at or below the value, or a gap of more than 30 minutes in the readings, does. A snoozed High alarm does not hold it back.";
 "experimental.quietWindow" = "Quiet window";
 "experimental.quietMode" = "During the window";
 "experimental.quietBreakthrough" = "Sound anyway after";

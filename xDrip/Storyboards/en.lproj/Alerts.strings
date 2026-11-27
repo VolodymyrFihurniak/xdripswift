@@ -37,5 +37,7 @@
 "alerts_predictedLowAlertTitle" = "Predicted Low";
 "alerts_predictedHighAlertTitle" = "Predicted High";
 "alerts_predictedLowInMinutes" = "in %ld min";
+"alerts_persistentHighAlertTitle" = "Persistent High";
+"alerts_persistentHighForMinutes" = "for %ld min";
 "alerts_signalRestoredTitle" = "Signal restored";
 "alerts_signalRestoredBody" = "Readings are back after %ld min.";
