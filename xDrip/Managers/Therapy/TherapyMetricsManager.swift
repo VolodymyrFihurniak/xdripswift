@@ -75,7 +75,7 @@ final class TherapyMetricsManager {
                 // Cache keys include only the relevant preferences. Unrelated defaults do not flush inputs.
                 guard let self else { return }
                 let signature = "\(UserDefaults.standard.dataFlowPolicy)-\(TherapyModelSettings(defaults: .standard))"
-                    + "-\(UserDefaults.standard.showIOBCOB)"
+                    + "-\(UserDefaults.standard.showIOBCOB)-\(UserDefaults.standard.experimentalNightscoutIobFollow)"
                 guard signature != self.preferenceSignature else { return }
                 self.preferenceSignature = signature
                 NotificationCenter.default.post(name: Self.changed, object: self)
@@ -101,10 +101,15 @@ final class TherapyMetricsManager {
         return "\(version)-\(UserDefaults.standard.nightscoutTreatmentsUpdateCounter)-\(policy.therapyDataSource.rawValue)-\(policy.nightscoutFollowType.rawValue)-\(settings)"
     }
 
-    func snapshot(at date: Date = .now, external: AIDStatus? = nil, historical: Bool = false) -> TherapyMetricsSnapshot {
+    /// - Parameter includesRemoteIob: Home only. The IOB and COB another phone uploaded to Nightscout
+    ///   (`ExperimentalRemoteIob`) may stand in for a phone with no treatments of its own. Every
+    ///   other consumer (watch, widgets, Live Activity, chart) leaves it off and never sees them.
+    func snapshot(at date: Date = .now, external: AIDStatus? = nil, historical: Bool = false, includesRemoteIob: Bool = false) -> TherapyMetricsSnapshot {
         let policy = UserDefaults.standard.dataFlowPolicy
         let settings = TherapyModelSettings(defaults: .standard)
         let status = historical ? external : externalStatus?() ?? external
+        let remoteIob = includesRemoteIob && !historical && UserDefaults.standard.experimentalNightscoutIobFollow
+            ? ExperimentalRemoteIobStore.shared.fresh(at: date) : nil
         let needsInputs = policy.externalIOBSource == nil || policy.externalCOBSource == nil
         let currentDate = Date()
         let window = TherapyModelSettings.visibilityInterval
@@ -113,10 +118,10 @@ final class TherapyMetricsManager {
         let recentEntries = needsInputs && historical ? treatments(from: currentDate.addingTimeInterval(-window),
             to: currentDate, policy: policy, settings: settings) : []
         return Self.resolve(at: date, external: status, policy: policy, settings: settings, entries: entries,
-            currentDate: currentDate, recentEntries: recentEntries)
+            currentDate: currentDate, recentEntries: recentEntries, remoteIob: remoteIob)
     }
 
-    static func resolve(at date: Date, external status: AIDStatus?, policy: DataFlowPolicy, settings: TherapyModelSettings, entries: [TherapyTreatment]?, currentDate: Date? = nil, recentEntries: [TherapyTreatment]? = []) -> TherapyMetricsSnapshot {
+    static func resolve(at date: Date, external status: AIDStatus?, policy: DataFlowPolicy, settings: TherapyModelSettings, entries: [TherapyTreatment]?, currentDate: Date? = nil, recentEntries: [TherapyTreatment]? = [], remoteIob: ExperimentalRemoteIob? = nil) -> TherapyMetricsSnapshot {
         var result = TherapyMetricsSnapshot.external(status, at: date)
         // Ownership is configured capability, even when a poll has returned no status at all.
         if let source = policy.externalIOBSource {
@@ -132,6 +137,16 @@ final class TherapyMetricsManager {
         }
         if policy.externalCOBSource == nil {
             result.cob = Self.localMetric(entries: entries, isIOB: false, date: date, settings: settings, currentDate: currentDate, recentEntries: recentEntries)
+        }
+        // A phone with no treatments of its own to compute from shows the main phone's numbers, both
+        // from one document. Only a confirmed empty treatment window counts: a pending or failed read
+        // is not proof, and a phone that has treatments keeps its own IOB and COB, so a remote value
+        // never sits beside a local one (nor beside the chart's local curves).
+        if let remoteIob, remoteIob.isFresh(at: date), policy.showsRemoteIob(enabled: true),
+           policy.externalIOBSource == nil, policy.externalCOBSource == nil,
+           result.iob.source == .local, result.iob.reason == .noTreatments,
+           result.cob.source == .local, result.cob.reason == .noTreatments {
+            (result.iob, result.cob) = remoteIob.metricStates()
         }
         return result
     }

@@ -174,20 +174,34 @@ struct TherapyMetricDetailsView: View {
     let isIOB: Bool
     var body: some View {
         List {
-            Section {
-                Text(metric.formatted(isIOB: isIOB, at: metric.referenceDate)).font(.title2)
-                Text(TherapyTexts.text("local"))
-                Text(metric.referenceDate.formatted(date: .abbreviated, time: .shortened))
-                let settings = TherapyModelSettings(defaults: .standard)
-                if isIOB {
-                    LabeledContent(TherapyTexts.text("insulinType"), value: TherapyInsulinPreset.nearest(to: settings.insulinPeak).rawValue)
-                } else {
-                    LabeledContent(TherapyTexts.text("carbDuration"), value: DateComponentsFormatter.localizedString(from: DateComponents(hour: Int(settings.carbDuration / 60)), unitsStyle: .full) ?? "")
+            if metric.source == .remote {
+                // The main phone's own numbers, read from its Nightscout devicestatus.
+                Section {
+                    Text(metric.formatted(isIOB: isIOB, at: metric.referenceDate)).font(.title2)
+                    Text(ExperimentalTexts.text("remoteIobSource", "From the main phone, through Nightscout"))
+                    Text(metric.referenceDate.formatted(date: .abbreviated, time: .shortened))
+                    if isIOB, let effective = metric.effectiveAmount {
+                        LabeledContent("eIOB", value: ChartCursorCard.units(effective))
+                    }
+                } footer: {
+                    Text(ExperimentalTexts.text("remoteIobFooter", "This phone has no treatments of its own to work these out from. They are shown only while the main phone's last upload is under 15 minutes old."))
                 }
-            }
-            Section {
-                NavigationLink(TherapyTexts.text("treatmentSettings")) { TreatmentSettingsView() }
-                Text(TherapyTexts.text("settingsHelp"))
+            } else {
+                Section {
+                    Text(metric.formatted(isIOB: isIOB, at: metric.referenceDate)).font(.title2)
+                    Text(TherapyTexts.text("local"))
+                    Text(metric.referenceDate.formatted(date: .abbreviated, time: .shortened))
+                    let settings = TherapyModelSettings(defaults: .standard)
+                    if isIOB {
+                        LabeledContent(TherapyTexts.text("insulinType"), value: TherapyInsulinPreset.nearest(to: settings.insulinPeak).rawValue)
+                    } else {
+                        LabeledContent(TherapyTexts.text("carbDuration"), value: DateComponentsFormatter.localizedString(from: DateComponents(hour: Int(settings.carbDuration / 60)), unitsStyle: .full) ?? "")
+                    }
+                }
+                Section {
+                    NavigationLink(TherapyTexts.text("treatmentSettings")) { TreatmentSettingsView() }
+                    Text(TherapyTexts.text("settingsHelp"))
+                }
             }
         }
         .navigationTitle(isIOB ? "IOB" : "COB")

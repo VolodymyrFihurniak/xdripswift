@@ -237,6 +237,8 @@ struct RootHomeMetricState: Identifiable {
     var title: String
     var value: String
     var valueColor = ConstantsAppColors.primaryText
+    /// The value is the main phone's, read from Nightscout (`ExperimentalRemoteIob`), not computed here.
+    var isRemote = false
 
     var id: String {
         title
@@ -400,13 +402,18 @@ final class RootHomeStateModel: ObservableObject {
     }
 
     func applyTherapyMetrics(to loop: inout RootHomeLoopState, at date: Date = .now, external: AIDStatus? = nil, historical: Bool = false) {
-        let metrics = TherapyMetricsManager.shared.snapshot(at: date, external: external, historical: historical)
+        let metrics = TherapyMetricsManager.shared.snapshot(at: date, external: external, historical: historical, includesRemoteIob: true)
         loop.therapyMetrics = metrics
         loop.showsIOB = metrics.iob.isVisible(at: date)
         loop.showsCOB = metrics.cob.isVisible(at: date)
         loop.showsAIDStatus = UserDefaults.standard.dataFlowPolicy.showsTherapyStatus
         loop.iob.value = metrics.iob.formatted(isIOB: true, at: date)
         loop.cob.value = metrics.cob.formatted(isIOB: false, at: date)
+        // The main phone's numbers say so on the row, so they are never taken for this phone's own.
+        loop.iob.isRemote = metrics.iob.source == .remote
+        loop.cob.isRemote = metrics.cob.source == .remote
+        loop.iob.title = loop.iob.isRemote ? ExperimentalTexts.text("remoteIobTitle", "Remote IOB") : "IOB"
+        loop.cob.title = loop.cob.isRemote ? ExperimentalTexts.text("remoteCobTitle", "Remote COB") : "COB"
     }
 
     func setStatisticsLoading() {

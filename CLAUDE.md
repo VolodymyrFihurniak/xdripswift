@@ -163,6 +163,21 @@ to 5 min), `SameDirectionAlertRule` (Fast Drop ↔ predicted low after a snooze)
 `ExperimentalQuietWindow` (sound/vibration held back, lows always break through) — all off by default. Basal injections
 (Nightscout event type Note) always count in `ExperimentalTreatment.fetch`.
 
+IOB and COB through Nightscout (`docs/experimental-features.md`, Settings → Experimental features → "IOB and COB
+through Nightscout", UserDefaults `experimentalNightscoutIobUpload` / `experimentalNightscoutIobFollow`, both off;
+JugglucoNG `NightscoutIobDeviceStatus` / `RemoteIobSnapshot`): `ExperimentalNightscoutIob` builds the devicestatus
+(`openaps.iob.{iob,timestamp}` classic IOB + `jugglucong.{iob,eiob,cob}`, two decimals, device xDrip4iOS), the
+cadence (5 min while insulin is on board or values move, 10 min idle — JugglucoNG's 15 would outlast the follower's
+window) and the snapshot from this phone's own treatments only (`DataFlowPolicy.localTreatmentsOnly`, rapid insulins,
+needs a dose in 24 h); uploaded by `NightscoutSyncManager.uploadExperimentalIobIfDue` next to the forecast upload and
+never while an AID's status is followed. Follower: `NightscoutSyncManager.updateRemoteIob` polls `devicestatus?count=10`
+(≥ 60 s apart) into `ExperimentalRemoteIobStore`; `ExperimentalRemoteIob` is fresh for 15 min (JugglucoNG 30);
+`TherapyMetricsManager.resolve(remoteIob:)` shows it as `TherapyMetricSource.remote` on the Home IOB/COB row only
+(`snapshot(includesRemoteIob:)`, labelled "Remote IOB/COB", details sheet shows eIOB), and only when
+`DataFlowPolicy.showsRemoteIob` holds and the local treatment window is confirmed empty — a phone with treatments keeps
+its own values (JugglucoNG prefers remote), so remote and local never mix. Watch, widgets, Live Activity and chart never see
+remote values. Uncompiled, never tried on a real Nightscout or a JugglucoNG phone.
+
 Food library (`xDrip/SwiftUIViews/Treatments/FoodLibrary.swift`, button in the carbs treatment
 editor, no setting): JugglucoNG staples embedded as a `key|carbs|protein|fat|portions|en|uk` table,
 custom foods and recents as UserDefaults JSON, Open Food Facts search/barcode (network only on

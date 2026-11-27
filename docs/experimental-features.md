@@ -164,6 +164,8 @@ xDrip follows an AID's status from Nightscout, so the AID's own lines stay the o
 upload the chosen insulin as `notes`, carb entries their `protein` and `fat`, exercise its
 intensity note.
 
+For IOB and COB as such, see [IOB and COB through Nightscout](#iob-and-cob-through-nightscout).
+
 ### Suggest from history
 
 Glucose prediction → Model → **Suggest from history** (`TherapyParameterEstimator`, fork
@@ -259,7 +261,8 @@ own IOB curve is not drawn (it covered them in the same colour); COB stays.
   silent notification when readings return after a gap as long as the Missed Reading delay, or 30 min).
 - **eIOB** on the active insulin card: IOB weighted by how hard each dose is acting now.
 - **Nightscout**: the forecast devicestatus also carries `openaps.iob.iob` and `suggested.COB`
-  from the logged treatments.
+  from the logged treatments. IOB, eIOB and COB can also be exchanged on their own, see
+  [IOB and COB through Nightscout](#iob-and-cob-through-nightscout).
 - **Grouped markers**: boluses (and carbs) closer together than a marker's width are drawn as one
   marker with their total and count, e.g. `7.5 ×3`.
 - Sibionics battery level is read and shown for Sibionics 2 only, as JugglucoNG does.
@@ -364,6 +367,70 @@ a measurement). ELTA Satellite (Сателлит+, Nordic UART, JugglucoNG `Sate
 the code printed on the meter (or its three-digit PIN) when paired; it sets the meter's clock and
 reads up to ten records, newest first, converting capillary to plasma (×1.12) as JugglucoNG does.
 Never tried on a real meter.
+
+## IOB and COB through Nightscout
+
+Settings → Experimental features → **IOB and COB through Nightscout** has two switches, both off by
+default. They follow JugglucoNG ("exchange IOB/eIOB/COB through devicestatus in both roles",
+`NightscoutIobDeviceStatus`, `RemoteIobSnapshot`), so a JugglucoNG phone and an xDrip phone can read
+each other's numbers. Both are code in `ExperimentalTherapy.swift` (`ExperimentalNightscoutIob`,
+`ExperimentalRemoteIob`, `ExperimentalRemoteIobStore`), the upload and the poll in
+`NightscoutSyncManager`, the Home source in `TherapyMetricsManager.resolve`.
+
+**Upload IOB and COB** (the phone that logs the treatments) posts a devicestatus to
+`/api/v1/devicestatus`:
+
+```json
+{"device": "xDrip4iOS", "created_at": "2027-01-15T08:00:00.000Z",
+ "openaps": {"iob": {"iob": 1.8, "timestamp": "2027-01-15T08:00:00.000Z"}},
+ "jugglucong": {"iob": 1.8, "eiob": 1.5, "cob": 24}}
+```
+
+- Classic IOB goes in `openaps.iob.iob`, the container Nightscout's IOB plugin and loop followers
+  read as insulin still on board. eIOB (what is acting now, never more than IOB) and COB go in the
+  separate `jugglucong` object, which Nightscout stores and serves back unchanged. There is no
+  `activity` or `basaliob`: the model computes neither. Values have two decimals, in units and grams.
+- The numbers are the Home active insulin card's: the rapid insulins only (`countsTowardPrediction`;
+  basal injections are not part of IOB), from the model's curves (`InsulinActivityStack.onBoard`), and
+  COB from `PredictedLowEvidence.carbsOnBoard`. They need a logged dose of a rapid insulin in the last 24
+  hours, otherwise nothing is uploaded (a finished dose still uploads zeros, as JugglucoNG does). COB is
+  left out until a meal is logged in that window.
+- Only treatments logged on this phone count (`DataFlowPolicy.localTreatmentsOnly`): one imported from
+  Nightscout or CareLink is never uploaded again with a new timestamp, which would keep another
+  source's numbers alive as an echo.
+- Cadence: at most every five minutes while insulin is on board or a value changed (two values within
+  0.01 are unchanged), every ten minutes while everything is zero. JugglucoNG's idle cadence is 15
+  minutes; ten keeps an idle upload inside the 15-minute window a follower accepts. It is sent along
+  with new readings, so it needs the phone to upload glucose to Nightscout, and it is skipped while xDrip
+  follows an AID's status from Nightscout (`importsStatusFromNightscout`), where the AID's own IOB and
+  COB must stay the only ones. A Nightscout follower uploads no glucose and so never uploads these.
+- It is separate from **Upload to Nightscout** under Glucose prediction (the forecast document also
+  carries IOB and COB, as before); either, both or neither can be on.
+
+**Show the main phone's IOB and COB** (a phone that follows Nightscout) asks Nightscout for the ten
+newest devicestatus documents with each foreground sync (at most once a minute) and keeps the newest
+one that has a `jugglucong` object with a plausible `iob` (0 to 500 U; eIOB the same, COB 0 to 2000 g;
+documents of loops, battery and the forecast have no such object and are ignored). Its time is
+`openaps.iob.timestamp`, else `created_at`, else `mills`.
+
+- **Where it shows.** On the Home IOB / COB row only, as **Remote IOB** and **Remote COB**; tapping opens
+  the details with the source, the time of the upload and eIOB. The watch, widgets, Live Activity and the
+  chart curves never get remote values (`snapshot(includesRemoteIob:)` is Home only).
+- **When.** Only for a phone that reads glucose from Nightscout (not a master), is not following an AID's
+  status and has the switch on (`DataFlowPolicy.showsRemoteIob`), while the newest document is under 15
+  minutes old (JugglucoNG uses 30; a document stamped more than a minute ahead of this clock is not trusted).
+  Older, or none: Home behaves exactly as without the switch.
+- **Never mixed with local values.** Remote numbers stand in only when this phone has no treatments of its
+  own to work them out from: the treatment window has been read and is empty (a pending or failed read does
+  not count). A phone with treatments of its own keeps its own IOB, COB and curves; JugglucoNG instead
+  prefers the remote document while it is fresh. IOB and COB always come from the same document; a COB the
+  document lacks is hidden, not filled from anything else. A phone that follows Nightscout for treatments
+  too (the therapy source Nightscout) has local treatments whenever the main phone uploaded some, so this
+  mostly serves a phone whose therapy source is None.
+- Held in memory only: after a restart the row is local until the next poll.
+
+Tested against hand-computed values and a Python port only. Never tried against a real Nightscout, nor
+against a JugglucoNG phone.
 
 ## Insulin pens (NFC)
 
