@@ -3734,3 +3734,397 @@ extension GlucoseMeterLink: CBPeripheralDelegate {
         }
     }
 }
+
+// MARK: - Trend engine (JugglucoNG logic/TrendEngine.kt, CausalGlucoseFilter.kt, TrendWindows.kt)
+
+extension UserDefaults {
+    /// JugglucoNG's trend engine for the slope and arrow of Sibionics 1 and 2 readings. Off by default.
+    /// It changes only `calculatedValueSlope` and `hideSlope`, never a glucose value.
+    var experimentalTrendEngine: Bool {
+        get { bool(forKey: "experimentalTrendEngine") }
+        set { set(newValue, forKey: "experimentalTrendEngine") }
+    }
+
+    /// Feed the trend engine the readings as `CausalGlucoseFilter` estimates them. Only the trend is
+    /// computed from the filtered series; the stored and uploaded values stay the measured ones. Off by default.
+    var experimentalTrendEngineCausalFilter: Bool {
+        get { bool(forKey: "experimentalTrendEngineCausalFilter") }
+        set { set(newValue, forKey: "experimentalTrendEngineCausalFilter") }
+    }
+}
+
+/// JugglucoNG `TrendEngine`: the velocity of glucose from a weighted sliding window, for sensors that
+/// report every minute as well as every five.
+///
+/// The window is scaled to the sensor's measured reading interval (about 12 minutes at one reading a
+/// minute, 20 at five, at most 25), the least-squares fit weights recent readings by `exp(-age / 5
+/// intervals)` so a turn off a plateau is not averaged against the plateau it just left, and a jump of
+/// more than 20 mg/dL per minute between neighbours (a calibration step) ends the window. Velocity is
+/// mg/dL per minute.
+///
+/// Differences from the Kotlin original, which also measures the noise of a quadratic fit for its
+/// signal-quality chip: that part is not ported (xDrip has its own sensor noise), and the acceleration
+/// is the same constant 0 as there.
+enum TrendEngine {
+    /// JugglucoNG `TrendEngine.TrendState`.
+    enum TrendState: Equatable, Sendable {
+        case doubleUp, singleUp, fortyFiveUp, flat, fortyFiveDown, singleDown, doubleDown, unknown
+    }
+
+    /// One reading as the engine sees it: a time and a value in mg/dL.
+    struct Point: Equatable, Sendable {
+        let date: Date
+        let mgDl: Double
+
+        /// Milliseconds since 1970: JugglucoNG keeps its timestamps as `Long` milliseconds.
+        var millis: Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded()) }
+    }
+
+    /// JugglucoNG `TrendEngine.TrendResult` without the noise fields.
+    struct TrendResult: Equatable, Sendable {
+        let state: TrendState
+        /// mg/dL per minute, a `Float` as in the original so the arrow boundaries compare the same way.
+        let velocity: Float
+        let acceleration: Float
+        /// 0 when there were fewer than two usable readings (no trend), otherwise 1.
+        let confidence: Float
+
+        static let noTrend = TrendResult(state: .flat, velocity: 0, acceleration: 0, confidence: 0)
+    }
+
+    /// Cadence the 20 minute window was chosen for: one reading per five minutes.
+    static let referenceCadenceMinutes = 5.0
+    static let referenceWindowMinutes = 20.0
+    /// Never so short it rides jitter, never so long it outlives the trend.
+    static let minimumWindowMinutes = 8.0
+    static let maximumWindowMinutes = 25.0
+    /// Recency half-weighting of the regression, as a multiple of the reading interval.
+    static let decayCadenceMultiple = 5.0
+    static let maximumWindowPoints = 30
+    /// A jump faster than this between two neighbouring readings is not glucose.
+    static let artifactRateMgDlPerMinute: Float = 20
+    /// JugglucoNG `GlucoseValuePlausibility`: values above this are driver diagnostics, not glucose.
+    static let maximumPlausibleMgDl = 600.0
+    /// JugglucoNG `TrendWindows.DEFAULT_WINDOW_MS`: the context a row of a list measures its arrow over.
+    static let defaultWindowMs: Int64 = 35 * 60_000
+    /// JugglucoNG `DisplayTrendSource.TREND_WINDOW_MS`: the history the live arrow is supplied with,
+    /// at least the longest window the engine can choose.
+    static let supplyWindowMs: Int64 = 25 * 60_000
+
+    /// Which arrow a rate in mg/dL per minute is (JugglucoNG `TrendEngine.stateFor`).
+    static func state(forVelocity velocity: Float) -> TrendState {
+        if velocity > 2.0 { return .doubleUp }
+        if velocity > 1.0 { return .singleUp }
+        if velocity > 0.5 { return .fortyFiveUp }
+        if velocity > -0.5 { return .flat }
+        if velocity > -1.0 { return .fortyFiveDown }
+        if velocity > -2.0 { return .singleDown }
+        return .doubleDown
+    }
+
+    /// The sensor's actual reading interval in minutes: the median of the first twelve forward gaps
+    /// (so one disconnect does not stretch it), or five minutes with none. `newestFirst`.
+    static func cadenceMinutes(newestFirst: [Point]) -> Double {
+        var gaps = [Double]()
+        if newestFirst.count >= 2 {
+            for index in 0..<(newestFirst.count - 1) {
+                let gap = Double(newestFirst[index].millis - newestFirst[index + 1].millis) / 60_000.0
+                // Only forward gaps; duplicate timestamps say nothing about cadence.
+                if gap > 0 { gaps.append(gap) }
+                if gaps.count >= 12 { break }
+            }
+        }
+        if gaps.isEmpty { return referenceCadenceMinutes }
+        gaps.sort()
+        return gaps[gaps.count / 2]
+    }
+
+    /// How far back the slope regresses: `20 min * cbrt(cadence / 5 min)` kept within 8...25 minutes, which
+    /// holds the standard error of the slope constant across sensors. `newestFirst`.
+    static func trendWindowMillis(newestFirst: [Point]) -> Int64 {
+        let scaled = referenceWindowMinutes * cbrt(cadenceMinutes(newestFirst: newestFirst) / referenceCadenceMinutes)
+        let windowMinutes = min(max(scaled, minimumWindowMinutes), maximumWindowMinutes)
+        return Int64(windowMinutes * 60_000.0)
+    }
+
+    /// Recency-weighted least-squares slope in mg/dL per minute over the first `usableCount` readings of
+    /// `newestFirst` (all of them when nil); nil with fewer than two or a degenerate fit.
+    static func recencyWeightedSlope(newestFirst: [Point], usableCount: Int? = nil) -> Float? {
+        let usable = min(max(usableCount ?? newestFirst.count, 0), newestFirst.count)
+        guard usable >= 2, let newest = newestFirst.first else { return nil }
+        let tauMinutes = decayCadenceMultiple * cadenceMinutes(newestFirst: newestFirst)
+        guard tauMinutes.isFinite, tauMinutes > 0 else { return nil }
+        let newestMillis = newest.millis
+        var sw = 0.0, sx = 0.0, sy = 0.0, sxy = 0.0, sxx = 0.0
+        for index in 0..<usable {
+            let point = newestFirst[index]
+            let x = Double(point.millis - newestMillis) / 60_000.0
+            let y = point.mgDl
+            guard y.isFinite else { return nil }
+            // x <= 0 going back, so the weight decays from 1 at the newest reading.
+            let weight = exp(x / tauMinutes)
+            sw += weight
+            sx += weight * x
+            sy += weight * y
+            sxy += weight * x * y
+            sxx += weight * x * x
+        }
+        let denominator = sw * sxx - sx * sx
+        guard denominator > 1e-6 else { return nil }
+        let slope = Float((sw * sxy - sx * sy) / denominator)
+        return slope.isFinite ? slope : nil
+    }
+
+    /// The trend at the newest reading of `history` (any order). A reading that is not a value
+    /// (zero, above 600 mg/dL) is dropped before anything is measured; fewer than two left means no trend.
+    static func calculateTrend(history: [Point]) -> TrendResult {
+        guard history.count >= 2 else { return .noTrend }
+        // Newest first.
+        let ordered = history[0].millis < history[history.count - 1].millis ? Array(history.reversed()) : history
+        let newestFirst = ordered.filter { $0.mgDl.isFinite && $0.mgDl > 0 && $0.mgDl <= maximumPlausibleMgDl }
+        guard newestFirst.count >= 2 else { return .noTrend }
+
+        let windowMillis = trendWindowMillis(newestFirst: newestFirst)
+        let newestMillis = newestFirst[0].millis
+        var validPoints = [Point]()
+        for point in newestFirst {
+            guard newestMillis - point.millis <= windowMillis else { break }
+            validPoints.append(point)
+            if validPoints.count >= maximumWindowPoints { break }
+        }
+        guard validPoints.count >= 2 else { return .noTrend }
+
+        // A non-physiological jump between adjacent points ends the window: only the segment newer
+        // than the artifact describes the current trend.
+        var usable = validPoints.count
+        for index in 0..<(validPoints.count - 1) {
+            let newer = validPoints[index]
+            let older = validPoints[index + 1]
+            let minutes = Float(newer.millis - older.millis) / 60_000
+            if minutes > 0 && abs((Float(newer.mgDl) - Float(older.mgDl)) / minutes) > artifactRateMgDlPerMinute {
+                usable = index + 1
+                break
+            }
+        }
+
+        let velocity = recencyWeightedSlope(newestFirst: validPoints, usableCount: usable) ?? 0
+        return TrendResult(state: state(forVelocity: velocity), velocity: velocity, acceleration: 0, confidence: 1)
+    }
+
+    /// JugglucoNG `TrendWindows.velocities`, keeping the whole result: the trend measured at each of
+    /// `rows` over the `windowMs` of `historyAscending` that end at it, keyed by the row's milliseconds.
+    /// A row with fewer than two readings behind it gets `TrendResult.noTrend`. One pass over rows and history.
+    static func trends(historyAscending: [Point], rows: [Point], windowMs: Int64 = TrendEngine.defaultWindowMs) -> [Int64: TrendResult] {
+        guard !rows.isEmpty, !historyAscending.isEmpty else { return [:] }
+        let ordered = rows.sorted { $0.millis < $1.millis }
+        var result = [Int64: TrendResult](minimumCapacity: ordered.count)
+        var start = 0
+        var end = 0
+        for row in ordered {
+            let rowMillis = row.millis
+            let from = rowMillis - windowMs
+            while start < historyAscending.count && historyAscending[start].millis < from { start += 1 }
+            if end < start { end = start }
+            while end < historyAscending.count && historyAscending[end].millis <= rowMillis { end += 1 }
+            if end - start >= 2 {
+                let trend = calculateTrend(history: Array(historyAscending[start..<end]))
+                result[rowMillis] = trend.velocity.isFinite ? trend : TrendResult.noTrend
+            } else {
+                result[rowMillis] = TrendResult.noTrend
+            }
+        }
+        return result
+    }
+}
+
+/// JugglucoNG `CausalGlucoseFilter`: a causal level-and-trend Kalman filter for the newest reading.
+///
+/// An averaging window centred on a reading has no future at the live edge, so the newest value is the
+/// noisiest one. This filter only looks back: the estimate for a sample comes from the samples of the
+/// hour before it and nothing else, so a live estimate, a backfill and a redraw of the same minute agree.
+/// State is `[G, dG/dt]` in mg/dL and mg/dL/min; `G' = G + dG/dt * dt`, `dG/dt' = dG/dt * exp(-dt / 30 min)`,
+/// process noise scaled by `dt / 5 min` (AAPS UnscentedKalmanFilterPlugin, which for this linear model
+/// is the ordinary filter). R is fixed on purpose: one learned over history would make the result depend
+/// on what was processed before. A surprising sample is not dropped: its innovation is scored against
+/// chi-squared and R is inflated onto the threshold, so a lone spike is mostly ignored and a sustained
+/// move is followed.
+enum CausalGlucoseFilter {
+    /// How far back one estimate looks. Older readings never influence it.
+    static let defaultWindowMs: Int64 = 60 * 60_000
+    /// JugglucoNG `GlucoseChartGap.THRESHOLD_MS`: 15 minutes of history interval, a minute of write
+    /// drift and a minute of margin. A larger spacing restarts the filter.
+    static let defaultGapMs: Int64 = 17 * 60_000
+
+    private static let millisPerMinute = 60_000.0
+    /// The process noise is specified per five minutes and scaled by `dt` over this.
+    private static let qReferenceMinutes = 5.0
+    private static let minimumGlucoseVariance = 0.1
+    private static let minimumRateVariance = 0.001
+
+    struct Params: Equatable, Sendable {
+        /// Glucose process noise, mg/dL^2 per five minutes.
+        var qGlucose = 1.0
+        /// Rate process noise, (mg/dL/min)^2 per five minutes.
+        var qRate = 0.35
+        /// Measurement noise, mg/dL^2.
+        var r = 25.0
+        /// Upper bound for R inflated by an outlier, mg/dL^2.
+        var rEffMax = 400.0
+        /// 99.99 % for one degree of freedom.
+        var chiSquaredThreshold = 15.13
+        var rateDecayMinutes = 30.0
+        /// Physiological bound on the rate state, mg/dL/min.
+        var maxRate = 4.0
+        /// Rate variance the filter starts from, so the first moves teach it the slope fast.
+        var initialRateVariance = 4.0
+    }
+
+    static let defaultParams = Params()
+
+    struct Estimate: Equatable, Sendable {
+        let mgDl: Double
+        let rateMgDlPerMin: Double
+    }
+
+    /// Estimate at sample `at`, from the samples in `(t[at] - windowMs, t[at]]` only. `timesMs` ascending.
+    /// A sample whose value is not finite or not positive is skipped, a spacing above `gapMs` restarts the
+    /// filter at the first sample after it (a hole is not bridged by prediction) and a repeated timestamp
+    /// keeps the first sample. nil when sample `at` is itself invalid.
+    static func estimateAt(timesMs: [Int64], mgDl: [Double], at: Int, params: Params = CausalGlucoseFilter.defaultParams,
+                           windowMs: Int64 = CausalGlucoseFilter.defaultWindowMs, gapMs: Int64 = CausalGlucoseFilter.defaultGapMs) -> Estimate? {
+        guard timesMs.indices.contains(at), mgDl.indices.contains(at), isValid(mgDl[at]) else { return nil }
+        let end = timesMs[at]
+        var start = at
+        while start > 0 && timesMs[start - 1] > end - windowMs { start -= 1 }
+
+        var g = 0.0
+        var rate = 0.0
+        var p00 = 0.0
+        var p01 = 0.0
+        var p11 = 0.0
+        var lastTime: Int64?
+
+        for index in start...at {
+            let z = mgDl[index]
+            if !isValid(z) { continue }
+            let t = timesMs[index]
+            guard let previous = lastTime, t - previous <= gapMs else {
+                g = z
+                rate = 0
+                p00 = params.r
+                p01 = 0
+                p11 = params.initialRateVariance
+                lastTime = t
+                continue
+            }
+            if t <= previous { continue }
+            let dt = Double(t - previous) / millisPerMinute
+            lastTime = t
+
+            // Predict with F = [[1, dt], [0, d]].
+            let d = exp(-dt / params.rateDecayMinutes)
+            let gPred = g + rate * dt
+            let ratePred = rate * d
+            let qScale = dt / qReferenceMinutes
+            let a00 = p00 + 2.0 * dt * p01 + dt * dt * p11 + params.qGlucose * qScale
+            let a01 = d * (p01 + dt * p11)
+            let a11 = d * d * p11 + params.qRate * qScale
+
+            // Update with H = [1, 0]; an outlier gets R inflated onto the chi-squared threshold.
+            let innovation = z - gPred
+            var s = a00 + params.r
+            if innovation * innovation / s > params.chiSquaredThreshold {
+                let inflatedR = min(max(innovation * innovation / params.chiSquaredThreshold - a00, params.r), params.rEffMax)
+                s = a00 + inflatedR
+            }
+            let k0 = a00 / s
+            let k1 = a01 / s
+            g = gPred + k0 * innovation
+            rate = min(max(ratePred + k1 * innovation, -params.maxRate), params.maxRate)
+            p00 = max(a00 - k0 * k0 * s, minimumGlucoseVariance)
+            p01 = a01 - k0 * k1 * s
+            p11 = max(a11 - k1 * k1 * s, minimumRateVariance)
+        }
+        return Estimate(mgDl: g, rateMgDlPerMin: rate)
+    }
+
+    /// `estimateAt` for every point of an ascending series, rounded to `Float` as in the original. An invalid
+    /// point keeps its original value.
+    /// `sameSource(a, b)` for neighbouring indices ends one filtered stretch and starts a new one: state
+    /// is not carried across a change of sensor.
+    static func filterLane(timesMs: [Int64], mgDl: [Double], params: Params = CausalGlucoseFilter.defaultParams,
+                           sameSource: (Int, Int) -> Bool = { _, _ in true }) -> [Double] {
+        let size = min(timesMs.count, mgDl.count)
+        var filtered = [Double](repeating: 0, count: size)
+        var start = 0
+        while start < size {
+            var end = start
+            while end + 1 < size && sameSource(end, end + 1) { end += 1 }
+            let times = Array(timesMs[start...end])
+            let segment = Array(mgDl[start...end])
+            for offset in times.indices {
+                if let estimate = estimateAt(timesMs: times, mgDl: segment, at: offset, params: params) {
+                    // The original returns a Float lane; keep its precision so what the trend reads is the same.
+                    filtered[start + offset] = Double(Float(estimate.mgDl))
+                } else {
+                    filtered[start + offset] = mgDl[start + offset]
+                }
+            }
+            start = end + 1
+        }
+        return filtered
+    }
+
+    private static func isValid(_ value: Double) -> Bool {
+        value.isFinite && value > 0
+    }
+}
+
+/// How the fork applies `TrendEngine` (fork code, not in JugglucoNG): the slope and arrow of Sibionics
+/// readings only. Fast Drop and Fast Rise, the delta, every glucose value and every upload of a value are
+/// untouched, and the arrow keeps xDrip's own thresholds (stored slope in mg/dL per millisecond).
+enum ExperimentalTrendEngine {
+    /// Only a Sibionics 1 or 2 sensor read by this phone: both are `CGMTransmitterType.sibionics2`.
+    static func appliesTo(isMaster: Bool, cgmTransmitterType: CGMTransmitterType?) -> Bool {
+        isMaster && cgmTransmitterType == .sibionics2
+    }
+
+    static func isActive(defaults: UserDefaults = .standard) -> Bool {
+        defaults.experimentalTrendEngine
+            && appliesTo(isMaster: defaults.isMaster, cgmTransmitterType: defaults.cgmTransmitterType)
+    }
+
+    /// The engine's velocity in mg/dL per minute at each reading of an ascending series, nil where it has
+    /// no trend (fewer than two readings in its window). With `causalFilter` the series is first replaced by
+    /// `CausalGlucoseFilter` estimates, as in JugglucoNG when the causal method is on; that series feeds
+    /// only the regression, nothing is returned or stored as a glucose value.
+    static func velocities(readings: [(date: Date, mgDl: Double)], causalFilter: Bool) -> [Float?] {
+        guard !readings.isEmpty else { return [] }
+        var points = readings.map { TrendEngine.Point(date: $0.date, mgDl: $0.mgDl) }
+        if causalFilter {
+            let lane = CausalGlucoseFilter.filterLane(timesMs: points.map { $0.millis }, mgDl: points.map { $0.mgDl })
+            points = zip(points, lane).map { TrendEngine.Point(date: $0.date, mgDl: $1) }
+        }
+        let trends = TrendEngine.trends(historyAscending: points, rows: points, windowMs: TrendEngine.supplyWindowMs)
+        return points.map { point -> Float? in
+            guard let trend = trends[point.millis], trend.confidence > 0 else { return nil }
+            return trend.velocity
+        }
+    }
+
+    /// Writes the engine's trend into `calculatedValueSlope` and `hideSlope` of every visible reading of
+    /// `bgReadings` (ascending) that has one. Readings the five-minute cadence hides keep their own
+    /// slope, but still count as engine input: they are measurements the engine can use. A reading with no
+    /// engine trend keeps the slope xDrip calculated for it. The glucose values are only read.
+    static func apply(to bgReadings: [BgReading], causalFilter: Bool) {
+        let perReading = Self.velocities(
+            readings: bgReadings.map { (date: $0.timeStamp, mgDl: $0.finalValue) },
+            causalFilter: causalFilter
+        )
+        for (index, bgReading) in bgReadings.enumerated() where !bgReading.isSuppressedByFiveMinuteCadence {
+            guard index < perReading.count, let velocity = perReading[index] else { continue }
+            bgReading.calculatedValueSlope = Double(velocity) / 60_000
+            bgReading.hideSlope = false
+        }
+    }
+}
