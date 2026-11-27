@@ -73,6 +73,8 @@
 "alerts_predictedLowAlertTitle" = "Прогнозована гіпоглікемія";
 "alerts_predictedHighAlertTitle" = "Прогнозована гіперглікемія";
 "alerts_predictedLowInMinutes" = "через %ld хв";
+"alerts_persistentHighAlertTitle" = "Стійка гіперглікемія";
+"alerts_persistentHighForMinutes" = "протягом %ld хв";
 
 /* Fork: Ukrainian translation completed */
 "alerts_notloopingalerttitle" = "Цикл не працює";

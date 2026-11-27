@@ -137,6 +137,8 @@ watch and notification extensions. A treatment's insulin is named in its `notes`
 prediction periods/body weight/protein-fat/intensity (notes tokens `P:20 F:15`, `intensity:light`),
 `TherapyParameterEstimator` (sensitivity / carb ratio suggestions from clean corrections and meals, per
 period, applied only on tap), `AlertKind.predictedHigh` (raw 17, `PredictedHighAlert`, JugglucoNG PRE_HIGH + `ForecastIobCoverage`),
+`AlertKind.persistentHigh` (raw 18, `PersistentHighAlert`, JugglucoNG PERSISTENT_HIGH: stateless replay of 4 h of readings, run of values
+above the alert value for `experimentalPersistentHighMinutes`, quiet while falling ≥ 1 mg/dL/min without ending the run, own group after High),
 accuracy recorder (Application Support JSON, 14 days; `PredictionInspector` + `ExperimentalPredictionInspectorView` = JugglucoNG prediction inspector), Nightscout devicestatus forecast
 (`openaps.suggested.predBGs.IOB`, only when no AID status is followed), and
 `ExperimentalCompanionForecast` for widgets, Live Activity and watch (optional fields).

@@ -288,6 +288,25 @@ episodes to xDrip's snooze-based alarms):
   the same fall. Once one of them has fired and been snoozed, the other stays quiet for the chosen
   time. Low and Very Low are never held back.
 
+## Persistent high alert
+
+Settings → Alerts → **Persistent High** (`AlertKind.persistentHigh`, raw value 18, off by default;
+JugglucoNG PERSISTENT_HIGH): "your correction was not enough". It fires when glucose has stayed
+above the alarm value (default 180 mg/dL) for the whole duration set in Experimental features →
+Alarms → *Persistent High: Alarm after* (30, 45, 60, 90, 120 or 180 minutes, default 60). JugglucoNG
+keeps a timer; here the run is replayed from the last four hours of readings, so a restart of the
+app cannot lose it: it begins at the oldest reading of the unbroken run of values above the alarm
+value that ends at the newest reading, and a value at or below the alarm value, or two readings more
+than 30 minutes apart, ends it.
+
+- While glucose falls at least 1.0 mg/dL a minute (the slope against the nearest reading at least 4,
+  at most 15 minutes older) the alert stays quiet, as in JugglucoNG `FallSuppressionPolicy`. The fall
+  does **not** restart the count: if glucose stagnates above the value again, the high was continuous
+  and the alert fires at once with the full time above ("for 75 min").
+- It is a separate alert with its own sound, schedule and snooze, checked right after High and Very
+  High, so a snoozed High does not hold it back. While High itself is raising its alarm, High wins.
+- Not ported: JugglucoNG's adjustable fall limit for this alert (fixed at its default, 1.0 mg/dL a minute).
+
 ## Quiet window
 
 Settings → Experimental features → Alarms → Quiet window (JugglucoNG "quiet mode"). Start it for

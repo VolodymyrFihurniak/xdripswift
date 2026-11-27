@@ -409,6 +409,16 @@ extension UserDefaults {
         set { set(newValue, forKey: "experimentalPredictedHighIobCoverage") }
     }
 
+    /// How long glucose must stay above the Persistent High alert's value before it fires, in minutes
+    /// (JugglucoNG PERSISTENT_HIGH `durationMinutes`, default 60).
+    var experimentalPersistentHighMinutes: Int {
+        get {
+            let stored = integer(forKey: "experimentalPersistentHighMinutes")
+            return PersistentHighAlert.durationChoices.contains(stored) ? stored : PersistentHighAlert.defaultDurationMinutes
+        }
+        set { set(newValue, forKey: "experimentalPersistentHighMinutes") }
+    }
+
     /// Draws each insulin's activity along the bottom of the main chart.
     var experimentalInsulinsEnabled: Bool {
         get { bool(forKey: ExperimentalKey.insulinsEnabled) }
@@ -1070,6 +1080,78 @@ enum PredictedHighAlert {
         let overshoot = projectedMgDl - thresholdMgDl
         guard overshoot > 0 else { return false }
         return iobUnits * insulinSensitivityMgDl >= overshoot * coverageFactor
+    }
+}
+
+/// The experimental alert for a high that does not come down (JugglucoNG PERSISTENT_HIGH): glucose has
+/// stayed above the alert value for the whole duration set in Settings > Experimental features, "the
+/// correction was not enough".
+///
+/// JugglucoNG keeps a timer in the alert runtime; here the run is replayed from the recent readings
+/// (like `GDHDeltaRun`), so a restart of the app can neither lose nor invent it. Only a value at or
+/// below the alert value, or a gap in the readings over 30 minutes, ends the run. While glucose falls at
+/// least 1.0 mg/dL a minute (`FallSuppressionPolicy.fallingSuppresses`) the alert stays quiet, but the
+/// fall does not end the run: when glucose stagnates above the value again the high phase was
+/// continuous, so the alert does not wait out a fresh duration. It is a separate alert with its own
+/// snooze, so a snoozed High alarm does not hold it back.
+enum PersistentHighAlert {
+    static let durationChoices = [30, 45, 60, 90, 120, 180]
+    static let defaultDurationMinutes = 60
+    /// JugglucoNG `AlertDefaults.FALL_RATE_SUPPRESS_MGDL_PER_MIN`.
+    static let fallRateLimitMgDlPerMinute = 1.0
+    /// Two consecutive readings further apart than this end the run: nothing is known about the time between.
+    static let maximumGap: TimeInterval = 30 * 60
+    /// The rate is the slope against the nearest reading at least 4 minutes older, at most 15 minutes back.
+    static let rateMinimumSpan: TimeInterval = 4 * 60
+    static let rateMaximumSpan: TimeInterval = 15 * 60
+    /// Readings fetched for the replay: the longest duration plus an hour.
+    static let history: TimeInterval = 4 * 60 * 60
+
+    private static func valid(_ readings: [(date: Date, mgDl: Double)]) -> [(date: Date, mgDl: Double)] {
+        readings.filter { $0.mgDl > 0 }.sorted { $0.date < $1.date }
+    }
+
+    /// When the run of readings above the value that ends at the newest reading began; nil when the
+    /// newest reading is not above the value. `readings` oldest first.
+    static func runStart(_ readings: [(date: Date, mgDl: Double)], thresholdMgDl: Double) -> Date? {
+        let ordered = valid(readings)
+        guard thresholdMgDl > 0, let newest = ordered.last, newest.mgDl > thresholdMgDl else { return nil }
+        var start = newest.date
+        for reading in ordered.dropLast().reversed() {
+            guard reading.mgDl > thresholdMgDl, start.timeIntervalSince(reading.date) <= maximumGap else { break }
+            start = reading.date
+        }
+        return start
+    }
+
+    /// Change per minute between the newest reading and the nearest one at least 4 minutes older; nil
+    /// when that reading is more than 15 minutes back or there is none. `readings` oldest first.
+    static func ratePerMinute(_ readings: [(date: Date, mgDl: Double)]) -> Double? {
+        let ordered = valid(readings)
+        guard let newest = ordered.last,
+              let reference = ordered.dropLast().last(where: { newest.date.timeIntervalSince($0.date) >= rateMinimumSpan })
+        else { return nil }
+        let span = newest.date.timeIntervalSince(reference.date)
+        guard span <= rateMaximumSpan else { return nil }
+        return (newest.mgDl - reference.mgDl) / (span / 60)
+    }
+
+    /// JugglucoNG `FallSuppressionPolicy.fallingSuppresses`: quiet while glucose falls at least `limit`
+    /// mg/dL a minute; an unknown rate never suppresses, a limit of 0 or less switches it off.
+    static func fallingSuppresses(ratePerMinute rate: Double?, limit: Double = PersistentHighAlert.fallRateLimitMgDlPerMinute) -> Bool {
+        guard let rate, rate.isFinite, limit.isFinite, limit > 0 else { return false }
+        return rate <= -limit
+    }
+
+    /// The minutes glucose has been above the value when the alert is to fire now: the run that ends at
+    /// the newest reading has lasted the duration and glucose is not falling fast. nil otherwise.
+    static func minutesAbove(_ readings: [(date: Date, mgDl: Double)], thresholdMgDl: Double, durationMinutes: Int) -> Int? {
+        guard durationMinutes > 0, let start = runStart(readings, thresholdMgDl: thresholdMgDl),
+              let newest = valid(readings).last else { return nil }
+        let elapsed = newest.date.timeIntervalSince(start)
+        guard elapsed >= TimeInterval(durationMinutes * 60),
+              !fallingSuppresses(ratePerMinute: ratePerMinute(readings)) else { return nil }
+        return Int(elapsed / 60)
     }
 }
 

@@ -29,6 +29,8 @@ class Texts_Alerts {
     static let signalRestoredTitle = NSLocalizedString("alerts_signalRestoredTitle", tableName: filename, bundle: .main, value: "Signal restored", comment: "Notification title: readings are arriving again after a loss")
     static let signalRestoredBody = NSLocalizedString("alerts_signalRestoredBody", tableName: filename, bundle: .main, value: "Readings are back after %ld min.", comment: "Notification body: minutes without readings")
     static let predictedHighAlertTitle = NSLocalizedString("alerts_predictedHighAlertTitle", tableName: filename, bundle: .main, value: "Predicted High", comment: "Experimental alert raised when the glucose forecast rises above the alert value")
+    static let persistentHighAlertTitle = NSLocalizedString("alerts_persistentHighAlertTitle", tableName: filename, bundle: .main, value: "Persistent High", comment: "Experimental alert raised when glucose has stayed above the alert value for the whole set duration")
+    static let persistentHighForMinutes = NSLocalizedString("alerts_persistentHighForMinutes", tableName: filename, bundle: .main, value: "for %ld min", comment: "Persistent high alert: how long glucose has been above the value, e.g. 'for 75 min'")
     static let predictedLowInMinutes = NSLocalizedString("alerts_predictedLowInMinutes", tableName: filename, bundle: .main, value: "in %ld min", comment: "Predicted low alert: when the forecast reaches the value, e.g. 'in 20 min'")
 
     static let lowAlertTitle: String = {

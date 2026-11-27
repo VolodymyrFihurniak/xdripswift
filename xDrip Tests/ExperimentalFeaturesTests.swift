@@ -8,6 +8,7 @@
 
 import XCTest
 import SwiftUI
+import UserNotifications
 @testable import xdrip
 
 final class ExperimentalFeaturesTests: XCTestCase {
@@ -1672,6 +1673,241 @@ final class AlertDeltaRunAndQuietWindowTests: XCTestCase {
         ExperimentalQuietWindow.end(defaults: defaults)
         XCTAssertNil(ExperimentalQuietWindow.until(now: start, defaults: defaults))
         defaults.removePersistentDomain(forName: "ExperimentalQuietWindowTests")
+    }
+}
+
+// MARK: - Persistent High
+
+/// Records the notifications an alarm raises, without notification permission.
+private final class RecordingAlertCenter: AlertNotificationScheduling {
+    private(set) var requests = [UNNotificationRequest]()
+
+    func add(_ request: UNNotificationRequest, withCompletionHandler completionHandler: (@Sendable (Error?) -> Void)?) {
+        requests.append(request)
+        completionHandler?(nil)
+    }
+
+    func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {}
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String]) {}
+}
+
+/// JugglucoNG PERSISTENT_HIGH, replayed from readings instead of a timer. Every expected value was
+/// produced by a Python port of `PersistentHighAlert` run on the same readings.
+final class PersistentHighAlertTests: XCTestCase {
+
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func point(_ minute: Double, _ mgDl: Double) -> (date: Date, mgDl: Double) {
+        (date: start.addingTimeInterval(minute * 60), mgDl: mgDl)
+    }
+
+    /// Readings `step` minutes apart, the first at minute `first`.
+    private func readings(every step: Double, _ values: [Double], from first: Double = 0) -> [(date: Date, mgDl: Double)] {
+        values.enumerated().map { point(first + Double($0.offset) * step, $0.element) }
+    }
+
+    private func repeated(_ value: Double, _ count: Int) -> [Double] {
+        Array(repeating: value, count: count)
+    }
+
+    func testPersistentHighIsANewDisabledByDefaultGlucoseAlert() {
+        XCTAssertEqual(AlertKind.persistentHigh.rawValue, 18)
+        XCTAssertTrue(AlertKind.persistentHigh.defaultIsDisabled())
+        XCTAssertTrue(AlertKind.persistentHigh.valueIsABgValue())
+        XCTAssertTrue(AlertKind.persistentHigh.createsImmediateNotificationWithBGReading())
+        XCTAssertEqual(AlertKind.persistentHigh.defaultAlertValue(), ConstantsDefaultAlertLevels.high)
+        XCTAssertEqual(AlertKind.persistentHigh.alertUrgencyType(), .warning)
+        XCTAssertEqual(AlertKind.persistentHigh.alertTitle(), Texts_Alerts.persistentHighAlertTitle)
+        XCTAssertNotEqual(AlertKind.persistentHigh.notificationIdentifier(), AlertKind.high.notificationIdentifier())
+        let kinds = AlertKind.visibleAlertKinds(for: .Libre2)
+        XCTAssertEqual(kinds.firstIndex(of: .persistentHigh), (kinds.firstIndex(of: .predictedHigh) ?? -2) + 1)
+    }
+
+    func testDurationSettingDefaultsToAnHourAndRejectsOtherValues() throws {
+        let suite = "PersistentHighAlertTests"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(PersistentHighAlert.durationChoices, [30, 45, 60, 90, 120, 180])
+        XCTAssertEqual(defaults.experimentalPersistentHighMinutes, 60)
+        defaults.experimentalPersistentHighMinutes = 90
+        XCTAssertEqual(defaults.experimentalPersistentHighMinutes, 90)
+        defaults.experimentalPersistentHighMinutes = 75
+        XCTAssertEqual(defaults.experimentalPersistentHighMinutes, 60)
+    }
+
+    func testTheRunStartsAtTheOldestReadingOfTheTrailingRunAboveTheValue() {
+        // Ten minutes at 150, then 61 minutes at 200: the run starts at minute 10 and lasts 60 minutes.
+        let oneMinute = readings(every: 1, repeated(150, 10) + repeated(200, 61))
+        XCTAssertEqual(PersistentHighAlert.runStart(oneMinute, thresholdMgDl: 180), start.addingTimeInterval(10 * 60))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(oneMinute, thresholdMgDl: 180, durationMinutes: 60), 60)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(oneMinute, thresholdMgDl: 180, durationMinutes: 30), 60)
+        // One minute short of the duration, or a longer duration: quiet.
+        XCTAssertNil(PersistentHighAlert.minutesAbove(Array(oneMinute.dropLast()), thresholdMgDl: 180, durationMinutes: 60))
+        XCTAssertNil(PersistentHighAlert.minutesAbove(oneMinute, thresholdMgDl: 180, durationMinutes: 90))
+        XCTAssertNil(PersistentHighAlert.minutesAbove(oneMinute, thresholdMgDl: 180, durationMinutes: 0))
+        // A five-minute sensor: 55 minutes is not an hour, 60 is.
+        XCTAssertNil(PersistentHighAlert.minutesAbove(readings(every: 5, repeated(200, 12)), thresholdMgDl: 180, durationMinutes: 60))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(readings(every: 5, repeated(200, 13)), thresholdMgDl: 180, durationMinutes: 60), 60)
+    }
+
+    func testAValueAtOrBelowTheThresholdEndsTheRun() {
+        // 200 for 25 minutes, exactly 180 at minute 30, then 200 again: only minute 35 onward counts.
+        let touched = readings(every: 5, repeated(200, 6) + repeated(180, 1) + repeated(200, 7))
+        XCTAssertEqual(PersistentHighAlert.runStart(touched, thresholdMgDl: 180), start.addingTimeInterval(35 * 60))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(touched, thresholdMgDl: 180, durationMinutes: 30), 30)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(touched, thresholdMgDl: 180, durationMinutes: 45))
+        // A newest reading at the value is no run at all.
+        let atTheValue = readings(every: 5, repeated(200, 14) + repeated(180, 1))
+        XCTAssertNil(PersistentHighAlert.runStart(atTheValue, thresholdMgDl: 180))
+        XCTAssertNil(PersistentHighAlert.minutesAbove(atTheValue, thresholdMgDl: 180, durationMinutes: 30))
+    }
+
+    func testAGapOverThirtyMinutesBreaksTheRun() {
+        // Thirty minutes between two readings is still one run; thirty-five is not.
+        let thirty = readings(every: 5, repeated(200, 5)) + readings(every: 5, repeated(200, 5), from: 50)
+        XCTAssertEqual(PersistentHighAlert.runStart(thirty, thresholdMgDl: 180), start)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(thirty, thresholdMgDl: 180, durationMinutes: 60), 70)
+        let thirtyFive = readings(every: 5, repeated(200, 5)) + readings(every: 5, repeated(200, 5), from: 55)
+        XCTAssertEqual(PersistentHighAlert.runStart(thirtyFive, thresholdMgDl: 180), start.addingTimeInterval(55 * 60))
+        XCTAssertNil(PersistentHighAlert.minutesAbove(thirtyFive, thresholdMgDl: 180, durationMinutes: 30))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(thirtyFive, thresholdMgDl: 180, durationMinutes: 20), 20)
+    }
+
+    func testAFastFallKeepsTheAlertQuietButDoesNotRestartTheTimer() {
+        // An hour at 220, then the value falls but stays above 180.
+        let plateau = readings(every: 5, repeated(220, 13))
+        let firstStep = plateau + [point(65, 214)]
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(firstStep) ?? 0, -1.2, accuracy: 1e-9)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(firstStep, thresholdMgDl: 180, durationMinutes: 60))
+        let secondStep = firstStep + [point(70, 208)]
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(secondStep) ?? 0, -1.2, accuracy: 1e-9)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(secondStep, thresholdMgDl: 180, durationMinutes: 60))
+        // The value stagnates above 180: the high phase was continuous, so it fires at once with the
+        // whole 75 minutes, not after another full hour.
+        let stagnant = secondStep + [point(75, 208)]
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(stagnant) ?? 1, 0, accuracy: 1e-9)
+        XCTAssertEqual(PersistentHighAlert.runStart(stagnant, thresholdMgDl: 180), start)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(stagnant, thresholdMgDl: 180, durationMinutes: 60), 75)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(stagnant + [point(80, 208)], thresholdMgDl: 180, durationMinutes: 60), 80)
+    }
+
+    func testTheFallLimitIsOneMilligramPerMinuteAndInclusive() {
+        let plateau = readings(every: 5, repeated(220, 13))
+        // 0.8 mg/dL a minute is not a fall: it fires with 70 minutes above.
+        let slow = plateau + [point(65, 216), point(70, 212)]
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(slow) ?? 0, -0.8, accuracy: 1e-9)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(slow, thresholdMgDl: 180, durationMinutes: 60), 70)
+        // Exactly 1.0 mg/dL a minute is.
+        let exact = plateau + [point(65, 215)]
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(exact) ?? 0, -1.0, accuracy: 1e-9)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(exact, thresholdMgDl: 180, durationMinutes: 60))
+
+        XCTAssertFalse(PersistentHighAlert.fallingSuppresses(ratePerMinute: nil))
+        XCTAssertTrue(PersistentHighAlert.fallingSuppresses(ratePerMinute: -1.0))
+        XCTAssertFalse(PersistentHighAlert.fallingSuppresses(ratePerMinute: -0.99))
+        XCTAssertFalse(PersistentHighAlert.fallingSuppresses(ratePerMinute: 2))
+        XCTAssertFalse(PersistentHighAlert.fallingSuppresses(ratePerMinute: .nan))
+        XCTAssertFalse(PersistentHighAlert.fallingSuppresses(ratePerMinute: -5, limit: 0))
+    }
+
+    func testAFallThatEndsAtOrBelowTheValueDoesRestartTheTimer() {
+        // The value falls to 170 at minute 70 and comes back to 190: a new run from minute 75.
+        let afterPlateau: [(date: Date, mgDl: Double)] = [point(65, 214), point(70, 170), point(75, 190), point(80, 190), point(85, 190)]
+        let dipped = readings(every: 5, repeated(220, 13)) + afterPlateau
+        XCTAssertEqual(PersistentHighAlert.runStart(dipped, thresholdMgDl: 180), start.addingTimeInterval(75 * 60))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(dipped, thresholdMgDl: 180, durationMinutes: 10), 10)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(dipped, thresholdMgDl: 180, durationMinutes: 15))
+    }
+
+    func testTheRateUsesTheNearestReadingAtLeastFourMinutesOlderWithinFifteen() {
+        // The newest reading is at minute 8; the reading at minute 4 (200) is the reference, not minute 3 (203).
+        let oneMinute = readings(every: 1, [200, 200, 200, 203, 200, 199, 198, 197, 195])
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(oneMinute) ?? 0, -1.25, accuracy: 1e-9)
+        // Exactly four minutes back counts, three do not, and more than fifteen is no rate.
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute([point(0, 230), point(2, 228), point(4, 226)]) ?? 0, -1.0, accuracy: 1e-9)
+        XCTAssertNil(PersistentHighAlert.ratePerMinute([point(0, 230), point(2, 228), point(3, 226)]))
+        XCTAssertNil(PersistentHighAlert.ratePerMinute([point(0, 230), point(16, 190)]))
+        // 230 falling by 1.5 a minute for half an hour is still above 180 and falling: quiet.
+        let falling = readings(every: 1, (0...30).map { 230 - 1.5 * Double($0) })
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(falling) ?? 0, -1.5, accuracy: 1e-9)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(falling, thresholdMgDl: 180, durationMinutes: 30))
+        // With no reading to measure against, a rate is unknown and does not suppress.
+        let unknown = [point(0, 230), point(10, 228), point(40, 190)]
+        XCTAssertNil(PersistentHighAlert.ratePerMinute(unknown))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(unknown, thresholdMgDl: 180, durationMinutes: 30), 40)
+    }
+
+    func testZeroValuesAreIgnoredAndTheOrderOfTheInputDoesNotMatter() {
+        let withZero = readings(every: 5, repeated(200, 7) + repeated(0, 1) + repeated(200, 6))
+        XCTAssertEqual(PersistentHighAlert.runStart(withZero, thresholdMgDl: 180), start)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(withZero, thresholdMgDl: 180, durationMinutes: 60), 65)
+        let oneMinute = readings(every: 1, repeated(150, 10) + repeated(200, 61))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(Array(oneMinute.reversed()), thresholdMgDl: 180, durationMinutes: 60), 60)
+    }
+
+    // MARK: Through the alert manager
+
+    /// Raises the alarms for one-minute readings at 200 mg/dL that end now and began `minutes` minutes ago.
+    /// Only High and Persistent High (value 180, duration an hour) are on; High may be snoozed.
+    @MainActor
+    private func checkAlerts(highSnoozed: Bool, readingsSpanMinutes minutes: Int) throws -> (center: RecordingAlertCenter, manager: AlertManager, core: CoreDataManager) {
+        // Keep the test independent of the simulator app's saved settings.
+        let keys = [UserDefaults.Key.isMaster.rawValue, UserDefaults.Key.snoozeAllAlertsUntilDate.rawValue, "experimentalPersistentHighMinutes"]
+        let saved = keys.map { UserDefaults.standard.object(forKey: $0) }
+        addTeardownBlock {
+            for (key, value) in zip(keys, saved) {
+                UserDefaults.standard.set(value, forKey: key)
+            }
+        }
+        UserDefaults.standard.isMaster = true
+        UserDefaults.standard.snoozeAllAlertsUntilDate = nil
+        UserDefaults.standard.experimentalPersistentHighMinutes = 60
+
+        let core = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
+        let types = AlertTypesAccessor(coreDataManager: core)
+        let entries = AlertEntriesAccessor(coreDataManager: core).getAllEntries(forAlertKind: nil, alertTypesAccessor: types)
+        for entry in entries {
+            entry.isDisabled = entry.alertkind != AlertKind.high.rawValue && entry.alertkind != AlertKind.persistentHigh.rawValue
+        }
+        for kind in [AlertKind.high, AlertKind.persistentHigh] {
+            let entry = try XCTUnwrap(entries.first { $0.alertkind == kind.rawValue })
+            entry.value = 180
+            entry.alertType.enabled = true
+            entry.alertType.soundname = ""
+        }
+        let now = Date()
+        for minute in 0...minutes {
+            let reading = BgReading(timeStamp: now.addingTimeInterval(-Double(minutes - minute) * 60), sensor: nil, calibration: nil,
+                                    rawData: 120, deviceName: nil, nsManagedObjectContext: core.mainManagedObjectContext)
+            reading.calculatedValue = 200
+        }
+        let center = RecordingAlertCenter()
+        let manager = AlertManager(coreDataManager: core, soundPlayer: nil, notificationCenter: center)
+        if highSnoozed {
+            manager.snooze(alertKind: .high, snoozePeriodInMinutes: 60, response: nil)
+        }
+        _ = manager.checkAlerts(maxAgeOfLastBgReadingInSeconds: 60)
+        return (center, manager, core)
+    }
+
+    @MainActor
+    func testPersistentHighStillFiresWhileTheHighAlarmIsSnoozed() throws {
+        let (center, manager, core) = try checkAlerts(highSnoozed: true, readingsSpanMinutes: 65)
+        let raised = center.requests.map(\.identifier)
+        XCTAssertTrue(raised.contains(AlertKind.persistentHigh.notificationIdentifier()))
+        XCTAssertFalse(raised.contains(AlertKind.high.notificationIdentifier()))
+        // Like every alarm it is then snoozed for a few minutes, on its own snooze.
+        XCTAssertTrue(manager.getSnoozeParameters(alertKind: .persistentHigh).getSnoozeValue().isSnoozed)
+        withExtendedLifetime(core) {}
+    }
+
+    @MainActor
+    func testPersistentHighWaitsForItsDurationEvenWhileTheHighAlarmIsSnoozed() throws {
+        let (center, manager, core) = try checkAlerts(highSnoozed: true, readingsSpanMinutes: 30)
+        XCTAssertTrue(center.requests.isEmpty)
+        XCTAssertFalse(manager.getSnoozeParameters(alertKind: .persistentHigh).getSnoozeValue().isSnoozed)
+        withExtendedLifetime(core) {}
     }
 }
 
