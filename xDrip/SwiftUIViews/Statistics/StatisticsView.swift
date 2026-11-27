@@ -246,7 +246,95 @@ private struct StatisticsCGMDataPage: View {
                 StatisticsInsightsCard(insights: analytics.insights, usesMgDl: analytics.usesMgDl)
             }
         }
+        // The Sibionics sensor's own thermometer, when one has reported in the last 48 hours.
+        let skinTemperature = SibionicsSkinTemperatureStore.activeSeries()
+        if skinTemperature.count >= 2 {
+            StatisticsSection(title: Texts_Common.statisticsSkinTemperature) {
+                StatisticsSkinTemperatureCard(samples: skinTemperature)
+            }
+        }
         StatisticsSummaryView(analytics: analytics)
+    }
+}
+
+/// JugglucoNG's Statistics temperature card: the latest skin temperature, its last 48 hours and
+/// the lowest, average and highest value (`SibionicsSkinTemperatureStore`). Display only.
+private struct StatisticsSkinTemperatureCard: View {
+    let samples: [SibionicsSkinTemperatureStore.Sample]
+
+    var body: some View {
+        StatisticsCard {
+            if let latest = samples.last, let summary = SibionicsSkinTemperatureStore.summary(of: samples) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(SibionicsSkinTemperatureStore.text(latest.celsius))
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(Color(.colorPrimary))
+                        .monospacedDigit()
+                    Spacer()
+                    Text(RelativeDateTimeFormatter().localizedString(for: latest.date, relativeTo: Date()))
+                        .font(.caption)
+                        .foregroundStyle(Color(.colorSecondary))
+                }
+
+                Chart(samples, id: \.date) { sample in
+                    LineMark(
+                        x: .value("Time", sample.date),
+                        y: .value("Temperature", sample.celsius)
+                    )
+                    .lineStyle(StrokeStyle(lineWidth: 2.0))
+                    .foregroundStyle(Color.cyan)
+                    .interpolationMethod(.catmullRom)
+                }
+                .chartLegend(.hidden)
+                .chartYScale(domain: (summary.minimum - 0.5)...(summary.maximum + 0.5))
+                .chartYAxis {
+                    AxisMarks(position: .trailing) { value in
+                        AxisGridLine()
+                            .foregroundStyle(Color(.colorSecondary).opacity(0.55))
+                        AxisValueLabel {
+                            if let celsius = value.as(Double.self) {
+                                Text(GlucoseReportFormatting.number(celsius, decimalPlaces: 1))
+                                    .font(.caption2)
+                                    .foregroundStyle(Color(.colorSecondary))
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                        AxisGridLine()
+                            .foregroundStyle(Color(.colorSecondary).opacity(0.55))
+                        AxisValueLabel(format: .dateTime.weekday(.abbreviated).hour(), centered: false)
+                    }
+                }
+                .frame(height: 140)
+
+                HStack {
+                    valueColumn(title: Texts_Common.statisticsMinimum, celsius: summary.minimum)
+                    Spacer()
+                    valueColumn(title: Texts_Common.averageStatistics, celsius: summary.average)
+                    Spacer()
+                    valueColumn(title: Texts_Common.statisticsMaximum, celsius: summary.maximum)
+                }
+
+                Text(Texts_Common.statisticsSkinTemperatureFooter)
+                    .font(.footnote)
+                    .foregroundStyle(Color(.colorSecondary))
+            }
+        }
+    }
+
+    private func valueColumn(title: String, celsius: Double) -> some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(Color(.colorSecondary))
+            Text(SibionicsSkinTemperatureStore.text(celsius))
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Color(.colorPrimary))
+                .monospacedDigit()
+        }
     }
 }
 

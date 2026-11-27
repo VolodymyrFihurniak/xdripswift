@@ -64,6 +64,7 @@ class Texts_BluetoothPeripheralView {
     static let sibionicsProblemAddressRefused = NSLocalizedString("sibionics.problemAddressRefused", tableName: filename, bundle: .main, value: "Sensor refused every address", comment: "Sibionics device screen, link status")
     static let sibionicsProblemAuthentication = NSLocalizedString("sibionics.problemAuthentication", tableName: filename, bundle: .main, value: "Authentication failed", comment: "Sibionics device screen, link status")
     static let sibionicsNotReported = NSLocalizedString("sibionics.notReported", tableName: filename, bundle: .main, value: "Not reported yet", comment: "Sibionics device screen, sensor information")
+    static let sibionicsSkinTemperature = NSLocalizedString("sibionics.skinTemperature", tableName: filename, bundle: .main, value: "Skin temperature", comment: "Sibionics device screen, the temperature the sensor last reported")
     static let sibionicsModel = NSLocalizedString("sibionics.model", tableName: filename, bundle: .main, value: "Model", comment: "Sibionics device screen, sensor information")
     static let sibionicsFirmware = NSLocalizedString("sibionics.firmware", tableName: filename, bundle: .main, value: "Firmware", comment: "Sibionics device screen, sensor information")
     static let sibionicsHardware = NSLocalizedString("sibionics.hardware", tableName: filename, bundle: .main, value: "Hardware", comment: "Sibionics device screen, sensor information")

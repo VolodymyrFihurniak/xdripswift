@@ -102,6 +102,12 @@ that broke the CI before. Before every commit: `python3 tools/check_swift.py` an
   Support/sibionics-source, new session = new journal. `probeCodeDidChange` (sensitivity, model, GS3) replays
   the contiguous journal locally a day per step (`replayFromJournal`), then asks the sensor for newer minutes.
   Backups carry the journals (`BackupPayload.sibionicsSourceJournals`), restored by merge, phone wins.
+- **Skin temperature** (`SibionicsSkinTemperatureStore`, end of `Sibionics2ReadingBatchProcessor.swift`; JugglucoNG
+  `SensorTemperature` + Statistics temperature card; display only, never feeds glucose): recorded in `process` for every
+  unique minute (live, history, journal replay), one sample per five-minute window (newest wins, keyed by time so replays
+  never double count), last 48 h from the newest sample, one JSON per sensor in Application Support/`sibionics-temperature`,
+  cleared with the peripheral. Shown as a row in the device info section and as a card in Statistics > CGM data (series of
+  whichever sensor reported last). Always °C: the app has no temperature unit setting.
 - **Last link problem** (`Sibionics2DeviceStatus.lastLinkProblem`, JugglucoNG "Last BLE status"): set by
   `noteLinkProblem` on lost links, refusals, stalls and auth failures, cleared by a reading; shown on the
   device screen. Home says "no signal" after 3 min for 1-minute sensors (`RootHomeSensorReach`).

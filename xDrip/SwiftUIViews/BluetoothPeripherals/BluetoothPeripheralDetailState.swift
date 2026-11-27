@@ -1247,6 +1247,15 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                 ?? Texts_BluetoothPeripheralView.sibionicsNotReported,
             detailIndicator: battery.map { SettingsIndicator(color: $0.percentage <= 10 ? Color.red : $0.percentage <= 25 ? Color.orange : Color.green) }
         )) }
+        // The sensor's own thermometer, from the minutes it reported (display only).
+        let skinTemperature = SibionicsSkinTemperatureStore.latest(for: address)
+        rows.append(row(
+            id: "sibionics-skin-temperature",
+            title: Texts_BluetoothPeripheralView.sibionicsSkinTemperature,
+            detail: skinTemperature.map {
+                "\(SibionicsSkinTemperatureStore.text($0.celsius)) · \(RelativeDateTimeFormatter().localizedString(for: $0.date, relativeTo: Date()))"
+            } ?? Texts_BluetoothPeripheralView.sibionicsNotReported
+        ))
         let fields: [(Sibionics2DeviceStatus.Field, String)] = [
             (.modelNumber, Texts_BluetoothPeripheralView.sibionicsModel),
             (.firmwareRevision, Texts_BluetoothPeripheralView.sibionicsFirmware),
