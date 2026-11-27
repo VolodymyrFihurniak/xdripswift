@@ -122,6 +122,9 @@ enum ConstantsLog {
     /// dexcom share upload manager
     static let categoryDexcomShareUploadManager =           "DexcomShareUploadManager      "
     
+    /// outbound API (Telegram bot and JSON webhook destinations)
+    static let categoryOutboundApi =                        "OutboundApi                   "
+    
     /// SettingsViewDexcomShareUploadSettingsViewModel
     static let categorySettingsViewDexcomShareUploadSettingsViewModel = 
                                                             "DexcomShareUploadSettngsVwMdl " // spell to fit available space
