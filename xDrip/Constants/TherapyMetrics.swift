@@ -11,6 +11,9 @@ import Foundation
 /// Display-only therapy amounts travel independently of pump and AID operating state.
 enum TherapyMetricSource: String, Codable, Hashable, Sendable {
     case local, nightscout, careLink
+    /// IOB and COB another phone uploaded to Nightscout (`ExperimentalRemoteIob`), shown on Home
+    /// only and labelled as remote. Never published to the watch, widgets or Live Activity.
+    case remote
 }
 
 enum TherapyMetricUnavailableReason: String, Codable, Hashable, Sendable {
@@ -24,6 +27,8 @@ struct TherapyMetricState: Codable, Hashable, Sendable {
     var expiresAt: Date?
     var visibilityDeadline: Date?
     var reason: TherapyMetricUnavailableReason?
+    /// eIOB of a remote IOB, nil otherwise.
+    var effectiveAmount: Double?
 
     func isVisible(at date: Date = .now) -> Bool {
         // A local cache miss or failed read is not evidence that treatments exist.

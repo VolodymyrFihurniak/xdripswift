@@ -384,6 +384,20 @@ extension UserDefaults {
         set { set(newValue, forKey: "experimentalNightscoutPredictionEnabled") }
     }
 
+    /// Uploads this phone's IOB, eIOB and COB as a devicestatus in JugglucoNG's layout
+    /// (`ExperimentalNightscoutIob`). Off by default.
+    var experimentalNightscoutIobUpload: Bool {
+        get { bool(forKey: "experimentalNightscoutIobUpload") }
+        set { set(newValue, forKey: "experimentalNightscoutIobUpload") }
+    }
+
+    /// A phone that follows Nightscout and has no treatments of its own shows the IOB and COB the
+    /// main phone uploaded (`ExperimentalRemoteIob`). Off by default.
+    var experimentalNightscoutIobFollow: Bool {
+        get { bool(forKey: "experimentalNightscoutIobFollow") }
+        set { set(newValue, forKey: "experimentalNightscoutIobFollow") }
+    }
+
     /// How far ahead the predicted low alert looks, in minutes.
     var experimentalPredictedLowLeadMinutes: Int {
         get {
@@ -2416,6 +2430,262 @@ enum ExperimentalNightscoutPrediction {
         }
         openaps["suggested"] = suggested
         return ["device": device, "created_at": now.ISOStringFromDate(), "openaps": openaps]
+    }
+}
+
+/// IOB, eIOB and COB as a Nightscout devicestatus, in the layout of JugglucoNG
+/// `NightscoutIobDeviceStatus`, so that JugglucoNG and xDrip can read each other's numbers.
+///
+/// Classic IOB goes into the standard `openaps.iob` container, which Nightscout's IOB plugin and
+/// loop followers read as the insulin still on board. eIOB (what is acting now, never more than
+/// IOB) and COB travel in a separate `jugglucong` object that Nightscout stores and serves back
+/// unchanged. `openaps.iob.activity` is left out: OpenAPS defines it as insulin activity per
+/// minute, which the model does not compute.
+///
+/// Differences from JugglucoNG: the document is a single object (the fork's other devicestatus
+/// uploads are too); the idle cadence is 10 minutes instead of 15, so that an idle upload never
+/// outlasts the 15-minute window `ExperimentalRemoteIob` accepts; and a clock that ran backwards
+/// makes an upload due again instead of waiting for it to catch up.
+enum ExperimentalNightscoutIob {
+    static let device = ExperimentalNightscoutPrediction.device
+    /// The object eIOB and COB travel in, named as JugglucoNG names it.
+    static let namespace = "jugglucong"
+    /// Values are moving or insulin is on board: at most one upload every five minutes.
+    static let fastInterval: TimeInterval = 5 * 60
+    /// Idle at zero: one upload every ten minutes keeps the last document fresh for followers.
+    static let slowInterval: TimeInterval = 10 * 60
+    /// Below half of this, IOB counts as zero; two values this close count as unchanged.
+    static let valueQuantum = 0.01
+    /// Doses and meals older than this no longer make the model available (JugglucoNG's active window).
+    static let activeWindow: TimeInterval = 24 * 60 * 60
+
+    struct Values: Equatable, Sendable {
+        /// Classic IOB of the rapid insulins, in units.
+        let iob: Double
+        /// What of it is acting now, in units; nil when unknown.
+        let eiob: Double?
+        /// Grams of carbohydrate still absorbing; nil when no meal was logged.
+        let cob: Double?
+    }
+
+    /// A cheap gate before the treatments are read: false until enough time has passed.
+    static func fastIntervalElapsed(now: Date, lastUpload: Date?) -> Bool {
+        guard let lastUpload else { return true }
+        let elapsed = now.timeIntervalSince(lastUpload)
+        return elapsed < 0 || elapsed >= fastInterval
+    }
+
+    /// Fast cadence while insulin is on board or a value moved since the last upload; the slow one
+    /// once everything has settled at zero, so an idle night does not fill Nightscout.
+    static func shouldUpload(now: Date, lastUpload: Date?, values: Values, lastValues: Values?) -> Bool {
+        guard let lastUpload else { return true }
+        let elapsed = now.timeIntervalSince(lastUpload)
+        if elapsed < 0 { return true }
+        if elapsed < fastInterval { return false }
+        let changed = differs(values.iob, lastValues?.iob) || differs(values.eiob, lastValues?.eiob) || differs(values.cob, lastValues?.cob)
+        if abs(values.iob) >= valueQuantum / 2 || changed { return true }
+        return elapsed >= slowInterval
+    }
+
+    private static func differs(_ value: Double?, _ last: Double?) -> Bool {
+        guard let value, let last else { return (value == nil) != (last == nil) }
+        return (value / valueQuantum).rounded() != (last / valueQuantum).rounded()
+    }
+
+    /// The devicestatus, or nil when there is no classic IOB to report: without `openaps.iob.iob`
+    /// the document would carry nothing Nightscout's IOB plugin can use. Insulin units and grams
+    /// pass through unchanged; glucose units play no role. Values have two decimals.
+    static func deviceStatus(now: Date, values: Values) -> [String: Any]? {
+        guard values.iob.isFinite else { return nil }
+        let stamp = now.ISOStringFromDate()
+        var own: [String: Any] = ["iob": rounded(values.iob)]
+        if let eiob = values.eiob, eiob.isFinite { own["eiob"] = rounded(eiob) }
+        if let cob = values.cob, cob.isFinite { own["cob"] = rounded(cob) }
+        return ["device": device, "created_at": stamp,
+                "openaps": ["iob": ["iob": rounded(values.iob), "timestamp": stamp] as [String: Any]],
+                namespace: own]
+    }
+
+    private static func rounded(_ value: Double) -> Double { (value * 100).rounded() / 100 }
+
+    /// The treatments this phone logged itself, over the active window. A treatment imported from
+    /// Nightscout or CareLink is not eligible: uploading it again with a fresh timestamp would keep
+    /// another source's numbers alive as an echo (JugglucoNG `nightscoutUploadIobSnapshot`).
+    static func localTreatments(in context: NSManagedObjectContext, now: Date = Date(),
+                                policy: DataFlowPolicy = UserDefaults.standard.dataFlowPolicy) -> [ExperimentalTreatment] {
+        var result: [ExperimentalTreatment] = []
+        context.performAndWait {
+            result = ExperimentalTreatment.fetch(from: now.addingTimeInterval(-activeWindow), to: now, in: context,
+                                                 policy: policy.localTreatmentsOnly) ?? []
+        }
+        return result
+    }
+
+    /// The model's IOB, eIOB and COB at `now`, nil while the model has nothing to report: no dose
+    /// of a rapid insulin in the active window (a finished one still reports zero, as in
+    /// JugglucoNG). IOB is the rapid insulins only, as the Home card shows it; basal injections are
+    /// not part of it. COB is nil until a meal was logged in the window.
+    static func snapshot(treatments: [ExperimentalTreatment], model: ExperimentalPredictionModel, now: Date) -> Values? {
+        let windowStart = now.addingTimeInterval(-activeWindow)
+        let recent = treatments.filter { $0.date <= now && $0.date >= windowStart && $0.amount.isFinite && $0.amount > 0 }
+        let hasInsulin = recent.contains {
+            ($0.kind == .bolus || $0.kind == .basalInjection)
+                && $0.insulin(bolusDefault: model.bolusInsulin, basalDefault: model.basalInsulin)?.countsTowardPrediction == true
+        }
+        guard hasInsulin else { return nil }
+        let onBoard = InsulinActivityStack.onBoard(treatments: recent, at: now, bolusDefault: model.bolusInsulin,
+                                                   basalDefault: model.basalInsulin, bodyWeightKg: model.bodyWeightKg)
+            .filter { $0.insulin.countsTowardPrediction }
+        let iob = onBoard.reduce(0) { $0 + $1.units }
+        let eiob = min(onBoard.reduce(0) { $0 + $1.effectiveUnits }, iob)
+        let cob = recent.contains { $0.kind == .carbs } ? PredictedLowEvidence.carbsOnBoard(treatments: recent, model: model, at: now) : nil
+        return Values(iob: iob, eiob: eiob, cob: cob)
+    }
+}
+
+/// IOB, eIOB and COB another phone uploaded as a devicestatus (`ExperimentalNightscoutIob`), read
+/// back by a phone that follows Nightscout. JugglucoNG `NightscoutFollowerDeviceStatus`, with one
+/// difference: the 15-minute window of the main phone's own cadence replaces JugglucoNG's 30
+/// minutes, and a document stamped more than a minute ahead of this clock is not trusted.
+struct ExperimentalRemoteIob: Equatable, Sendable {
+    let iob: Double
+    /// nil when the document carries no eIOB.
+    let eiob: Double?
+    /// nil when the document carries no COB.
+    let cob: Double?
+    /// When the main phone computed the numbers.
+    let date: Date
+
+    /// How old a document may be and still be shown.
+    static let freshnessWindow: TimeInterval = 15 * 60
+    /// How far ahead of this phone's clock a document may be stamped.
+    static let clockSkewTolerance: TimeInterval = 60
+    /// Values outside these ranges are garbage, not insulin or carbs on board.
+    private static let unitsRange = 0.0...500.0
+    private static let gramsRange = 0.0...2000.0
+
+    func isFresh(at now: Date) -> Bool {
+        let age = now.timeIntervalSince(date)
+        return age >= -Self.clockSkewTolerance && age < Self.freshnessWindow
+    }
+
+    /// The Home states for IOB and COB. Both come from one document: a COB the document lacks is
+    /// hidden rather than filled from anything else.
+    func metricStates() -> (iob: TherapyMetricState, cob: TherapyMetricState) {
+        let expires = date.addingTimeInterval(Self.freshnessWindow)
+        let iobState = TherapyMetricState(amount: iob, source: .remote, referenceDate: date, expiresAt: expires, effectiveAmount: eiob)
+        let cobState = cob.map { TherapyMetricState(amount: $0, source: .remote, referenceDate: date, expiresAt: expires) }
+            ?? TherapyMetricState(amount: nil, source: .remote, referenceDate: date, reason: .disabled)
+        return (iobState, cobState)
+    }
+
+    /// The newest document of a devicestatus response that carries the `jugglucong` object with a
+    /// plausible IOB, or nil. Documents of other uploaders (loops, battery, forecast) have no such
+    /// object and are ignored.
+    static func parseNewest(_ data: Data) -> ExperimentalRemoteIob? {
+        guard let documents = (try? JSONSerialization.jsonObject(with: data)) as? [Any] else { return nil }
+        var newest: ExperimentalRemoteIob?
+        for case let document as [String: Any] in documents {
+            guard let parsed = parse(document), newest.map({ parsed.date > $0.date }) ?? true else { continue }
+            newest = parsed
+        }
+        return newest
+    }
+
+    static func parse(_ document: [String: Any]) -> ExperimentalRemoteIob? {
+        guard let block = document[ExperimentalNightscoutIob.namespace] as? [String: Any],
+              let iob = number(block["iob"]), unitsRange.contains(iob),
+              let date = timestamp(of: document) else { return nil }
+        return ExperimentalRemoteIob(iob: iob,
+                                     eiob: number(block["eiob"]).flatMap { unitsRange.contains($0) ? $0 : nil },
+                                     cob: number(block["cob"]).flatMap { gramsRange.contains($0) ? $0 : nil },
+                                     date: date)
+    }
+
+    /// `openaps.iob.timestamp`, else `created_at`, else `mills`.
+    private static func timestamp(of document: [String: Any]) -> Date? {
+        if let stamp = ((document["openaps"] as? [String: Any])?["iob"] as? [String: Any])?["timestamp"] as? String,
+           let date = isoDate(stamp) { return date }
+        if let stamp = document["created_at"] as? String, let date = isoDate(stamp) { return date }
+        if let mills = number(document["mills"]), mills > 0 { return Date(timeIntervalSince1970: mills / 1000) }
+        return nil
+    }
+
+    private static func isoDate(_ text: String) -> Date? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        return ISO8601DateFormatter.withFractionalSeconds.date(from: trimmed) ?? ISO8601DateFormatter.withoutFractionalSeconds.date(from: trimmed)
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        let result: Double?
+        if let number = value as? NSNumber {
+            result = CFGetTypeID(number) == CFBooleanGetTypeID() ? nil : number.doubleValue
+        } else if let text = value as? String {
+            result = Double(text.trimmingCharacters(in: .whitespaces))
+        } else {
+            result = nil
+        }
+        return result.flatMap { $0.isFinite ? $0 : nil }
+    }
+}
+
+/// The newest `ExperimentalRemoteIob` a poll has found. Held in memory only: a restart starts with
+/// none and the next poll fills it.
+final class ExperimentalRemoteIobStore: @unchecked Sendable {
+    static let shared = ExperimentalRemoteIobStore()
+
+    private let lock = NSLock()
+    private var latest: ExperimentalRemoteIob?
+
+    init() {}
+
+    /// Keeps the previous document when a poll found none: its window retires it by itself, and
+    /// one failed or empty fetch must not flip what Home shows.
+    func update(_ remote: ExperimentalRemoteIob?) {
+        guard let remote else { return }
+        lock.lock()
+        let changed = latest != remote
+        latest = remote
+        lock.unlock()
+        if changed { Self.announce() }
+    }
+
+    func clear() {
+        lock.lock()
+        let hadValue = latest != nil
+        latest = nil
+        lock.unlock()
+        if hadValue { Self.announce() }
+    }
+
+    /// The stored document while it is inside its window, else nil.
+    func fresh(at now: Date) -> ExperimentalRemoteIob? {
+        lock.lock()
+        defer { lock.unlock() }
+        return latest.flatMap { $0.isFresh(at: now) ? $0 : nil }
+    }
+
+    /// Home recalculates its IOB and COB row when the therapy metrics change.
+    private static func announce() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: TherapyMetricsManager.changed, object: TherapyMetricsManager.shared)
+        }
+    }
+}
+
+extension DataFlowPolicy {
+    /// This phone reads its glucose from Nightscout and neither follows an AID's status (which owns
+    /// IOB and COB) nor takes pump data from CareLink, and the user turned the follow switch on.
+    func showsRemoteIob(enabled: Bool) -> Bool {
+        enabled && importsGlucoseFromNightscout && !importsStatusFromNightscout && !importsTherapyFromCareLink
+    }
+
+    /// The same settings with no remote therapy source: only treatments logged on this phone count.
+    var localTreatmentsOnly: DataFlowPolicy {
+        DataFlowPolicy(isMaster: isMaster, followerDataSource: followerDataSource, therapyDataSourceSelection: .none,
+                       nightscoutEnabled: nightscoutEnabled, masterUploadsGlucoseToNightscout: masterUploadsGlucoseToNightscout,
+                       followerUploadsGlucoseToNightscout: followerUploadsGlucoseToNightscout, nightscoutFollowType: nightscoutFollowType)
     }
 }
 

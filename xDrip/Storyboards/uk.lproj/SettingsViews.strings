@@ -856,6 +856,18 @@
 "experimental.inspectorMissing" = "немає показника";
 "experimental.predictionNightscout" = "Відвантажувати в Nightscout";
 "experimental.predictionNightscoutFooter" = "Кожні п’ять хвилин прогноз відвантажується як devicestatus у форматі OpenAPS, як це робить AAPS, тож Nightscout показує його лініями прогнозу (увімкніть плагін openaps). Недоступно, поки xDrip стежить за статусом AID із Nightscout. Болюси також передають вибраний інсулін у нотатках, а вуглеводи — білки й жири.";
+"experimental.nightscoutIob" = "IOB і COB через Nightscout";
+"experimental.nightscoutIobIntroduction" = "Експериментально. Телефон, на якому ведуться записи лікування, може відвантажувати в Nightscout активний інсулін і активні вуглеводи, а телефон, що стежить за Nightscout, може їх показувати. Формат — як у JugglucoNG, тож обидва застосунки можуть стежити один за одним.";
+"experimental.nightscoutIobUpload" = "Відвантажувати IOB і COB";
+"experimental.nightscoutIobFollow" = "Показувати IOB і COB основного телефона";
+"experimental.nightscoutIobFooter" = "Відвантаження надсилає активний інсулін (IOB), частку, що діє зараз (eIOB), і активні вуглеводи (COB) кожні п’ять хвилин, поки є активний інсулін або змінюється значення, і кожні десять хвилин, поки всі значення нульові. Вони обчислюються з записів лікування на цьому телефоні та кривих дії інсуліну, лише коли за останні 24 години записано дозу швидкого інсуліну. Недоступно, поки xDrip стежить за статусом AID із Nightscout.";
+"experimental.nightscoutIobFollowFooter" = "Показ IOB і COB основного телефона призначений для телефона, що стежить за Nightscout і не має власних записів лікування, з яких їх можна обчислити. Він показує найновіше відвантаження, молодше за 15 хвилин, із позначкою «Віддалений», лише на головному екрані. Телефон, що має власні записи лікування, залишає власні значення, а віддалені й локальні значення ніколи не показуються разом.";
+"experimental.remoteIobTitle" = "Віддалений IOB";
+"experimental.remoteCobTitle" = "Віддалений COB";
+"experimental.remoteIobAccessibility" = "Активний інсулін з основного телефона";
+"experimental.remoteCobAccessibility" = "Активні вуглеводи з основного телефона";
+"experimental.remoteIobSource" = "З основного телефона через Nightscout";
+"experimental.remoteIobFooter" = "На цьому телефоні немає власних записів лікування, з яких це можна обчислити. Значення показуються, лише поки останнє відвантаження основного телефона молодше за 15 хвилин.";
 
 /* Fork: Ukrainian translation completed */
 "experimental.chartCursor" = "Лінійка на графіку";

@@ -41,6 +41,12 @@ extension SettingsViewGroupedSettingsViewModel {
                     settingsScreen: { ExperimentalSettingsViewModel.metersScreen }
                 ),
                 SettingsGroupedRow(
+                    id: "experimental.nightscoutIob",
+                    title: ExperimentalTexts.text("nightscoutIob", "IOB and COB through Nightscout"),
+                    detail: { UserDefaults.standard.experimentalNightscoutIobUpload || UserDefaults.standard.experimentalNightscoutIobFollow ? Texts_Common.on : Texts_Common.off },
+                    settingsScreen: { ExperimentalSettingsViewModel.nightscoutIobScreen }
+                ),
+                SettingsGroupedRow(
                     id: "experimental.alerts",
                     title: ExperimentalTexts.text("alerts", "Alarms"),
                     settingsScreen: { ExperimentalSettingsViewModel.alertsScreen }
@@ -66,7 +72,7 @@ extension SettingsViewGroupedSettingsViewModel {
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving, alerts, quietWindow, doseHints, restricted, pens, meters }
+    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, nightscoutIob, insulins, powerSaving, alerts, quietWindow, doseHints, restricted, pens, meters }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
@@ -77,6 +83,12 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                      ExperimentalSettingsViewModel(group: .predictionAlert), ExperimentalSettingsViewModel(group: .predictionAccuracy),
                                      ExperimentalSettingsViewModel(group: .predictionNightscout),
                                      ExperimentalSettingsViewModel(group: .doseHints)] })
+    }
+
+    static var nightscoutIobScreen: SettingsScreen {
+        SettingsScreen(title: ExperimentalTexts.text("nightscoutIob", "IOB and COB through Nightscout"),
+                       introduction: { ExperimentalTexts.text("nightscoutIobIntroduction", "Experimental. The phone that logs the treatments can upload its insulin on board and carbs on board to Nightscout, and a phone that follows Nightscout can show them. The layout is JugglucoNG's, so the two apps can follow each other.") },
+                       providers: { [ExperimentalSettingsViewModel(group: .nightscoutIob)] })
     }
 
     static var insulinScreen: SettingsScreen {
@@ -319,6 +331,18 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                             control: .toggle(isOn: { UserDefaults.standard.experimentalNightscoutPredictionEnabled },
                                              setIsOn: { UserDefaults.standard.experimentalNightscoutPredictionEnabled = $0 }),
                             isEnabled: !defaults.dataFlowPolicy.importsStatusFromNightscout)
+            ]
+        case .nightscoutIob:
+            let policy = defaults.dataFlowPolicy
+            return [
+                SettingsRow(id: "experimental.nightscoutIob.upload", title: ExperimentalTexts.text("nightscoutIobUpload", "Upload IOB and COB"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalNightscoutIobUpload },
+                                             setIsOn: { UserDefaults.standard.experimentalNightscoutIobUpload = $0 }),
+                            isEnabled: !policy.importsStatusFromNightscout),
+                SettingsRow(id: "experimental.nightscoutIob.follow", title: ExperimentalTexts.text("nightscoutIobFollow", "Show the main phone's IOB and COB"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalNightscoutIobFollow },
+                                             setIsOn: { UserDefaults.standard.experimentalNightscoutIobFollow = $0 }),
+                            isEnabled: policy.importsGlucoseFromNightscout && !policy.importsStatusFromNightscout)
             ]
         case .predictionAccuracy:
             return [
@@ -607,7 +631,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
 
     func sectionTitle() -> String? {
         switch group {
-        case .predictionMain, .insulins, .powerSaving, .alerts, .restricted, .pens, .meters: return nil
+        case .predictionMain, .insulins, .powerSaving, .alerts, .restricted, .pens, .meters, .nightscoutIob: return nil
         case .quietWindow: return ExperimentalTexts.text("quietWindow", "Quiet window")
         case .doseHints: return ExperimentalTexts.text("doseHintsTitle", "Dose hints")
         case .predictionAdaptive: return ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction")
@@ -636,6 +660,9 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         case .predictionAccuracy:
             return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
                 + "\n\n" + ExperimentalTexts.text("predictionRangeFooter", "Show likely range draws a faint band around the forecast: where glucose ended up eight times in ten after this kind of forecast, from the recorded errors at 15, 30, 60 and 120 minutes (beyond two hours it keeps widening as an estimate). It appears once every horizon has at least 36 compared forecasts and is updated every hour.")
+        case .nightscoutIob:
+            return ExperimentalTexts.text("nightscoutIobFooter", "Upload sends the insulin on board (IOB), how much of it is acting now (eIOB) and the carbs on board (COB) every five minutes while insulin is on board or a value changes, and every ten minutes while everything is zero. They come from the treatments logged on this phone and its insulin curves, only while a rapid insulin dose of the last 24 hours is logged. Not available while xDrip follows an AID's status from Nightscout.")
+                + "\n\n" + ExperimentalTexts.text("nightscoutIobFollowFooter", "Show the main phone's IOB and COB is for a phone that follows Nightscout and has no treatments of its own to work them out from. It shows the newest upload that is under 15 minutes old, labelled Remote, on the Home screen only. A phone that has its own treatments keeps its own numbers, and remote and local values are never shown together.")
         case .restricted, .pens, .meters: return nil
         case .quietWindow:
             return ExperimentalTexts.text("quietFooter", "For the cinema or a lecture: alarms are still raised and shown, only their sound (and, with Notification only, vibration) is held back. The window always ends, after 24 hours at the most. An alarm that stays raised for the break-through time sounds anyway: a low always, the other alarms as chosen above. Snoozes and thresholds work as usual.")

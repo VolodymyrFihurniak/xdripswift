@@ -63,8 +63,9 @@ struct RootHomeLoopView: View {
                 }
 
                 if state.showsCOB {
+                    // "Remote COB" needs more room than "COB" does.
                     metricButton(isIOB: false)
-                        .frame(width: Layout.inlineMetricWidth, alignment: .leading)
+                        .frame(width: state.cob.isRemote ? nil : Layout.inlineMetricWidth, alignment: .leading)
                 }
 
                 if state.showsAIDStatus {
@@ -96,12 +97,15 @@ struct RootHomeLoopView: View {
     private func metricButton(isIOB: Bool) -> some View {
         let metric = isIOB ? state.therapyMetrics?.iob : state.therapyMetrics?.cob
         return Button {
-            if metric?.source == .local { selectedMetric = isIOB; showsMetricDetails = true }
+            if metric?.source == .local || metric?.source == .remote { selectedMetric = isIOB; showsMetricDetails = true }
             else { actions.showAIDStatus() }
         } label: {
             RootHomeInlineMetricView(metric: isIOB ? state.iob : state.cob, valueOpacity: state.isHistorical.rootHomeHistoricalValueOpacity)
         }
-        .accessibilityLabel(metric?.accessibilityName(isIOB: isIOB) ?? (isIOB ? "IOB" : "COB"))
+        .accessibilityLabel(metric?.source == .remote
+            ? ExperimentalTexts.text(isIOB ? "remoteIobAccessibility" : "remoteCobAccessibility",
+                                     isIOB ? "Insulin on board from the main phone" : "Carbohydrates on board from the main phone")
+            : metric?.accessibilityName(isIOB: isIOB) ?? (isIOB ? "IOB" : "COB"))
         .accessibilityValue(isIOB ? state.iob.value : state.cob.value)
     }
 

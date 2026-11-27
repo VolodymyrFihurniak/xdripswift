@@ -407,6 +407,296 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertNil(plain["iob"])
     }
 
+    // MARK: IOB and COB through Nightscout (JugglucoNG NightscoutIobDeviceStatusTests and
+    // NightscoutFollowerDeviceStatusTests). Expected values come from a Python port of the same
+    // arithmetic: two-decimal rounding, the cadence, ISO times and the aspart curve of
+    // InsulinCurveCatalogue (IOB and eIOB of a 6 U dose 30 minutes ago: 5.491386 and 4.802839).
+
+    private func values(_ iob: Double, _ eiob: Double? = nil, _ cob: Double? = nil) -> ExperimentalNightscoutIob.Values {
+        ExperimentalNightscoutIob.Values(iob: iob, eiob: eiob, cob: cob)
+    }
+
+    func testIobDeviceStatusKeepsClassicIobInTheOpenapsContainerAndTheRestInItsOwnObject() throws {
+        let status = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(1.8, 1.5, 24)))
+        XCTAssertEqual(status["device"] as? String, "xDrip4iOS")
+        XCTAssertEqual(status["created_at"] as? String, "2027-01-15T08:00:00.000Z")
+        let openaps = try XCTUnwrap(status["openaps"] as? [String: Any])
+        let iob = try XCTUnwrap(openaps["iob"] as? [String: Any])
+        XCTAssertEqual(iob["iob"] as? Double, 1.8)
+        XCTAssertEqual(iob["timestamp"] as? String, "2027-01-15T08:00:00.000Z")
+        // The standard container stays the classic-IOB contract: no eIOB, COB, activity or basal IOB.
+        for absent in ["eiob", "cob", "activity", "basaliob"] { XCTAssertNil(iob[absent], absent) }
+        XCTAssertNil(openaps["suggested"])
+        let own = try XCTUnwrap(status["jugglucong"] as? [String: Any])
+        XCTAssertEqual(own["iob"] as? Double, 1.8)
+        XCTAssertEqual(own["eiob"] as? Double, 1.5)
+        XCTAssertEqual(own["cob"] as? Double, 24)
+    }
+
+    func testIobDeviceStatusRoundsToTwoDecimalsAndLeavesOutWhatIsMissing() throws {
+        let rounded = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(1.2345, 0.9876, 17.549)))
+        let own = try XCTUnwrap(rounded["jugglucong"] as? [String: Any])
+        XCTAssertEqual(own["iob"] as? Double, 1.23)
+        XCTAssertEqual(own["eiob"] as? Double, 0.99)
+        XCTAssertEqual(own["cob"] as? Double, 17.55)
+        let sparse = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(1.8)))
+        XCTAssertNil((sparse["jugglucong"] as? [String: Any])?["eiob"])
+        XCTAssertNil((sparse["jugglucong"] as? [String: Any])?["cob"])
+        // Not finite means not reported, never invalid JSON.
+        let infinite = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(1.8, .infinity, -.infinity)))
+        XCTAssertNil((infinite["jugglucong"] as? [String: Any])?["eiob"])
+        XCTAssertNil((infinite["jugglucong"] as? [String: Any])?["cob"])
+        // Without classic IOB the document would carry nothing Nightscout can use.
+        XCTAssertNil(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(.nan, 1, 24)))
+        XCTAssertNil(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(.infinity)))
+    }
+
+    func testIobDeviceStatusPassesInsulinUnitsThroughWithoutGlucoseUnitConversion() throws {
+        let status = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(18)))
+        XCTAssertEqual(((status["openaps"] as? [String: Any])?["iob"] as? [String: Any])?["iob"] as? Double, 18)
+    }
+
+    private func upload(after elapsed: TimeInterval, _ now: ExperimentalNightscoutIob.Values, last: ExperimentalNightscoutIob.Values) -> Bool {
+        ExperimentalNightscoutIob.shouldUpload(now: start.addingTimeInterval(elapsed), lastUpload: start, values: now, lastValues: last)
+    }
+
+    func testIobUploadCadence() {
+        XCTAssertTrue(ExperimentalNightscoutIob.shouldUpload(now: start, lastUpload: nil, values: values(1.8, 1.5, 0), lastValues: nil))
+        // Moving values: at most every five minutes.
+        XCTAssertFalse(upload(after: 299, values(1.6, 1.28, 0), last: values(1.8, 1.5, 0)))
+        XCTAssertTrue(upload(after: 300, values(1.6, 1.28, 0), last: values(1.8, 1.5, 0)))
+        // Insulin on board keeps the fast cadence even when the rounded values did not move.
+        XCTAssertTrue(upload(after: 300, values(1.8, 1.44, 0), last: values(1.8, 1.44, 0)))
+        // Idle at zero: every ten minutes.
+        XCTAssertFalse(upload(after: 300, values(0, 0, 0), last: values(0, 0, 0)))
+        XCTAssertFalse(upload(after: 599, values(0, 0, 0), last: values(0, 0, 0)))
+        XCTAssertTrue(upload(after: 600, values(0, 0, 0), last: values(0, 0, 0)))
+        // Carbs moving at zero insulin still count, jitter under the 0.01 quantum does not.
+        XCTAssertTrue(upload(after: 300, values(0, 0, 12), last: values(0, 0, 24)))
+        XCTAssertFalse(upload(after: 300, values(0, 0, 24.001), last: values(0, 0, 24.004)))
+        // A value appearing or disappearing is a change.
+        XCTAssertTrue(upload(after: 300, values(0, 0, 0), last: values(0, 0, nil)))
+        // A clock that moved backwards makes the next upload due instead of blocking it.
+        XCTAssertTrue(upload(after: -5, values(0, 0, 0), last: values(0, 0, 0)))
+    }
+
+    func testIobFastIntervalGateMatchesTheCadence() {
+        XCTAssertTrue(ExperimentalNightscoutIob.fastIntervalElapsed(now: start, lastUpload: nil))
+        XCTAssertFalse(ExperimentalNightscoutIob.fastIntervalElapsed(now: start.addingTimeInterval(299), lastUpload: start))
+        XCTAssertTrue(ExperimentalNightscoutIob.fastIntervalElapsed(now: start.addingTimeInterval(300), lastUpload: start))
+        XCTAssertTrue(ExperimentalNightscoutIob.fastIntervalElapsed(now: start.addingTimeInterval(-1), lastUpload: start))
+    }
+
+    private func bolus(_ units: Double, minutesAgo: Double, notes: String? = nil) -> ExperimentalTreatment {
+        ExperimentalTreatment(date: start.addingTimeInterval(-minutesAgo * 60), amount: units, kind: .bolus, notes: notes)
+    }
+
+    func testIobSnapshotIsUnavailableWithoutARapidInsulinDose() {
+        let model = ExperimentalPredictionModel()
+        let carbs = ExperimentalTreatment(date: start, amount: 35, kind: .carbs, notes: nil)
+        let basal = ExperimentalTreatment(date: start, amount: 20, kind: .basalInjection, notes: nil)
+        XCTAssertNil(ExperimentalNightscoutIob.snapshot(treatments: [], model: model, now: start))
+        XCTAssertNil(ExperimentalNightscoutIob.snapshot(treatments: [carbs], model: model, now: start))
+        XCTAssertNil(ExperimentalNightscoutIob.snapshot(treatments: [basal, carbs], model: model, now: start))
+        // A dose of the next minutes does not exist yet; one older than the 24-hour window no longer counts.
+        XCTAssertNil(ExperimentalNightscoutIob.snapshot(treatments: [bolus(6, minutesAgo: -10)], model: model, now: start))
+        XCTAssertNil(ExperimentalNightscoutIob.snapshot(treatments: [bolus(6, minutesAgo: 25 * 60)], model: model, now: start))
+    }
+
+    func testIobSnapshotReportsClassicAndEffectiveInsulinAndCarbs() throws {
+        let model = ExperimentalPredictionModel()
+        // At the dose all of it is still to act and none of it acts yet.
+        let atDose = try XCTUnwrap(ExperimentalNightscoutIob.snapshot(treatments: [bolus(6, minutesAgo: 0)], model: model, now: start))
+        XCTAssertEqual(atDose.iob, 6, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(atDose.eiob), 0, accuracy: 1e-9)
+        XCTAssertNil(atDose.cob)
+        // Aspart, 6 U 30 minutes ago (Python port).
+        let later = try XCTUnwrap(ExperimentalNightscoutIob.snapshot(treatments: [bolus(6, minutesAgo: 30)], model: model, now: start))
+        XCTAssertEqual(later.iob, 5.491386, accuracy: 1e-4)
+        XCTAssertEqual(try XCTUnwrap(later.eiob), 4.802839, accuracy: 1e-4)
+        // Two doses and a meal: 6 U an hour ago and 3 U with 35 g half an hour ago. 35 g at 35 g/h is
+        // half absorbed after 30 minutes. A basal injection is not part of the rapid insulin total.
+        let treatments = [bolus(6, minutesAgo: 60), bolus(3, minutesAgo: 30),
+                          ExperimentalTreatment(date: start.addingTimeInterval(-1800), amount: 35, kind: .carbs, notes: nil),
+                          ExperimentalTreatment(date: start.addingTimeInterval(-1800), amount: 20, kind: .basalInjection, notes: nil)]
+        let both = try XCTUnwrap(ExperimentalNightscoutIob.snapshot(treatments: treatments, model: model, now: start))
+        XCTAssertEqual(both.iob, 7.255006, accuracy: 1e-4)
+        XCTAssertEqual(try XCTUnwrap(both.eiob), 6.802927, accuracy: 1e-4)
+        XCTAssertEqual(try XCTUnwrap(both.cob), 17.5, accuracy: 1e-9)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(both.eiob), both.iob)
+    }
+
+    func testIobSnapshotOfAFinishedDoseStillReportsZero() throws {
+        // The curve ends after six hours; the dose is inside the 24-hour window, so the model is available.
+        let finished = try XCTUnwrap(ExperimentalNightscoutIob.snapshot(treatments: [bolus(6, minutesAgo: 7 * 60)], model: ExperimentalPredictionModel(), now: start))
+        XCTAssertEqual(finished.iob, 0, accuracy: 1e-12)
+        XCTAssertEqual(try XCTUnwrap(finished.eiob), 0, accuracy: 1e-12)
+    }
+
+    func testIobUploadReadsOnlyTreatmentsLoggedOnThisPhone() throws {
+        let coreDataManager = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
+        let context = coreDataManager.mainManagedObjectContext
+        let hourAgo = start.addingTimeInterval(-3600)
+        // Logged here: a nil remote event type. Imported: an id and the event type Nightscout reported.
+        _ = TreatmentEntry(date: hourAgo, value: 4, treatmentType: .Insulin, nightscoutEventType: nil, enteredBy: "xDrip4iOS", nsManagedObjectContext: context)
+        _ = TreatmentEntry(id: "imported", date: hourAgo, value: 7, treatmentType: .Insulin,
+                           nightscoutEventType: "Correction Bolus", enteredBy: "Nightscout", nsManagedObjectContext: context)
+        let policy = DataFlowPolicy(isMaster: true, followerDataSource: .nightscout, therapyDataSourceSelection: .nightscout,
+                                    nightscoutEnabled: true, masterUploadsGlucoseToNightscout: true,
+                                    followerUploadsGlucoseToNightscout: false, nightscoutFollowType: .none)
+        var everything: [ExperimentalTreatment] = []
+        context.performAndWait {
+            everything = ExperimentalTreatment.fetch(from: start.addingTimeInterval(-7200), to: start, in: context, policy: policy) ?? []
+        }
+        XCTAssertEqual(everything.map(\.amount).sorted(), [4, 7])
+        let local = ExperimentalNightscoutIob.localTreatments(in: context, now: start, policy: policy)
+        XCTAssertEqual(local.map(\.amount), [4])
+    }
+
+    // The follower's side
+
+    private let remoteStamp = "2026-08-03T12:00:00.000Z"
+    /// Python: datetime(2026, 8, 3, 12, 0, tzinfo=utc).timestamp()
+    private let remoteDate = Date(timeIntervalSince1970: 1_785_758_400)
+
+    private func uploaderDocument(createdAt: String? = nil, openapsStamp: String? = "2026-08-03T12:00:00.000Z",
+                                  eiob: String = ",\"eiob\":1.25", cob: String = ",\"cob\":18.00") -> String {
+        let openaps = openapsStamp.map { "\"openaps\":{\"iob\":{\"iob\":2.50,\"timestamp\":\"\($0)\"}}," } ?? ""
+        return "{\"device\":\"xDrip4iOS\",\"created_at\":\"\(createdAt ?? remoteStamp)\",\(openaps)\"jugglucong\":{\"iob\":2.50\(eiob)\(cob)}}"
+    }
+
+    private func parseRemote(_ body: String) -> ExperimentalRemoteIob? {
+        ExperimentalRemoteIob.parseNewest(Data(body.utf8))
+    }
+
+    func testRemoteIobParsesTheUploaderDocument() throws {
+        let remote = try XCTUnwrap(parseRemote("[\(uploaderDocument())]"))
+        XCTAssertEqual(remote.iob, 2.5, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(remote.eiob), 1.25, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(remote.cob), 18, accuracy: 1e-9)
+        XCTAssertEqual(remote.date, remoteDate)
+    }
+
+    func testRemoteIobIgnoresDocumentsOfOtherUploaders() {
+        // A loop publishes openaps.iob but no jugglucong object; a battery document has neither.
+        let loop = "[{\"device\":\"loop://iPhone\",\"created_at\":\"\(remoteStamp)\",\"openaps\":{\"iob\":{\"iob\":3.1,\"timestamp\":\"\(remoteStamp)\"}}}]"
+        XCTAssertNil(parseRemote(loop))
+        XCTAssertNil(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"uploader\":{\"battery\":80}}]"))
+    }
+
+    func testRemoteIobPicksTheNewestDocumentWhateverTheOrder() throws {
+        // Python: 11:40 is 1785757200.
+        let older = uploaderDocument(createdAt: "2026-08-03T11:40:00.000Z", openapsStamp: "2026-08-03T11:40:00.000Z")
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[\(older),\(uploaderDocument())]")).date, remoteDate)
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[\(uploaderDocument()),\(older)]")).date, remoteDate)
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[\(older)]")).date, Date(timeIntervalSince1970: 1_785_757_200))
+    }
+
+    func testRemoteIobTimestampComesFromOpenapsThenCreatedAtThenMills() throws {
+        // created_at 12:05 (Python: 1785758700) loses to the openaps timestamp 12:00.
+        let both = uploaderDocument(createdAt: "2026-08-03T12:05:00.000Z", openapsStamp: remoteStamp)
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[\(both)]")).date, remoteDate)
+        let createdOnly = uploaderDocument(openapsStamp: nil)
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[\(createdOnly)]")).date, remoteDate)
+        let millsOnly = "[{\"mills\":1785758400000,\"jugglucong\":{\"iob\":1.0}}]"
+        XCTAssertEqual(try XCTUnwrap(parseRemote(millsOnly)).date, remoteDate)
+        // Without fractional seconds.
+        let plain = "[{\"created_at\":\"2026-08-03T12:00:00Z\",\"jugglucong\":{\"iob\":1.0}}]"
+        XCTAssertEqual(try XCTUnwrap(parseRemote(plain)).date, remoteDate)
+    }
+
+    func testRemoteIobMissingOptionalValuesAreNil() throws {
+        let remote = try XCTUnwrap(parseRemote("[\(uploaderDocument(eiob: "", cob: ""))]"))
+        XCTAssertNil(remote.eiob)
+        XCTAssertNil(remote.cob)
+        XCTAssertEqual(remote.iob, 2.5, accuracy: 1e-9)
+    }
+
+    func testRemoteIobRejectsDocumentsWithoutAPlausibleIob() throws {
+        XCTAssertNil(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"eiob\":1.0,\"cob\":10.0}}]"))
+        XCTAssertNil(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"iob\":1e100}}]"))
+        XCTAssertNil(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"iob\":-2}}]"))
+        XCTAssertNil(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"iob\":true}}]"))
+        // An implausible optional value is left out, the document stays.
+        let remote = try XCTUnwrap(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"iob\":2.5,\"eiob\":1e100,\"cob\":-5}}]"))
+        XCTAssertNil(remote.eiob)
+        XCTAssertNil(remote.cob)
+        // A number sent as text still reads.
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"iob\":\"1.5\"}}]")).iob, 1.5, accuracy: 1e-9)
+    }
+
+    func testRemoteIobMalformedBodiesParseToNothing() {
+        for body in ["not json", "{}", "[]", "[1, 2]", "[{\"created_at\":\"nonsense\",\"jugglucong\":{\"iob\":1.0}}]"] {
+            XCTAssertNil(parseRemote(body), body)
+        }
+    }
+
+    func testRemoteIobReadsBackWhatThisAppUploads() throws {
+        let status = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(1.8, 1.5, 24)))
+        let body = try JSONSerialization.data(withJSONObject: [status])
+        let remote = try XCTUnwrap(ExperimentalRemoteIob.parseNewest(body))
+        XCTAssertEqual(remote.iob, 1.8, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(remote.eiob), 1.5, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(remote.cob), 24, accuracy: 1e-9)
+        XCTAssertEqual(remote.date, start)
+    }
+
+    func testRemoteIobIsFreshForFifteenMinutes() {
+        let remote = ExperimentalRemoteIob(iob: 2, eiob: nil, cob: nil, date: remoteDate)
+        XCTAssertTrue(remote.isFresh(at: remoteDate))
+        XCTAssertTrue(remote.isFresh(at: remoteDate.addingTimeInterval(899.999)))
+        XCTAssertFalse(remote.isFresh(at: remoteDate.addingTimeInterval(900)))
+        // A clock slightly behind the uploader's is tolerated, one far behind is not trusted.
+        XCTAssertTrue(remote.isFresh(at: remoteDate.addingTimeInterval(-60)))
+        XCTAssertFalse(remote.isFresh(at: remoteDate.addingTimeInterval(-61)))
+    }
+
+    func testRemoteIobStoreKeepsTheLastDocumentUntilItExpires() {
+        let store = ExperimentalRemoteIobStore()
+        XCTAssertNil(store.fresh(at: remoteDate))
+        store.update(ExperimentalRemoteIob(iob: 2, eiob: 1, cob: 5, date: remoteDate))
+        XCTAssertEqual(store.fresh(at: remoteDate.addingTimeInterval(60))?.iob, 2)
+        // A poll that found nothing keeps the previous document; its window retires it.
+        store.update(nil)
+        XCTAssertNotNil(store.fresh(at: remoteDate.addingTimeInterval(600)))
+        XCTAssertNil(store.fresh(at: remoteDate.addingTimeInterval(900)))
+        // A newer upload replaces it with its own values.
+        store.update(ExperimentalRemoteIob(iob: 0.5, eiob: nil, cob: nil, date: remoteDate.addingTimeInterval(3600)))
+        XCTAssertEqual(store.fresh(at: remoteDate.addingTimeInterval(3600))?.iob, 0.5)
+        XCTAssertNil(store.fresh(at: remoteDate.addingTimeInterval(3600))?.eiob)
+        store.clear()
+        XCTAssertNil(store.fresh(at: remoteDate.addingTimeInterval(3600)))
+    }
+
+    func testRemoteIobFollowsOnlyAPhoneThatReadsGlucoseFromNightscoutWithoutAnAID() {
+        func policy(master: Bool = false, source: FollowerDataSourceType = .nightscout, therapy: TherapyDataSourceType = .none,
+                    nightscout: Bool = true, follow: NightscoutFollowType = .none) -> DataFlowPolicy {
+            DataFlowPolicy(isMaster: master, followerDataSource: source, therapyDataSourceSelection: therapy, nightscoutEnabled: nightscout,
+                           masterUploadsGlucoseToNightscout: false, followerUploadsGlucoseToNightscout: false, nightscoutFollowType: follow)
+        }
+        XCTAssertTrue(policy().showsRemoteIob(enabled: true))
+        XCTAssertTrue(policy(therapy: .nightscout).showsRemoteIob(enabled: true))
+        XCTAssertFalse(policy().showsRemoteIob(enabled: false))
+        XCTAssertFalse(policy(master: true).showsRemoteIob(enabled: true))
+        XCTAssertFalse(policy(source: .dexcomShare).showsRemoteIob(enabled: true))
+        XCTAssertFalse(policy(nightscout: false).showsRemoteIob(enabled: true))
+        // An AID's status owns IOB and COB.
+        XCTAssertFalse(policy(therapy: .nightscout, follow: .loop).showsRemoteIob(enabled: true))
+        XCTAssertFalse(policy(therapy: .automatic, follow: .openAPS).showsRemoteIob(enabled: true))
+    }
+
+    func testRemoteIobSwitchesAreOffByDefault() throws {
+        let suite = "RemoteIobDefaults.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertFalse(defaults.experimentalNightscoutIobUpload)
+        XCTAssertFalse(defaults.experimentalNightscoutIobFollow)
+        defaults.experimentalNightscoutIobUpload = true
+        XCTAssertTrue(defaults.bool(forKey: "experimentalNightscoutIobUpload"))
+        defaults.experimentalNightscoutIobFollow = true
+        XCTAssertTrue(defaults.bool(forKey: "experimentalNightscoutIobFollow"))
+    }
+
     func testOverlappingMarkersBecomeOneWithTotalAndCount() {
         func point(_ seconds: TimeInterval, _ value: Double) -> GlucoseChartTreatmentPoint {
             GlucoseChartTreatmentPoint(date: start.addingTimeInterval(seconds), yValue: 100, treatmentValue: value, label: "\(Int(value))", notes: nil, idPrefix: "bolus")
@@ -774,7 +1064,7 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertEqual(sections[index].section().rows.map(\.id),
                        ["experimental.recommended", "experimental.chartStyle", "experimental.chartCursor", "experimental.uncertaintyRibbon",
                         "experimental.sensorDayCounter", "experimental.prediction",
-                        "experimental.insulins", "experimental.pens", "experimental.meters", "experimental.alerts",
+                        "experimental.insulins", "experimental.pens", "experimental.meters", "experimental.nightscoutIob", "experimental.alerts",
                         "experimental.restricted", "experimental.powerSaving"])
     }
 }
