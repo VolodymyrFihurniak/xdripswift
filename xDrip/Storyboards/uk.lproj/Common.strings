@@ -235,6 +235,10 @@
 "common_statistics_riseAfterBreakfast" = "Після сніданку глюкоза підіймалася в середньому на %@ (прийомів їжі: %ld)";
 "common_statistics_riseAfterLunch" = "Після обіду глюкоза підіймалася в середньому на %@ (прийомів їжі: %ld)";
 "common_statistics_riseAfterDinner" = "Після вечері глюкоза підіймалася в середньому на %@ (прийомів їжі: %ld)";
+"common_statistics_skinTemperature" = "Температура шкіри";
+"common_statistics_skinTemperatureFooter" = "Вимірює сенсор за останні 48 годин. Лише для інформації: на ваші показники вона не впливає.";
+"common_statistics_minimum" = "Мін";
+"common_statistics_maximum" = "Макс";
 "common_statistics_veryHigh" = "Дуже висока";
 "common_statistics_veryLow" = "Дуже низька";
 "common_statistics_night" = "Ніч";

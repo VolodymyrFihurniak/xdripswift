@@ -65,6 +65,11 @@ struct Sibionics2ReadingBatchProcessor {
         let uniqueReadings = uniqueByIndex.values.sorted { $0.index < $1.index }
         guard let firstReading = uniqueReadings.first else { return [] }
 
+        // Skin temperature rides along with every minute, live, from history and from a journal
+        // replay alike; the store keys it by time, so a minute seen twice is counted once.
+        SibionicsSkinTemperatureStore.record(uniqueReadings.compactMap(SibionicsSkinTemperatureStore.sample(from:)),
+                                             for: deviceIdentifier)
+
         let inferredStartDate = Self.sensorStartDate(for: firstReading)
         let didResetSession = shouldResetSession(
             inferredStartDate: inferredStartDate,
@@ -447,6 +452,154 @@ enum SibionicsSourceJournal {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try? bytes.write(to: url, options: .atomic)
             return added.count
+        }
+    }
+}
+
+// MARK: - Skin temperature
+
+/// The skin temperature a Sibionics sensor reports with every minute, for the device screen and the
+/// Statistics temperature card (JugglucoNG `SensorTemperature` and its Statistics temperature card,
+/// fed from the native `temppolls` channel). Display only: nothing here reaches glucose, calibration,
+/// alarms or uploads. One sample per five minutes for the last 48 hours is kept in one small JSON
+/// file per sensor in Application Support.
+enum SibionicsSkinTemperatureStore {
+    struct Sample: Codable, Equatable {
+        let date: Date
+        let celsius: Double
+    }
+
+    struct Summary: Equatable {
+        let minimum: Double
+        let average: Double
+        let maximum: Double
+    }
+
+    /// How far back from the newest sample the history reaches.
+    static let keptFor: TimeInterval = 48 * 60 * 60
+    /// One sample is kept per window this long: the newest one that arrived in it.
+    static let bucketLength: TimeInterval = 5 * 60
+    /// A sample this far ahead of the phone's clock is a clock error, not a measurement.
+    static let futureTolerance: TimeInterval = 10 * 60
+    static let directoryName = "sibionics-temperature"
+    private static let queue = DispatchQueue(label: "sibionics.skin.temperature", qos: .utility)
+    private static var cache: [String: [Sample]] = [:]
+
+    /// JugglucoNG ignores a temperature of zero or less (the sensor's "none") and accepts below 80 °C.
+    static func isPlausible(_ celsius: Double) -> Bool {
+        celsius.isFinite && celsius > 0 && celsius < 80
+    }
+
+    /// The temperature of one minute, rounded to the sensor's 0.1 °C step (a journal keeps it as a
+    /// Float, so a replayed minute reads back as the same value). Nil when the sensor sent none.
+    static func sample(from reading: Sibionics2RawReading) -> Sample? {
+        guard isPlausible(reading.temperatureC) else { return nil }
+        return Sample(date: reading.eventTime, celsius: (reading.temperatureC * 10).rounded() / 10)
+    }
+
+    /// Samples oldest first, one per five-minute window (the newest of the window wins, a later
+    /// sample of the same moment replaces an earlier one), the last 48 hours from the newest
+    /// sample. Merging the same minutes again changes nothing.
+    static func merged(_ existing: [Sample], adding new: [Sample], now: Date) -> [Sample] {
+        var byWindow: [Int64: Sample] = [:]
+        for sample in existing + new where isPlausible(sample.celsius) && sample.date.timeIntervalSince1970 > 0
+            && sample.date.timeIntervalSince(now) <= futureTolerance {
+            let window = Int64((sample.date.timeIntervalSince1970 / bucketLength).rounded(.down))
+            if let held = byWindow[window], held.date > sample.date { continue }
+            byWindow[window] = sample
+        }
+        let sorted = byWindow.values.sorted { $0.date < $1.date }
+        guard let newest = sorted.last else { return [] }
+        return sorted.filter { newest.date.timeIntervalSince($0.date) <= keptFor }
+    }
+
+    static func summary(of samples: [Sample]) -> Summary? {
+        let values = samples.map(\.celsius)
+        guard let minimum = values.min(), let maximum = values.max() else { return nil }
+        return Summary(minimum: minimum, average: values.reduce(0, +) / Double(values.count), maximum: maximum)
+    }
+
+    /// Of several sensors' series, the one that reported last, while that report is inside the
+    /// kept 48 hours; empty otherwise.
+    static func mostRecent(_ series: [[Sample]], now: Date) -> [Sample] {
+        var best: [Sample] = []
+        for candidate in series {
+            guard let newest = candidate.last, now.timeIntervalSince(newest.date) <= keptFor else { continue }
+            if let bestNewest = best.last, bestNewest.date >= newest.date { continue }
+            best = candidate
+        }
+        return best
+    }
+
+    static func text(_ celsius: Double, locale: Locale = .current) -> String {
+        celsius.formatted(.number.locale(locale).precision(.fractionLength(1))) + " °C"
+    }
+
+    // MARK: Files
+
+    static var directoryURL: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent(directoryName, isDirectory: true)
+    }
+
+    static func fileKey(for address: String) -> String {
+        let safe = address.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == "-" }
+        return String(String.UnicodeScalarView(safe))
+    }
+
+    private static func fileURL(forKey key: String) -> URL? {
+        directoryURL?.appendingPathComponent(key + ".json")
+    }
+
+    private static func loadLocked(key: String) -> [Sample] {
+        if let cached = cache[key] { return cached }
+        guard let url = fileURL(forKey: key), let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([Sample].self, from: data) else { return [] }
+        cache[key] = decoded
+        return decoded
+    }
+
+    /// Adds the minutes of one batch for the sensor at `address`. Written in the background.
+    static func record(_ samples: [Sample], for address: String, now: Date = Date()) {
+        let key = fileKey(for: address)
+        guard !samples.isEmpty, !key.isEmpty else { return }
+        queue.async {
+            let held = loadLocked(key: key)
+            let updated = merged(held, adding: samples, now: now)
+            guard updated != held else { return }
+            cache[key] = updated
+            guard let url = fileURL(forKey: key) else { return }
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? JSONEncoder().encode(updated).write(to: url, options: .atomic)
+        }
+    }
+
+    /// The kept history of the sensor at `address`, oldest first.
+    static func samples(for address: String) -> [Sample] {
+        let key = fileKey(for: address)
+        return queue.sync { loadLocked(key: key) }
+    }
+
+    static func latest(for address: String) -> Sample? {
+        samples(for: address).last
+    }
+
+    /// The history of whichever sensor reported last, for Statistics, which does not know the
+    /// active sensor's address.
+    static func activeSeries(now: Date = Date()) -> [Sample] {
+        guard let directory = directoryURL,
+              let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return [] }
+        return queue.sync {
+            mostRecent(names.filter { $0.hasSuffix(".json") }.map { loadLocked(key: String($0.dropLast(5))) }, now: now)
+        }
+    }
+
+    /// Forgets a sensor's history, when the sensor is deleted.
+    static func clear(for address: String) {
+        let key = fileKey(for: address)
+        queue.sync {
+            cache[key] = nil
+            if let url = fileURL(forKey: key) { try? FileManager.default.removeItem(at: url) }
         }
     }
 }

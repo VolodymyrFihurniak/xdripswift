@@ -389,6 +389,22 @@ class Texts_Common {
         return NSLocalizedString("common_statistics_riseAfterDinner", tableName: filename, bundle: Bundle.main, value: "After dinner glucose rose by %@ on average (%ld meals)", comment: "statistics pattern: average rise after dinner")
     }()
 
+    static let statisticsSkinTemperature = {
+        return NSLocalizedString("common_statistics_skinTemperature", tableName: filename, bundle: Bundle.main, value: "Skin temperature", comment: "statistics card title: the temperature a Sibionics sensor measures")
+    }()
+
+    static let statisticsSkinTemperatureFooter = {
+        return NSLocalizedString("common_statistics_skinTemperatureFooter", tableName: filename, bundle: Bundle.main, value: "Measured by the sensor over the last 48 hours. For information only: it does not change your readings.", comment: "statistics skin temperature footer")
+    }()
+
+    static let statisticsMinimum = {
+        return NSLocalizedString("common_statistics_minimum", tableName: filename, bundle: Bundle.main, value: "Min", comment: "statistics: lowest value, short")
+    }()
+
+    static let statisticsMaximum = {
+        return NSLocalizedString("common_statistics_maximum", tableName: filename, bundle: Bundle.main, value: "Max", comment: "statistics: highest value, short")
+    }()
+
     static let statisticsDayPartsNoData = {
         return NSLocalizedString("common_statistics_dayPartsNoData", tableName: filename, bundle: Bundle.main, value: "No readings at these hours.", comment: "statistics day parts without data")
     }()

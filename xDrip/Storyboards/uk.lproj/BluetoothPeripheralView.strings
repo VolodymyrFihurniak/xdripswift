@@ -343,6 +343,7 @@
 "sibionics.deviceInfoFooter" = "Повідомляє сам сенсор через Bluetooth. Рівень заряду (лише Sibionics 2) зчитується під час кожного підключення та кожні шість годин.";
 "sibionics.battery" = "Батарея сенсора";
 "sibionics.notReported" = "Ще не повідомлено";
+"sibionics.skinTemperature" = "Температура шкіри";
 "sibionics.model" = "Модель";
 "sibionics.firmware" = "Прошивка";
 "sibionics.hardware" = "Апаратна версія";

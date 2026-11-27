@@ -1466,3 +1466,191 @@ final class Sibionics2RegistrationAndDeliveryTests: XCTestCase {
     }
 
 }
+
+/// `SibionicsSkinTemperatureStore`. Every expected value comes from a Python port of `merged`
+/// (five-minute windows keyed by epoch time, newest sample of a window wins, 48 hours from the
+/// newest sample, 10 minutes of clock tolerance).
+final class SibionicsSkinTemperatureStoreTests: XCTestCase {
+    /// On a five-minute boundary (1_700_000_100 / 300 = 5_666_667) and long past, so the future
+    /// tolerance never matters for a store that records with the real clock.
+    private let start = Date(timeIntervalSince1970: 1_700_000_100)
+    private let minuteTemperatures = [33.0, 33.1, 33.2, 33.3, 33.4, 33.5, 33.6, 33.7, 33.8, 33.9, 34.0, 34.1]
+
+    private func sample(_ offset: TimeInterval, _ celsius: Double) -> SibionicsSkinTemperatureStore.Sample {
+        SibionicsSkinTemperatureStore.Sample(date: start.addingTimeInterval(offset), celsius: celsius)
+    }
+
+    private func offsets(_ samples: [SibionicsSkinTemperatureStore.Sample]) -> [TimeInterval] {
+        samples.map { $0.date.timeIntervalSince(start) }
+    }
+
+    func testMinutesKeepOneNewestSamplePerFiveMinutesInTimeOrder() {
+        // Minutes 0...11 in a scrambled order: windows 0-4, 5-9 and 10-11 keep minutes 4, 9 and 11.
+        let scrambled = [7, 2, 11, 0, 9, 4, 1, 10, 5, 3, 8, 6]
+        let incoming = scrambled.map { sample(Double($0) * 60, minuteTemperatures[$0]) }
+        let merged = SibionicsSkinTemperatureStore.merged([], adding: incoming, now: start.addingTimeInterval(660))
+        XCTAssertEqual(offsets(merged), [240, 540, 660])
+        XCTAssertEqual(merged.map(\.celsius), [33.4, 33.9, 34.1])
+
+        // The same minutes arriving live, one by one, end up the same.
+        var live: [SibionicsSkinTemperatureStore.Sample] = []
+        for minute in 0..<12 {
+            let next = sample(Double(minute) * 60, minuteTemperatures[minute])
+            live = SibionicsSkinTemperatureStore.merged(live, adding: [next], now: next.date)
+        }
+        XCTAssertEqual(live, merged)
+    }
+
+    func testMergingTheSameMinutesAgainChangesNothing() {
+        let incoming = (0..<12).map { sample(Double($0) * 60, minuteTemperatures[$0]) }
+        let once = SibionicsSkinTemperatureStore.merged([], adding: incoming, now: start.addingTimeInterval(660))
+        let twice = SibionicsSkinTemperatureStore.merged(once, adding: incoming, now: start.addingTimeInterval(660))
+        XCTAssertEqual(twice, once)
+        XCTAssertEqual(SibionicsSkinTemperatureStore.merged(once, adding: once, now: start.addingTimeInterval(660)), once)
+    }
+
+    func testSameMomentIsCountedOnceAndTheLaterSampleWins() {
+        let merged = SibionicsSkinTemperatureStore.merged([sample(60, 33.0)], adding: [sample(60, 34.0)],
+                                                          now: start.addingTimeInterval(60))
+        XCTAssertEqual(merged, [sample(60, 34.0)])
+        // An older sample of the same window never replaces a newer one.
+        let kept = SibionicsSkinTemperatureStore.merged([sample(200, 35.0)], adding: [sample(100, 31.0)],
+                                                        now: start.addingTimeInterval(200))
+        XCTAssertEqual(kept, [sample(200, 35.0)])
+    }
+
+    func testHistoryIsTrimmedTo48HoursFromTheNewestSample() {
+        // 601 samples five minutes apart cover 50 hours; the last 48 hours are 577 of them.
+        let series = (0..<601).map { sample(300 * Double($0), 30 + Double($0 % 20) * 0.1) }
+        let merged = SibionicsSkinTemperatureStore.merged([], adding: series, now: series[600].date)
+        XCTAssertEqual(merged.count, 577)
+        XCTAssertEqual(offsets(merged).first, 7200)
+        XCTAssertEqual(offsets(merged).last, 180_000)
+        XCTAssertEqual(try XCTUnwrap(merged.first).celsius, 30.4, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(merged.last).celsius, 30.0, accuracy: 1e-9)
+
+        // Older stored samples fall out when a much newer one arrives; exactly 48 hours stays.
+        let existing = [sample(0, 33.0), sample(36_000, 33.5)]
+        let adding = [sample(216_000, 34.0), sample(216_000 - 172_800, 31.0), sample(216_000 - 172_801 - 300, 30.0)]
+        let trimmed = SibionicsSkinTemperatureStore.merged(existing, adding: adding, now: start.addingTimeInterval(216_000))
+        XCTAssertEqual(offsets(trimmed), [43_200, 216_000])
+        XCTAssertEqual(trimmed.map(\.celsius), [31.0, 34.0])
+    }
+
+    func testSamplesAheadOfTheClockOrImplausibleAreDropped() {
+        let now = start
+        let future = SibionicsSkinTemperatureStore.merged([], adding: [sample(600, 33.0), sample(601, 34.0)], now: now)
+        XCTAssertEqual(future, [sample(600, 33.0)])
+
+        let incoming = [sample(0, 0), sample(300, 80), sample(600, .nan), sample(900, -1), sample(1200, 79.9),
+                        sample(1500, 0.1), sample(1800, .infinity)]
+        let kept = SibionicsSkinTemperatureStore.merged([], adding: incoming, now: start.addingTimeInterval(1800))
+        XCTAssertEqual(kept, [sample(1200, 79.9), sample(1500, 0.1)])
+    }
+
+    func testSummaryAndMostRecentSeries() throws {
+        let series = [sample(240, 33.4), sample(540, 33.9), sample(660, 34.1)]
+        let summary = try XCTUnwrap(SibionicsSkinTemperatureStore.summary(of: series))
+        XCTAssertEqual(summary.minimum, 33.4)
+        XCTAssertEqual(summary.maximum, 34.1)
+        XCTAssertEqual(summary.average, 33.8, accuracy: 1e-9)
+        XCTAssertNil(SibionicsSkinTemperatureStore.summary(of: []))
+
+        let older = [sample(0, 33.0), sample(300, 33.1)]
+        let newer = [sample(600, 34.0)]
+        let ancient = [sample(-3 * 86_400, 30.0)]
+        let now = start.addingTimeInterval(900)
+        XCTAssertEqual(SibionicsSkinTemperatureStore.mostRecent([older, newer, ancient], now: now), newer)
+        XCTAssertEqual(SibionicsSkinTemperatureStore.mostRecent([ancient], now: now), [])
+        XCTAssertEqual(SibionicsSkinTemperatureStore.mostRecent([], now: now), [])
+        // The newest report counts while it is at most 48 hours old.
+        XCTAssertEqual(SibionicsSkinTemperatureStore.mostRecent([older, newer], now: start.addingTimeInterval(600 + 172_800)), newer)
+        XCTAssertEqual(SibionicsSkinTemperatureStore.mostRecent([older, newer], now: start.addingTimeInterval(601 + 172_800)), [])
+    }
+
+    func testReadingBecomesASampleRoundedToTenthsAndAJournalReplayReadsBackTheSame() throws {
+        func reading(_ celsius: Double) -> Sibionics2RawReading {
+            Sibionics2RawReading(index: 5, eventTime: start, temperatureC: celsius, impedance: 0, rawMmol: 6,
+                                 trend: .notDetermined, reindex: 0)
+        }
+        XCTAssertEqual(SibionicsSkinTemperatureStore.sample(from: reading(33.29999923706055)), sample(0, 33.3))
+        XCTAssertEqual(SibionicsSkinTemperatureStore.sample(from: reading(36.04)), sample(0, 36.0))
+        XCTAssertNil(SibionicsSkinTemperatureStore.sample(from: reading(0)))
+        XCTAssertNil(SibionicsSkinTemperatureStore.sample(from: reading(80)))
+        XCTAssertNil(SibionicsSkinTemperatureStore.sample(from: reading(.nan)))
+
+        // The journal keeps the temperature as a Float; the replayed minute is the same sample.
+        for celsius in [29.3, 31.7, 33.3, 36.0] {
+            let original = reading(celsius)
+            let journaled = SibionicsSourceJournal.reading(from: SibionicsSourceJournal.sample(from: original, variant: .sibionics2))
+            XCTAssertEqual(SibionicsSkinTemperatureStore.sample(from: journaled), SibionicsSkinTemperatureStore.sample(from: original))
+        }
+    }
+
+    func testTextShowsOneDecimalInCelsius() {
+        let english = Locale(identifier: "en_US")
+        XCTAssertEqual(SibionicsSkinTemperatureStore.text(33.3, locale: english), "33.3 °C")
+        XCTAssertEqual(SibionicsSkinTemperatureStore.text(36, locale: english), "36.0 °C")
+    }
+
+    func testStoreKeepsEachSensorInItsOwnFileAndClearForgetsIt() throws {
+        let address = "temperature-test-\(UUID().uuidString)"
+        let other = "temperature-test-\(UUID().uuidString)"
+        defer {
+            SibionicsSkinTemperatureStore.clear(for: address)
+            SibionicsSkinTemperatureStore.clear(for: other)
+        }
+        let incoming = (0..<12).map { sample(Double($0) * 60, minuteTemperatures[$0]) }
+        SibionicsSkinTemperatureStore.record(incoming, for: address, now: start.addingTimeInterval(660))
+        let expected = [sample(240, 33.4), sample(540, 33.9), sample(660, 34.1)]
+        XCTAssertEqual(SibionicsSkinTemperatureStore.samples(for: address), expected)
+        XCTAssertEqual(SibionicsSkinTemperatureStore.latest(for: address), expected.last)
+        XCTAssertTrue(SibionicsSkinTemperatureStore.samples(for: other).isEmpty)
+
+        // The file holds the same list (recording is asynchronous; reading above waited for it).
+        let directory = try XCTUnwrap(SibionicsSkinTemperatureStore.directoryURL)
+        let file = directory.appendingPathComponent(SibionicsSkinTemperatureStore.fileKey(for: address) + ".json")
+        let stored = try JSONDecoder().decode([SibionicsSkinTemperatureStore.Sample].self, from: Data(contentsOf: file))
+        XCTAssertEqual(stored, expected)
+
+        SibionicsSkinTemperatureStore.clear(for: address)
+        XCTAssertTrue(SibionicsSkinTemperatureStore.samples(for: address).isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    func testBatchProcessorRecordsTemperatureOnceAcrossLiveHistoryAndJournalReplay() throws {
+        let address = "temperature-test-\(UUID().uuidString)"
+        let suite = "SibionicsSkinTemperatureStoreTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            SibionicsSkinTemperatureStore.clear(for: address)
+        }
+        let stateStore = Sibionics2ReadingStateStore(userDefaults: defaults)
+        func makeProcessor() -> Sibionics2ReadingBatchProcessor {
+            Sibionics2ReadingBatchProcessor(deviceIdentifier: address, stateStore: stateStore,
+                processor: Sibionics2GlucoseProcessor(sensitivity: 1.0, stockFamily: .v115g))
+        }
+        func minute(_ index: Int, temperature: Double) -> Sibionics2RawReading {
+            Sibionics2RawReading(index: index, eventTime: start.addingTimeInterval(Double(index - 1) * 60),
+                                 temperatureC: temperature, impedance: 0, rawMmol: 6, trend: .notDetermined, reindex: 0)
+        }
+        let readings = (1...12).map { minute($0, temperature: minuteTemperatures[$0 - 1]) }
+        let expected = [sample(240, 33.4), sample(540, 33.9), sample(660, 34.1)]
+
+        var processor = makeProcessor()
+        _ = processor.process(readings, receivedAt: readings[11].eventTime)
+        XCTAssertEqual(SibionicsSkinTemperatureStore.samples(for: address), expected)
+        // The same minutes again, as when the sensor repeats a page.
+        _ = processor.process(readings, receivedAt: readings[11].eventTime)
+        XCTAssertEqual(SibionicsSkinTemperatureStore.samples(for: address), expected)
+        // A replay from the source journal starts a processor from scratch over the same minutes.
+        stateStore.clear(for: address)
+        var replaying = makeProcessor()
+        _ = replaying.process(readings, receivedAt: readings[11].eventTime)
+        XCTAssertEqual(SibionicsSkinTemperatureStore.samples(for: address), expected)
+        // A minute without a temperature adds nothing.
+        _ = replaying.process([minute(13, temperature: 0)], receivedAt: readings[11].eventTime.addingTimeInterval(60))
+        XCTAssertEqual(SibionicsSkinTemperatureStore.samples(for: address), expected)
+    }
+}
