@@ -2,7 +2,8 @@
 
 Settings → **Experimental features**. Everything here is off by default except the chart cursor,
 and mostly changes the main chart on the Home screen; where a feature reaches widgets, the
-watch, alerts or Nightscout, its section says so. AID sharing is never affected. The models are
+watch, alerts or Nightscout, its section says so. AID sharing never gets a different glucose value
+(the Trend engine below changes only the trend direction that goes with it). The models are
 ported from JugglucoNG (see `THIRD_PARTY_NOTICES.md`).
 
 ## Recommended set
@@ -20,6 +21,54 @@ sensor's age on Home as "Day N / T" instead of days and hours (not while Home co
 the lifetime rounded to the nearest whole day, so a Libre 2 Plus (15 days + 12 hours) reads 16
 and a Libre 2 (14 days + 12 hours) 15, as in JugglucoNG; the real end is unchanged. A reminder
 before the end already exists: Settings → Alerts → Sensor ending soon (24 hours by default).
+
+## Trend engine (Sibionics)
+
+**Trend engine** (`TrendEngine`, JugglucoNG `TrendEngine`; UserDefaults `experimentalTrendEngine`, off by
+default) replaces how the trend slope, and so the arrow, of **Sibionics 1 and 2** readings is
+calculated. It does nothing for any other sensor, a follower or a Libre/Dexcom phone.
+
+xDrip's own slope compares a reading with the nearest older one that is at least four minutes
+away, which at one reading a minute is one noisy pair. The engine instead fits a line through the
+recent readings:
+
+- the window is scaled to the sensor's measured reading interval (median of the last twelve gaps):
+  `20 min * cbrt(interval / 5 min)`, kept within 8 and 25 minutes, so about 12 minutes at one
+  reading a minute and 20 at five;
+- the least-squares fit weights each reading by `exp(-age / (5 intervals))`, so a sharp turn off
+  a plateau is not averaged against the plateau it just left;
+- a jump of more than 20 mg/dL a minute between neighbours (a calibration step) ends the window;
+- readings of 0 or above 600 mg/dL are not readings and are dropped first; fewer than two left
+  means no trend, and xDrip's own slope stays.
+
+The velocity (mg/dL a minute) is stored as the reading's slope (`calculatedValueSlope`, per
+millisecond) in the same post-processing pass that already recalculates slopes
+(`BgPostProcessingManager.recomputeSlopes`), so every surface that shows the arrow (Home, the
+notification, widgets, Live Activity, watch, Nightscout and Loop direction) follows it.
+Readings the "5-minute readings" option hides keep their own slope but still feed the engine as
+measurements. The last 30 minutes of readings are recalculated with the next reading after the
+switch is turned on or off, which also replaces those readings' direction in Nightscout once.
+
+What it never touches: the stored glucose value, what is uploaded or shared as a value (Nightscout,
+Apple Health, Dexcom Share, Loop, calendar, watch), Fast Drop / Fast Rise (they compare the last
+two readings) and the delta. The trend that travels with a reading (the direction in Nightscout,
+the trend shared with Loop) is the stored slope, so it follows the engine. The arrow keeps xDrip's
+thresholds (a double arrow above 3.5 mg/dL a minute), not JugglucoNG's (above 2): the stored slope
+stays a true rate, and Nightscout and Loop read the same direction names as before. JugglucoNG's
+rotation of the arrow (`TrendArrowAngle`) is not ported, because xDrip draws arrow glyphs.
+
+**Trend engine: causal filter** (`experimentalTrendEngineCausalFilter`, off by default, needs the
+trend engine) is JugglucoNG's `CausalGlucoseFilter`, a level-and-trend Kalman filter that only
+looks back one hour: the readings are first replaced by their filtered estimates, and the
+engine's regression reads that series. In JugglucoNG the same filter can also replace the
+displayed value; here it does not. A filtered value is never stored, shown or uploaded, because
+the value is what insulin decisions and every follower read, and a different value for the same
+minute on the phone and in Nightscout would be worse than a noisier newest one. xDrip's own
+Glucose Smoothing (post processing) already exists for those who want a smoother value. The filter
+adds some lag to the trend, which is why it is a separate switch.
+
+Verified against JugglucoNG's Kotlin run on the JVM (see `ExperimentalFeaturesTests`,
+`TrendEngineTests`); not yet tried with a real sensor.
 
 ## Glucose on the chart
 

@@ -1149,6 +1149,10 @@
 "experimental.recommendedTitle" = "Рекомендований набір";
 "experimental.sensorDayCounter" = "Лічильник днів сенсора";
 "experimental.sensorDayCounterDetail" = "День N / загалом на головному екрані";
+"experimental.trendEngine" = "Рушій тренду";
+"experimental.trendEngineDetail" = "Sibionics 1 і 2, лише тренд";
+"experimental.trendEngineCausalFilter" = "Рушій тренду: каузальний фільтр";
+"experimental.trendEngineCausalFilterDetail" = "Згладжує те, що читає тренд";
 "experimental.sensorDay" = "День %ld";
 "experimental.recommendedTurnOn" = "Увімкнути";
 "experimental.recommendedConfirmTitle" = "Увімкнути рекомендований набір?";

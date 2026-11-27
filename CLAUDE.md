@@ -163,6 +163,17 @@ to 5 min), `SameDirectionAlertRule` (Fast Drop ↔ predicted low after a snooze)
 `ExperimentalQuietWindow` (sound/vibration held back, lows always break through) — all off by default. Basal injections
 (Nightscout event type Note) always count in `ExperimentalTreatment.fetch`.
 
+Trend engine (`TrendEngine`, `CausalGlucoseFilter`, `ExperimentalTrendEngine` at the end of ExperimentalTherapy.swift;
+JugglucoNG `logic/TrendEngine.kt`, `CausalGlucoseFilter.kt`, `TrendWindows.kt`; keys `experimentalTrendEngine` and
+`experimentalTrendEngineCausalFilter`, both off): for Sibionics 1/2 in master mode only (`cgmTransmitterType == .sibionics2`) it
+overwrites `calculatedValueSlope`/`hideSlope` at the end of `BgPostProcessingManager.recomputeSlopes` (it runs after every new
+reading and every replay and replaces the slope `Calibrator.findSlope` gave at creation, which only the Loop-delay minute list
+still sees), with a cadence-scaled, recency-weighted regression over the readings before each
+one (suppressed 5-minute-cadence readings are input, never written); no engine trend (< 2 readings) keeps xDrip's slope. Arrow
+thresholds stay xDrip's (the engine's `stateFor` 0.5/1/2 is ported and tested, not used for the arrow). Values, uploads of values,
+Fast Drop/Rise (they compare two readings) and the delta are untouched; the causal Kalman filter feeds only the regression and
+never a stored/displayed value. Vectors in `TrendEngineTests` come from the unchanged Kotlin run on the JVM.
+
 Food library (`xDrip/SwiftUIViews/Treatments/FoodLibrary.swift`, button in the carbs treatment
 editor, no setting): JugglucoNG staples embedded as a `key|carbs|protein|fat|portions|en|uk` table,
 custom foods and recents as UserDefaults JSON, Open Food Facts search/barcode (network only on
