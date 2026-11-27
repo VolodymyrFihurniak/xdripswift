@@ -869,6 +869,9 @@ import AppIntents
             loopManager?.shareMetadata()
         }
         
+        // the outbound API reads the newest reading from the same accessor
+        OutboundApiManager.shared.configure(bgReadingsAccessor: bgReadingsAccessor)
+        
         // setup dexcomShareUploadManager
         dexcomShareUploadManager = DexcomShareUploadManager(bgReadingsAccessor: bgReadingsAccessor, state: dexcomShareUploadState, messageHandler: { (title:String, message:String) in
             self.presentAlert(title: title, message: message)
@@ -1498,6 +1501,9 @@ import AppIntents
                 bgReadingSpeaker?.speakNewReading(lastConnectionStatusChangeTimeStamp: lastConnectionStatusChangeTimeStamp())
                 
                 dexcomShareUploadManager?.uploadLatestBgReadings(lastConnectionStatusChangeTimeStamp: lastConnectionStatusChangeTimeStamp())
+                
+                // Outbound API: Telegram bot and JSON webhook destinations, if the user set any up
+                OutboundApiManager.shared.processNewReading()
                 
                 bluetoothPeripheralManager?.sendLatestReading()
 

@@ -119,5 +119,8 @@ hardware first, roughly in order of risk:
 5. Alarm quiet window: sound held back, lows still breaking through.
 6. Predicted High alert and its insulin coverage; Settings search opening the right screen;
    Siri / Shortcuts "Log carbs" and "Log insulin" (entry appears on Home and goes to Nightscout).
+7. Outbound API (`docs/outbound-api.md`): Telegram test message and a real reading, the edit-in-place
+   message, the gap note after a pause, a webhook with headers, and a send during a Bluetooth
+   background wake with the phone locked (Keychain item readable after first unlock).
 
 Not portable to iOS: NovoPen unattended background reading (NFC needs a user tap).

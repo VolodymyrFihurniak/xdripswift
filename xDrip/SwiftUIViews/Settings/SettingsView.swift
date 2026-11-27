@@ -999,6 +999,16 @@ struct SettingsViewGroupedSettingsViewModel: SettingsViewModelProtocol, Settings
                     }
                 ),
                 SettingsGroupedRow(
+                    id: "sharingServices.outboundApi",
+                    title: OutboundApiTexts.text("title", "Outbound API"),
+                    detail: {
+                        OutboundApiSettingsProvider.summary()
+                    },
+                    settingsScreen: {
+                        OutboundApiSettingsProvider.screen
+                    }
+                ),
+                SettingsGroupedRow(
                     id: "sharingServices.m5Stack",
                     title: "M5Stack",
                     settingsScreen: {

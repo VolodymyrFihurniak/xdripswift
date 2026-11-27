@@ -18,6 +18,8 @@ final class BackupService: @unchecked Sendable {
     // Runtime, sensor-specific and current post-processing values must not move between app instances.
     private static let excludedSettingKeys: Set<String> = [
         UserDefaults.Key.dexcomSensorSessionIdentityData.rawValue,
+        // Outbound API destinations: their tokens live in the Keychain and cannot move, and the delivery state is local.
+        "outboundApiDestinations", "outboundApiState",
         UserDefaults.Key.nightscoutFollowerGapFillLastAuditEndDate.rawValue,
         UserDefaults.Key.nightscoutFollowerGapFillSite.rawValue,
         UserDefaults.Key.nightscoutFollowerGapFillCoverage.rawValue,

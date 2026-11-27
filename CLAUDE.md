@@ -184,6 +184,16 @@ pen's time instead of adding it twice; imported doses carry `enteredBy` "Insulin
 `D2760000850101` in Info.plist `...iso7816.select-identifiers`. Tested only against the
 `SimulatedPen` in the tests (verified with a Python port) — never against a real pen.
 
+Outbound API (`docs/outbound-api.md`, JugglucoNG `OutboundApi`, Settings → Sharing and services; no VK / Delta Chat): Telegram bot
+(`sendMessage`, then `editMessageText` on the last message inside a window, unchanged values skipped) and custom JSON webhook (standard body
+`xdrip.outbound.glucose.v1` or a body template), one trigger (every reading / low / high / outside range) and minimum interval per destination.
+`xDrip/Managers/OutboundApi/OutboundApi.swift` (`OutboundApiPlanner`, `OutboundApiDispatcher` over `OutboundApiTransport`, `@MainActor OutboundApiManager`),
+`OutboundApiSettingsView.swift`. Hooked in `RootApplicationCoordinator.processNewGlucoseData` beside the Dexcom Share upload (foreground or BLE wake,
+with a background task); `ExperimentalPowerSaving` raises the interval to 5 min unless urgent. Token, URL and headers live in the Keychain
+(`OutboundApiKeychainSecretStore`, one item per destination), config/state in UserDefaults `outboundApiDestinations` / `outboundApiState`, all excluded
+from backups. iOS has no timer, so JugglucoNG's stale/missed message is a note posted before the next reading (`gapNotice`), never on time. Not ported:
+IOB/COB/raw/battery tokens, retries, Activity Log entries. Never compiled or tried against Telegram.
+
 Libre sensor activation (`docs/libre-activation.md`): `LibreSensorActivation` (plan) and
 `LibreSensorActivator` (CoreNFC) at the end of `Libre/Utilities/LibreNFC.swift`, row on the Libre 2,
 MiaoMiao and Bubble device screens (also while adding). DiaBLE commands: Libre 1 `A0 C2AD7521`,
