@@ -119,6 +119,24 @@ final class AnytimeDriverTests: XCTestCase {
         XCTAssertEqual(AnytimeDeviceStore.load(address: address).lastGlucoseId, -1)
     }
 
+    func testCurrentEstimateIsOffUntilTheUserTurnsItOn() {
+        let address = "anytime-test-estimate"
+        AnytimeConfiguration.clear(address: address)
+        XCTAssertFalse(AnytimeConfiguration.ct5EstimatesFromCurrent(for: address))
+
+        AnytimeConfiguration.setCt5EstimatesFromCurrent(true, for: address)
+        XCTAssertTrue(AnytimeConfiguration.ct5EstimatesFromCurrent(for: address))
+        XCTAssertFalse(AnytimeConfiguration.ct5EstimatesFromCurrent(for: address + "-other"))
+
+        // deleting the peripheral clears the choice with the rest of its state
+        AnytimeDeviceStore.clear(address: address)
+        XCTAssertFalse(AnytimeConfiguration.ct5EstimatesFromCurrent(for: address))
+
+        AnytimeConfiguration.setCt5EstimatesFromCurrent(true, for: address)
+        AnytimeConfiguration.setCt5EstimatesFromCurrent(false, for: address)
+        XCTAssertFalse(AnytimeConfiguration.ct5EstimatesFromCurrent(for: address))
+    }
+
     func testUnknownAddressHasNoCt5Secrets() {
         let address = "anytime-test-no-secrets"
         AnytimeCt5SecretStore.clear(address: address)

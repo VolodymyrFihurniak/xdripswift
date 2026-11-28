@@ -112,6 +112,7 @@ enum AnytimeDeviceStore {
         lock.lock()
         defer { lock.unlock() }
         UserDefaults.standard.removeObject(forKey: keyPrefix + address)
+        AnytimeConfiguration.clear(address: address)
     }
 
     private static func loadUnlocked(address: String) -> AnytimeDeviceState {
@@ -120,6 +121,32 @@ enum AnytimeDeviceStore {
             return AnytimeDeviceState()
         }
         return state
+    }
+}
+
+// MARK: - Settings
+
+/// The one choice the user makes for an Anytime sensor, kept per Bluetooth address.
+enum AnytimeConfiguration {
+    private static let estimateKeyPrefix = "anytime.ct5CurrentEstimate."
+
+    /// A CT5 stops computing glucose when its rated life ends but keeps reporting current. JugglucoNG turns
+    /// that current into an estimate with the scale it learned; here this is off until the user opts in, because
+    /// the estimates look like any other reading everywhere outside the device screen.
+    static func ct5EstimatesFromCurrent(for address: String, userDefaults: UserDefaults = .standard) -> Bool {
+        return userDefaults.bool(forKey: estimateKeyPrefix + address)
+    }
+
+    static func setCt5EstimatesFromCurrent(_ isOn: Bool, for address: String, userDefaults: UserDefaults = .standard) {
+        if isOn {
+            userDefaults.set(true, forKey: estimateKeyPrefix + address)
+        } else {
+            userDefaults.removeObject(forKey: estimateKeyPrefix + address)
+        }
+    }
+
+    static func clear(address: String, userDefaults: UserDefaults = .standard) {
+        userDefaults.removeObject(forKey: estimateKeyPrefix + address)
     }
 }
 
@@ -1864,8 +1891,11 @@ class CGMAnytimeTransmitter: BluetoothTransmitter, CGMTransmitter {
     /// A CT5 that reached the end of its life keeps reporting live current and temperature but stops
     /// computing glucose. With a scale learned from its own earlier output the current can still be turned
     /// into an estimate (JugglucoNG measured 1.5-4 % MARD out of sample); the sensitivity this scale freezes
-    /// decays about 0.9 % per day. Only reached for an id that is not advancing, and never in warm-up.
+    /// decays about 0.9 % per day. Only reached for an id that is not advancing, never in warm-up, and only
+    /// when the user turned the option on (`AnytimeConfiguration`, off by default).
     private func emitCt5RawEstimate(_ record: AnytimeComputedRecord, now: Int64) -> Bool {
+        // opt-in: a value past the sensor's rated life must not appear without the user having asked for it
+        guard let address = deviceAddress, AnytimeConfiguration.ct5EstimatesFromCurrent(for: address) else { return false }
         if isCt5WarmingUp() { return false }
         let estimate = ct5RawScale.estimateMgdl(iwNa: record.iwNa)
         guard estimate.isFinite else { return false }

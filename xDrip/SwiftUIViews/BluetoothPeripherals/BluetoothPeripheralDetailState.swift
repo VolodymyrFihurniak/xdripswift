@@ -3969,6 +3969,19 @@ private extension BluetoothPeripheralDetailState {
             )
         ])
 
+        if family == .ct5 {
+            rows.append(toggleRow(
+                id: "anytime-current-estimate",
+                title: Texts_BluetoothPeripheralView.anytimeCurrentEstimateTitle,
+                isOn: AnytimeConfiguration.ct5EstimatesFromCurrent(for: address),
+                setValue: { [weak self] isOn in
+                    guard isOn != AnytimeConfiguration.ct5EstimatesFromCurrent(for: address) else { return }
+                    AnytimeConfiguration.setCt5EstimatesFromCurrent(isOn, for: address)
+                    self?.refresh()
+                }
+            ))
+        }
+
         if let scale = state.rawScale {
             rows.append(row(
                 id: "anytime-current-scale",
