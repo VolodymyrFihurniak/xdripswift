@@ -106,8 +106,8 @@ public enum AlertKind: Int, CaseIterable {
         case .miaomiao, .Bubble, .Libre2, .some(.sibionics2):
             // Sibionics reports the standard BLE Battery Service level as a percentage.
             return .batterylow
-        case .Libre3, .medtrumTouchCareNano, .iCan, .aiDex, .anytime, .mq, nil:
-            // Medtrum, iCan, AiDex, Anytime and MQ do not currently provide a battery value through TransmitterBatteryInfo.
+        case .Libre3, .medtrumTouchCareNano, .iCan, .aiDex, .anytime, .mq, .ottai, nil:
+            // Medtrum, iCan, AiDex, Anytime, MQ and Ottai do not currently provide a battery value through TransmitterBatteryInfo.
             // With no configured CGM there is likewise no meaningful battery alarm to edit.
             return nil
         }

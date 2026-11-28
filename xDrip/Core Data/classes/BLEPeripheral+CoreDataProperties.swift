@@ -81,6 +81,9 @@ extension BLEPeripheral {
 
     /// MQ / Glutec CGM peripheral.
     @NSManaged public var mq: MQ?
+
+    /// Ottai / Syai CGM peripheral.
+    @NSManaged public var ottai: Ottai?
     
     /// sensorSerialNumber of last sensor that was read
     @NSManaged public var sensorSerialNumber: String?

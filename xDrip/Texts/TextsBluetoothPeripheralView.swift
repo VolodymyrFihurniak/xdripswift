@@ -825,3 +825,106 @@ extension Texts_BluetoothPeripheralView {
         }
     }
 }
+
+// MARK: - Ottai
+
+extension Texts_BluetoothPeripheralView {
+
+    static let ottaiScanNoticeTitle = NSLocalizedString("ottai.scanNoticeTitle", tableName: filename, bundle: .main, value: "Ottai Sensor Connection", comment: "Title of the notice shown before scanning for an Ottai sensor")
+    static let ottaiScanNoticeMessage = NSLocalizedString("ottai.scanNoticeMessage", tableName: filename, bundle: .main, value: "This app connects directly to an Ottai sensor over Bluetooth and never contacts the manufacturer's online service. That service is what issues the keys and the glucose coefficients of a sensor, so they must be imported first (see the sensor material section on this screen). The first connection takes the first Ottai sensor it finds whose signature matches the imported material; any other sensor is ignored.\n\nBefore scanning, close the manufacturer's app: a sensor talks to one phone at a time. A sensor that is not activated yet is not activated here; use the manufacturer's app for that.\n\nScanning works only while this app is open. This driver has not been tried on a real sensor.", comment: "Notice shown before scanning for an Ottai sensor")
+    static let ottaiMaterialSectionTitle = NSLocalizedString("ottai.materialSectionTitle", tableName: filename, bundle: .main, value: "Sensor material", comment: "Title of the section with the imported Ottai sensor keys and coefficients")
+    static let ottaiMaterialAddFooter = NSLocalizedString("ottai.materialAddFooter", tableName: filename, bundle: .main, value: "The keys and glucose coefficients of an Ottai sensor come from the manufacturer's online service, which this app does not use. Import them as the portable JSON that JugglucoNG exports: copy it, then tap Import. The material stays in the Keychain of this device only, is not part of app backups and is never written to the Activity Log. Scanning needs it.", comment: "Footer of the sensor material section while adding an Ottai sensor")
+    static let ottaiMaterialDeviceFooter = NSLocalizedString("ottai.materialDeviceFooter", tableName: filename, bundle: .main, value: "Importing the material of a different sensor starts the status above over. Removing the material stops the connection until it is imported again. The material is kept in the Keychain of this device only and is never written to the Activity Log.", comment: "Footer of the sensor material section on the Ottai device screen")
+    static let ottaiMaterialRow = NSLocalizedString("ottai.materialRow", tableName: filename, bundle: .main, value: "Sensor material", comment: "Ottai device screen row")
+    static let ottaiMaterialMissing = NSLocalizedString("ottai.materialMissing", tableName: filename, bundle: .main, value: "Not imported", comment: "Ottai device screen row detail")
+    static let ottaiMaterialImportedFormat = NSLocalizedString("ottai.materialImportedFormat", tableName: filename, bundle: .main, value: "Imported for sensor %@", comment: "Ottai device screen row detail. %@ is the sensor id")
+    static let ottaiMaterialImport = NSLocalizedString("ottai.materialImport", tableName: filename, bundle: .main, value: "Import from clipboard", comment: "Ottai device screen row")
+    static let ottaiMaterialRemove = NSLocalizedString("ottai.materialRemove", tableName: filename, bundle: .main, value: "Remove sensor material", comment: "Ottai device screen row")
+    static let ottaiRemoveConfirmTitle = NSLocalizedString("ottai.removeConfirmTitle", tableName: filename, bundle: .main, value: "Remove the sensor material?", comment: "Confirmation title before removing the Ottai sensor material")
+    static let ottaiRemoveConfirmMessage = NSLocalizedString("ottai.removeConfirmMessage", tableName: filename, bundle: .main, value: "The keys and coefficients are deleted from this device. The sensor is not followed until the material is imported again.", comment: "Confirmation message before removing the Ottai sensor material")
+    static let ottaiImportTitle = NSLocalizedString("ottai.importTitle", tableName: filename, bundle: .main, value: "Import sensor material", comment: "Title of the result of importing Ottai sensor material")
+    static let ottaiImportClipboardEmpty = NSLocalizedString("ottai.importClipboardEmpty", tableName: filename, bundle: .main, value: "The clipboard holds no text. Copy the sensor material JSON first.", comment: "Ottai material import result")
+    static let ottaiImportNotJson = NSLocalizedString("ottai.importNotJson", tableName: filename, bundle: .main, value: "The clipboard does not hold sensor material in JSON form.", comment: "Ottai material import result")
+    static let ottaiImportMissingSensorId = NSLocalizedString("ottai.importMissingSensorId", tableName: filename, bundle: .main, value: "The material has no sensor id.", comment: "Ottai material import result")
+    static let ottaiImportSensorIdNotTwelveHex = NSLocalizedString("ottai.importSensorIdNotTwelveHex", tableName: filename, bundle: .main, value: "The sensor id is not 12 hexadecimal digits, so the sensor could not be recognised by it.", comment: "Ottai material import result")
+    static let ottaiImportInvalidKeys = NSLocalizedString("ottai.importInvalidKeys", tableName: filename, bundle: .main, value: "The material has no valid authentication keys.", comment: "Ottai material import result")
+    static let ottaiImportSaveFailed = NSLocalizedString("ottai.importSaveFailed", tableName: filename, bundle: .main, value: "The material could not be saved to the Keychain of this device.", comment: "Ottai material import result")
+    static let ottaiImportDoneAdding = NSLocalizedString("ottai.importDoneAdding", tableName: filename, bundle: .main, value: "The sensor material was imported. Now scan for the sensor.", comment: "Ottai material import result while adding a sensor")
+    static let ottaiImportDoneDevice = NSLocalizedString("ottai.importDoneDevice", tableName: filename, bundle: .main, value: "The sensor material was imported. The connection restarts.", comment: "Ottai material import result on the device screen")
+    static let ottaiImportNoExpression = NSLocalizedString("ottai.importNoExpression", tableName: filename, bundle: .main, value: " It has no glucose expression or recognised coefficients, so no reading can be calculated from it.", comment: "Added to the Ottai material import result when the material cannot give a glucose value")
+    static let ottaiScanNeedsMaterial = NSLocalizedString("ottai.scanNeedsMaterial", tableName: filename, bundle: .main, value: "Import the sensor material first. Without the keys of the sensor the connection cannot be made.", comment: "Shown when scanning for an Ottai sensor is tried without imported material")
+    static let ottaiSectionTitle = NSLocalizedString("ottai.sectionTitle", tableName: filename, bundle: .main, value: "Ottai CGM", comment: "Device screen section title")
+    static let ottaiSectionFooter = NSLocalizedString("ottai.sectionFooter", tableName: filename, bundle: .main, value: "Glucose is calculated in this app from the sensor current with the expression and coefficients of the imported material; nothing is sent to the manufacturer. A sensor that is not activated is not activated here, and an ended sensor is not read. Never tried on a real sensor.", comment: "Footer of the Ottai section on the device screen")
+    static let ottaiBluetoothName = NSLocalizedString("ottai.bluetoothName", tableName: filename, bundle: .main, value: "Bluetooth name", comment: "Ottai device screen row")
+    static let ottaiSessionStart = NSLocalizedString("ottai.sessionStart", tableName: filename, bundle: .main, value: "Session start", comment: "Ottai device screen row")
+    static let ottaiExpectedEnd = NSLocalizedString("ottai.expectedEnd", tableName: filename, bundle: .main, value: "Expected end", comment: "Ottai device screen row")
+    static let ottaiLifetimeFromSensor = NSLocalizedString("ottai.lifetimeFromSensor", tableName: filename, bundle: .main, value: "Lifetime reported by the sensor", comment: "Ottai device screen row")
+    static let ottaiDaysFormat = NSLocalizedString("ottai.daysFormat", tableName: filename, bundle: .main, value: "%.1f days", comment: "Ottai device screen row detail. %.1f is a number of days")
+    static let ottaiSensorState = NSLocalizedString("ottai.sensorState", tableName: filename, bundle: .main, value: "Sensor state", comment: "Ottai device screen row")
+    static let ottaiStateUnknown = NSLocalizedString("ottai.stateUnknown", tableName: filename, bundle: .main, value: "Not read yet", comment: "Ottai sensor state")
+    static let ottaiStateNotActivated = NSLocalizedString("ottai.stateNotActivated", tableName: filename, bundle: .main, value: "Not activated", comment: "Ottai sensor state")
+    static let ottaiStateRunning = NSLocalizedString("ottai.stateRunning", tableName: filename, bundle: .main, value: "Running", comment: "Ottai sensor state")
+    static let ottaiStateEnded = NSLocalizedString("ottai.stateEnded", tableName: filename, bundle: .main, value: "Ended", comment: "Ottai sensor state")
+    static let ottaiLastReading = NSLocalizedString("ottai.lastReading", tableName: filename, bundle: .main, value: "Last reading", comment: "Ottai device screen row")
+    static let ottaiWaitingForReading = NSLocalizedString("ottai.waitingForReading", tableName: filename, bundle: .main, value: "Waiting for a reading", comment: "Ottai device screen row detail")
+    static let ottaiTemperature = NSLocalizedString("ottai.temperature", tableName: filename, bundle: .main, value: "Sensor temperature", comment: "Ottai device screen row")
+    static let ottaiTemperatureFormat = NSLocalizedString("ottai.temperatureFormat", tableName: filename, bundle: .main, value: "%.1f °C", comment: "Ottai device screen row detail. %.1f is a temperature in degrees Celsius")
+    static let ottaiLastLinkProblem = NSLocalizedString("ottai.lastLinkProblem", tableName: filename, bundle: .main, value: "Last link problem", comment: "Ottai device screen row")
+    static let ottaiNoLinkProblem = NSLocalizedString("ottai.noLinkProblem", tableName: filename, bundle: .main, value: "None since the last reading", comment: "Ottai device screen row detail")
+    static let ottaiProblemLinkLost = NSLocalizedString("ottai.problemLinkLost", tableName: filename, bundle: .main, value: "Link lost", comment: "Ottai link problem")
+    static let ottaiProblemNotAnOttai = NSLocalizedString("ottai.problemNotAnOttai", tableName: filename, bundle: .main, value: "Device is not an Ottai sensor", comment: "Ottai link problem")
+    static let ottaiProblemNoMaterial = NSLocalizedString("ottai.problemNoMaterial", tableName: filename, bundle: .main, value: "No sensor material imported", comment: "Ottai link problem")
+    static let ottaiProblemSensorNotMatching = NSLocalizedString("ottai.problemSensorNotMatching", tableName: filename, bundle: .main, value: "The sensor does not match the imported material", comment: "Ottai link problem")
+    static let ottaiProblemSignatureMismatch = NSLocalizedString("ottai.problemSignatureMismatch", tableName: filename, bundle: .main, value: "The sensor's signature did not match this time", comment: "Ottai link problem")
+    static let ottaiProblemNotificationsFailed = NSLocalizedString("ottai.problemNotificationsFailed", tableName: filename, bundle: .main, value: "Notifications could not be switched on", comment: "Ottai link problem")
+    static let ottaiProblemSetupTimeout = NSLocalizedString("ottai.problemSetupTimeout", tableName: filename, bundle: .main, value: "The sensor did not finish the connection setup", comment: "Ottai link problem")
+    static let ottaiProblemReadFailed = NSLocalizedString("ottai.problemReadFailed", tableName: filename, bundle: .main, value: "A value could not be read from the sensor", comment: "Ottai link problem")
+    static let ottaiProblemAuthRejected = NSLocalizedString("ottai.problemAuthRejected", tableName: filename, bundle: .main, value: "The sensor rejected the handshake", comment: "Ottai link problem")
+    static let ottaiProblemSessionKeyFailed = NSLocalizedString("ottai.problemSessionKeyFailed", tableName: filename, bundle: .main, value: "The session key could not be derived", comment: "Ottai link problem")
+    static let ottaiProblemSensorNotActivated = NSLocalizedString("ottai.problemSensorNotActivated", tableName: filename, bundle: .main, value: "The sensor is not activated; use the manufacturer's app", comment: "Ottai link problem")
+    static let ottaiProblemSensorEnded = NSLocalizedString("ottai.problemSensorEnded", tableName: filename, bundle: .main, value: "The sensor session has ended", comment: "Ottai link problem")
+    static let ottaiProblemCommandStatusUnreadable = NSLocalizedString("ottai.problemCommandStatusUnreadable", tableName: filename, bundle: .main, value: "The sensor state could not be read", comment: "Ottai link problem")
+    static let ottaiProblemLinkSilent = NSLocalizedString("ottai.problemLinkSilent", tableName: filename, bundle: .main, value: "The sensor went silent", comment: "Ottai link problem")
+    static let ottaiProblemNoReadings = NSLocalizedString("ottai.problemNoReadings", tableName: filename, bundle: .main, value: "Connected, but no reading for a long time", comment: "Ottai link problem")
+    static let ottaiProblemFrameNotDecryptable = NSLocalizedString("ottai.problemFrameNotDecryptable", tableName: filename, bundle: .main, value: "Data frames could not be decrypted", comment: "Ottai link problem")
+    static let ottaiProblemNoExpression = NSLocalizedString("ottai.problemNoExpression", tableName: filename, bundle: .main, value: "The material has no usable glucose expression", comment: "Ottai link problem")
+
+    static func ottaiProblem(_ problem: OttaiLinkProblem) -> String {
+        switch problem {
+        case .linkLost: return ottaiProblemLinkLost
+        case .notAnOttai: return ottaiProblemNotAnOttai
+        case .noMaterial: return ottaiProblemNoMaterial
+        case .sensorNotMatching: return ottaiProblemSensorNotMatching
+        case .signatureMismatch: return ottaiProblemSignatureMismatch
+        case .notificationsFailed: return ottaiProblemNotificationsFailed
+        case .setupTimeout: return ottaiProblemSetupTimeout
+        case .readFailed: return ottaiProblemReadFailed
+        case .authRejected: return ottaiProblemAuthRejected
+        case .sessionKeyFailed: return ottaiProblemSessionKeyFailed
+        case .sensorNotActivated: return ottaiProblemSensorNotActivated
+        case .sensorEnded: return ottaiProblemSensorEnded
+        case .commandStatusUnreadable: return ottaiProblemCommandStatusUnreadable
+        case .linkSilent: return ottaiProblemLinkSilent
+        case .noReadings: return ottaiProblemNoReadings
+        case .frameNotDecryptable: return ottaiProblemFrameNotDecryptable
+        case .noExpression: return ottaiProblemNoExpression
+        }
+    }
+
+    /// The sensor's command status: 0 to 2 not activated, 3 running, 4 and more ended, -1 not read yet.
+    static func ottaiSensorStateText(commandStatus: Int) -> String {
+        if commandStatus < 0 { return ottaiStateUnknown }
+        if OttaiConstants.commandNeedsActivation(commandStatus) { return ottaiStateNotActivated }
+        if commandStatus >= 4 { return ottaiStateEnded }
+        return ottaiStateRunning
+    }
+
+    static func ottaiImportFailure(_ failure: OttaiMaterials.ImportFailure) -> String {
+        switch failure {
+        case .notJson: return ottaiImportNotJson
+        case .missingSensorId: return ottaiImportMissingSensorId
+        case .sensorIdNotTwelveHex: return ottaiImportSensorIdNotTwelveHex
+        case .invalidKeys: return ottaiImportInvalidKeys
+        }
+    }
+}

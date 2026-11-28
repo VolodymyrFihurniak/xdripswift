@@ -320,6 +320,24 @@ battery byte is raw, not a percentage. Pure cloud timing/restore policies are po
 reassembly across notifications, source journal/replay, `protocolType` from the server (reset uses the observed Protocol02 marker only), native mirror, battery percentage, a
 device picker, history beyond what the transmitter replays.
 
+Ottai / Syai CGM (`docs/ottai.md`, JugglucoNG `drivers/ottai`; **uncompiled, never tried on a real sensor**):
+`xDrip/BluetoothTransmitter/CGM/Ottai/OttaiProtocol.swift` (pure: BLE layout 180A/181F/E06E1D43, "BLE Auth V2" secp256r1 ECDH + SHA-256 signatures, AES-ECB zero-padded
+payloads, 8/9-byte record parser, RPN glucose expression `OttaiFormula`, `OttaiOutputFilter`, `OttaiMaterials` portable JSON), `OttaiSession.swift` (`OttaiTiming`,
+stream clock `OttaiArrivalStartCorrection`, `OttaiPipeline`, history window/chain, `OttaiCgmInfo`) and `CGMOttaiTransmitter.swift` (connection; `OttaiDeviceStore`
+per-address state and the rejected-address list in UserDefaults, `OttaiMaterialsStore` the keys in the Keychain, one item per address plus a "pending" item the add
+screen fills, adopted by the first sensor whose signature matches; all cleared with the peripheral; vectors in `OttaiProtocolTests`/`OttaiFormulaTests`/`OttaiSessionTests`
+come from the unchanged Kotlin run on the JVM). Own Core Data entity `Ottai` (model `xdrip v43 Ottai` = v42 MQ + entity, only a link to `BLEPeripheral`),
+`BluetoothPeripheralType.ottaiType`, `CGMTransmitterType.ottai` (`NoCalibrator`, 1-minute readings, `sensorWarmupDurationInMinutes()` 0, the pipeline withholds the first
+10 minutes). **The six authentication keys and the per-sensor glucose coefficients exist only in the vendor cloud** (account that owns the sensor), so the driver never
+contacts it and **shows a sensor as unsupported until the user imports the material** (JugglucoNG's portable JSON v1 from the clipboard, device screen or add screen);
+nothing is guessed. Never port the cloud client (`OttaiCloudClient` sends spoofed forwarded-IP headers), `OttaiNetSecurity`, `OttaiRegionalTransport` or the phone-number login. A first signature that does
+not match the material rejects the peripheral for good (address kept in `OttaiDeviceStore.rejectedAddresses`, max 20; importing other material forgives it); the manager
+still creates a Core Data peripheral for it before the handshake (accepted). iOS has no MAC (the 12-digit sensor id comes from the material), no bond-state API, no way to tell a
+read from a notification of `2AA7` (reads in flight counter), and a 185-byte MTU against Android's 247 (history frames may arrive truncated: the largest untested risk). The
+transmitter owns its copy of the state: the screen calls `sensorMaterialsDidChange(removed:)` instead of writing the store. Skipped on purpose: the cloud, firmware/OTA,
+activation of a new sensor (command status 0-2 only hangs up and retries after 5 minutes), NFC wake reminder, ended-sensor history, Room diff / persistent hole ledger,
+provisional start from the CGM info, CN V3 server-mediated active authentication, native mirror, fingerstick calibration, battery, a device picker.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new

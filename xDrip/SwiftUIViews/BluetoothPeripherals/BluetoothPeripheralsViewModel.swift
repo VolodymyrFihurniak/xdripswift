@@ -611,7 +611,8 @@ extension BluetoothPeripheralType {
             .iCanType,
             .aiDexType,
             .anytimeType,
-            .mqType
+            .mqType,
+            .ottaiType
         ]
     ]
 }

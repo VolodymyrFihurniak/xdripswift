@@ -18,4 +18,6 @@ enum CGMSensorType:String, CaseIterable {
 
     case mq = "MQ"
 
+    case ottai = "Ottai"
+
 }
