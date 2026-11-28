@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		077010150000000000000001 /* OttaiSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010140000000000000001 /* OttaiSessionTests.swift */; };
+		077010130000000000000001 /* OttaiSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010120000000000000001 /* OttaiSession.swift */; };
 		077010110000000000000001 /* OttaiFormulaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010100000000000000001 /* OttaiFormulaTests.swift */; };
 		0770100F0000000000000001 /* OttaiProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0770100E0000000000000001 /* OttaiProtocolTests.swift */; };
 		077010020000000000000001 /* OttaiProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010010000000000000001 /* OttaiProtocol.swift */; };
@@ -1070,6 +1072,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		077010140000000000000001 /* OttaiSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiSessionTests.swift; sourceTree = "<group>"; };
+		077010120000000000000001 /* OttaiSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiSession.swift; sourceTree = "<group>"; };
 		077010100000000000000001 /* OttaiFormulaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiFormulaTests.swift; sourceTree = "<group>"; };
 		0770100E0000000000000001 /* OttaiProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiProtocolTests.swift; sourceTree = "<group>"; };
 		077010010000000000000001 /* OttaiProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiProtocol.swift; sourceTree = "<group>"; };
@@ -3004,6 +3008,7 @@
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
+				077010140000000000000001 /* OttaiSessionTests.swift */,
 				077010100000000000000001 /* OttaiFormulaTests.swift */,
 				0770100E0000000000000001 /* OttaiProtocolTests.swift */,
 				3A5D00180000000000000001 /* MQDriverTests.swift */,
@@ -4511,6 +4516,7 @@
 		0770100C0000000000000001 /* Ottai */ = {
 			isa = PBXGroup;
 			children = (
+				077010120000000000000001 /* OttaiSession.swift */,
 				077010010000000000000001 /* OttaiProtocol.swift */,
 			);
 			path = Ottai;
@@ -5112,6 +5118,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				077010150000000000000001 /* OttaiSessionTests.swift in Sources */,
 				077010110000000000000001 /* OttaiFormulaTests.swift in Sources */,
 				0770100F0000000000000001 /* OttaiProtocolTests.swift in Sources */,
 				3A5D00190000000000000001 /* MQDriverTests.swift in Sources */,
@@ -5176,6 +5183,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				077010130000000000000001 /* OttaiSession.swift in Sources */,
 				077010020000000000000001 /* OttaiProtocol.swift in Sources */,
 				3A5D00080000000000000001 /* CGMMQTransmitter.swift in Sources */,
 				3A5D000E0000000000000001 /* MQ+CoreDataProperties.swift in Sources */,
