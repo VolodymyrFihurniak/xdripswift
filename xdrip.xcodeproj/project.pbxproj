@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1DE10020000000000000001 /* AiDexProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE10010000000000000001 /* AiDexProtocol.swift */; };
+		A1DE100B0000000000000001 /* AiDexProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE100C0000000000000001 /* AiDexProtocolTests.swift */; };
 		1CA210040000000000000001 /* CGMICanTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210030000000000000001 /* CGMICanTransmitter.swift */; };
 		1CA2100A0000000000000001 /* ICan+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */; };
 		1CA210080000000000000001 /* ICan+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210070000000000000001 /* ICan+CoreDataProperties.swift */; };
@@ -1039,6 +1041,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A1DE10010000000000000001 /* AiDexProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiDexProtocol.swift; sourceTree = "<group>"; };
+		A1DE100C0000000000000001 /* AiDexProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiDexProtocolTests.swift; sourceTree = "<group>"; };
 		1CA210030000000000000001 /* CGMICanTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMICanTransmitter.swift; sourceTree = "<group>"; };
 		1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
 		1CA210070000000000000001 /* ICan+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+CoreDataProperties.swift"; sourceTree = "<group>"; };
@@ -2939,6 +2943,7 @@
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
+				A1DE100C0000000000000001 /* AiDexProtocolTests.swift */,
 				1CA2100C0000000000000001 /* ICanProtocolTests.swift */,
 				C2BBCA83D24E98D08C260FC2 /* Libre3 */,
 				BA0709260000000000000002 /* BasalInjectionTests.swift */,
@@ -4121,6 +4126,7 @@
 		F8F971BA23A5915900C3F17D /* CGM */ = {
 			isa = PBXGroup;
 			children = (
+				A1DE100D0000000000000001 /* AiDex */,
 				1CA2100D0000000000000001 /* ICan */,
 				F8F971BB23A5915900C3F17D /* Dexcom */,
 				F8F971F023A5915900C3F17D /* Generic */,
@@ -4345,6 +4351,14 @@
 				6153AEEF5A9ABACAA3B9181E /* Pairing */,
 			);
 			path = Protocol;
+			sourceTree = "<group>";
+		};
+		A1DE100D0000000000000001 /* AiDex */ = {
+			isa = PBXGroup;
+			children = (
+				A1DE10010000000000000001 /* AiDexProtocol.swift */,
+			);
+			path = AiDex;
 			sourceTree = "<group>";
 		};
 		1CA2100D0000000000000001 /* ICan */ = {
@@ -4960,6 +4974,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1DE100B0000000000000001 /* AiDexProtocolTests.swift in Sources */,
 				1CA2100B0000000000000001 /* ICanProtocolTests.swift in Sources */,
 				51B200063102000100000001 /* Sibionics2ProtocolTests.swift in Sources */,
 				51B210023102000100000001 /* Sibionics2GlucoseProcessorTests.swift in Sources */,
@@ -5013,6 +5028,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1DE10020000000000000001 /* AiDexProtocol.swift in Sources */,
 				1CA210040000000000000001 /* CGMICanTransmitter.swift in Sources */,
 				1CA2100A0000000000000001 /* ICan+BluetoothPeripheral.swift in Sources */,
 				1CA210080000000000000001 /* ICan+CoreDataProperties.swift in Sources */,
