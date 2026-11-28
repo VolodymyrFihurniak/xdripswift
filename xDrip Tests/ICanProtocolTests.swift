@@ -513,4 +513,65 @@ final class ICanProtocolTests: XCTestCase {
         XCTAssertTrue(ICanHistoryPolicy.shouldSkipHistoryOverlap(sequence: 5, sampleTime: now, coveredSequence: -1, coveredTime: now, pendingLiveGap: nil))
         XCTAssertFalse(ICanHistoryPolicy.shouldSkipHistoryOverlap(sequence: 5, sampleTime: now.addingTimeInterval(1), coveredSequence: -1, coveredTime: now, pendingLiveGap: nil))
     }
+
+    // MARK: - registration
+
+    func testICanIsAvailableInTheDirectCGMAddFlow() {
+        XCTAssertEqual(BluetoothPeripheralType.iCanType.category(), .CGM)
+        XCTAssertTrue(BluetoothPeripheralType.addFlowPreferredOrder[.CGM]?.contains(.iCanType) == true)
+        XCTAssertEqual(BluetoothPeripheralType.iCanType.onlineHelpTopic, .addDirectCGM)
+        XCTAssertFalse(BluetoothPeripheralType.iCanType.usesIntermittentConnection)
+    }
+
+    func testICanTransmitterTypeProperties() {
+        XCTAssertEqual(CGMTransmitterType.iCan.rawValue, "iCan")
+        XCTAssertEqual(CGMTransmitterType.iCan.sensorType(), .iCan)
+        XCTAssertTrue(CGMTransmitterType.iCan.canDetectNewSensor())
+        XCTAssertFalse(CGMTransmitterType.iCan.allowManualSensorStart())
+    }
+
+    func testICanTroubleshootingSource() throws {
+        XCTAssertEqual(TroubleshootingLogSource(directTransmitterType: .iCan), .iCan)
+        let source = try XCTUnwrap(TroubleshootingLogSource(bluetoothPeripheralType: .iCanType))
+        XCTAssertEqual(source, .iCan)
+        XCTAssertEqual(source.name, "iCan")
+        XCTAssertFalse(source.isFollowerSource)
+    }
+
+    func testICanEntityRoundTripsThroughCoreData() throws {
+        let coreDataManager = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
+        let context = coreDataManager.mainManagedObjectContext
+        let ican = ICan(address: "test-ican", name: "iCGM-0001", alias: nil, nsManagedObjectContext: context)
+        XCTAssertEqual(ican.bluetoothPeripheralType(), .iCanType)
+        XCTAssertTrue(ican.blePeripheral.shouldconnect)
+
+        coreDataManager.saveChanges()
+        let objectID = ican.blePeripheral.objectID
+        context.reset()
+
+        let restored = try XCTUnwrap(context.existingObject(with: objectID) as? BLEPeripheral)
+        XCTAssertNotNil(restored.iCan)
+        XCTAssertNil(restored.sibionics2)
+        XCTAssertEqual(restored.iCan?.bluetoothPeripheralType(), .iCanType)
+    }
+
+    func testDeviceStoreRoundTripAndClear() {
+        let address = "ican-test-address"
+        ICanDeviceStore.clear(address: address)
+        XCTAssertNil(ICanDeviceStore.load(address: address).authAccepted)
+        XCTAssertEqual(ICanDeviceStore.load(address: address).highestSequence, -1)
+
+        ICanDeviceStore.update(address: address) {
+            $0.model = "iCan i3"
+            $0.authAccepted = true
+            $0.problem = .linkLost
+        }
+        let stored = ICanDeviceStore.load(address: address)
+        XCTAssertEqual(stored.model, "iCan i3")
+        XCTAssertEqual(stored.authAccepted, true)
+        XCTAssertEqual(stored.problem, .linkLost)
+
+        ICanDeviceStore.clear(address: address)
+        XCTAssertNil(ICanDeviceStore.load(address: address).model)
+    }
 }

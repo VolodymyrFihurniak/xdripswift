@@ -146,6 +146,8 @@ class CGMICanTransmitter: BluetoothTransmitter, CGMTransmitter {
     private var phase: Phase = .connecting
     private var characteristics = [CBUUID: CBCharacteristic]()
     private var sessionBegun = false
+    /// A specific problem recorded on this link is not overwritten by the generic "link lost".
+    private var problemNotedOnThisLink = false
 
     private var identity = Identity()
     private var pendingIdentityReads = [CBUUID]()
@@ -218,6 +220,7 @@ class CGMICanTransmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     private func noteProblem(_ problem: ICanLinkProblem) {
+        problemNotedOnThisLink = true
         trace("iCan link problem: %{public}@", log: log, category: ConstantsLog.categoryCGMICan, type: .info, problem.rawValue)
         updateState {
             $0.problem = problem
@@ -247,7 +250,7 @@ class CGMICanTransmitter: BluetoothTransmitter, CGMTransmitter {
     }
 
     override func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        if phase != .streaming || error != nil {
+        if !problemNotedOnThisLink, phase != .streaming || error != nil {
             noteProblem(.linkLost)
         }
         invalidateConnection()
@@ -276,6 +279,7 @@ class CGMICanTransmitter: BluetoothTransmitter, CGMTransmitter {
         invalidateConnection()
         characteristics.removeAll()
         sessionBegun = false
+        problemNotedOnThisLink = false
         identity = Identity()
         pendingIdentityReads = []
         opsIndicating = false
