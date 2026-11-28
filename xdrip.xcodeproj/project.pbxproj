@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3A5D000E0000000000000001 /* MQ+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D000D0000000000000001 /* MQ+CoreDataProperties.swift */; };
+		3A5D000C0000000000000001 /* MQ+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D000B0000000000000001 /* MQ+CoreDataClass.swift */; };
+		3A5D000A0000000000000001 /* MQ+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00090000000000000001 /* MQ+BluetoothPeripheral.swift */; };
 		3A5D00170000000000000001 /* MQSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00160000000000000001 /* MQSessionTests.swift */; };
 		3A5D00150000000000000001 /* MQAlgorithmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00140000000000000001 /* MQAlgorithmTests.swift */; };
 		3A5D00130000000000000001 /* MQProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00120000000000000001 /* MQProtocolTests.swift */; };
@@ -1062,6 +1065,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		3A5D000F0000000000000001 /* xdrip v42 MQ.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v42 MQ.xcdatamodel"; sourceTree = "<group>"; };
+		3A5D000D0000000000000001 /* MQ+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MQ+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		3A5D000B0000000000000001 /* MQ+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MQ+CoreDataClass.swift"; sourceTree = "<group>"; };
+		3A5D00090000000000000001 /* MQ+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MQ+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
 		3A5D00160000000000000001 /* MQSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQSessionTests.swift; sourceTree = "<group>"; };
 		3A5D00140000000000000001 /* MQAlgorithmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQAlgorithmTests.swift; sourceTree = "<group>"; };
 		3A5D00120000000000000001 /* MQProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQProtocolTests.swift; sourceTree = "<group>"; };
@@ -3938,6 +3945,8 @@
 		F8EA6CA421B9A25B0082976B /* classes */ = {
 			isa = PBXGroup;
 			children = (
+				3A5D000D0000000000000001 /* MQ+CoreDataProperties.swift */,
+				3A5D000B0000000000000001 /* MQ+CoreDataClass.swift */,
 				AE7110070000000000000001 /* Anytime+CoreDataProperties.swift */,
 				AE7110050000000000000001 /* Anytime+CoreDataClass.swift */,
 				A1DE10070000000000000001 /* AiDex+CoreDataProperties.swift */,
@@ -4123,6 +4132,7 @@
 		F8F971AE23A5914C00C3F17D /* CGM */ = {
 			isa = PBXGroup;
 			children = (
+				3A5D00110000000000000001 /* MQ peripheral group */,
 				AE71100E0000000000000001 /* Anytime peripheral group */,
 				A1DE100E0000000000000001 /* AiDex peripheral group */,
 				1CA2100E0000000000000001 /* ICan peripheral group */,
@@ -4471,6 +4481,14 @@
 				3A5D00050000000000000001 /* MQSession.swift */,
 				3A5D00030000000000000001 /* MQAlgorithm.swift */,
 				3A5D00010000000000000001 /* MQProtocol.swift */,
+			);
+			path = MQ;
+			sourceTree = "<group>";
+		};
+		3A5D00110000000000000001 /* MQ peripheral group */ = {
+			isa = PBXGroup;
+			children = (
+				3A5D00090000000000000001 /* MQ+BluetoothPeripheral.swift */,
 			);
 			path = MQ;
 			sourceTree = "<group>";
@@ -5132,6 +5150,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A5D000E0000000000000001 /* MQ+CoreDataProperties.swift in Sources */,
+				3A5D000C0000000000000001 /* MQ+CoreDataClass.swift in Sources */,
+				3A5D000A0000000000000001 /* MQ+BluetoothPeripheral.swift in Sources */,
 				3A5D00060000000000000001 /* MQSession.swift in Sources */,
 				3A5D00040000000000000001 /* MQAlgorithm.swift in Sources */,
 				3A5D00020000000000000001 /* MQProtocol.swift in Sources */,
@@ -6939,6 +6960,7 @@
 		F85FF3C2252D0C32004E6FF1 /* xdrip.xcdatamodeld */ = {
 			isa = XCVersionGroup;
 			children = (
+				3A5D000F0000000000000001 /* xdrip v42 MQ.xcdatamodel */,
 				AE71100F0000000000000001 /* xdrip v41 Anytime.xcdatamodel */,
 				A1DE100F0000000000000001 /* xdrip v40 AiDex.xcdatamodel */,
 				1CA2100F0000000000000001 /* xdrip v39 iCan.xcdatamodel */,
@@ -6973,7 +6995,7 @@
 				F85FF3C3252D0C32004E6FF1 /* xdrip v12.xcdatamodel */,
 				F7936B31E35D82919DCDE294 /* xdrip v33.xcdatamodel */,
 			);
-			currentVersion = AE71100F0000000000000001 /* xdrip v41 Anytime.xcdatamodel */;
+			currentVersion = 3A5D000F0000000000000001 /* xdrip v42 MQ.xcdatamodel */;
 			path = xdrip.xcdatamodeld;
 			sourceTree = "<group>";
 			versionGroupType = wrapper.xcdatamodel;

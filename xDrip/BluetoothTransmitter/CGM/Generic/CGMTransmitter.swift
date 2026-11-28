@@ -210,6 +210,9 @@ enum CGMTransmitterType:String, CaseIterable {
     /// Anytime / Yuwell CGM. Keep this raw value stable because it is persisted in UserDefaults.
     case anytime = "Anytime"
 
+    /// MQ / Glutec CGM. Keep this raw value stable because it is persisted in UserDefaults.
+    case mq = "MQ"
+
     /// Direct Medtrum Nano glucose is already consumed by the connected pump and must not be
     /// exported as an independent CGM source to another OS-AID system.
     var osAidSharingPolicy: OSAidSharingPolicy {
@@ -246,6 +249,9 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .anytime:
             return .anytime
+
+        case .mq:
+            return .mq
 
         }
         
@@ -295,6 +301,10 @@ enum CGMTransmitterType:String, CaseIterable {
             // a new sensor is detected from its serial number or, on CT5, from the identity the transmitter reports
             return true
 
+        case .mq:
+            // a new run is detected when the transmitter starts a session (BEGIN_WORK) or its packet counter restarts
+            return true
+
         }
     }
     
@@ -331,6 +341,10 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .anytime:
             // the sensor is started with the vendor app, xDrip only follows its session
+            return false
+
+        case .mq:
+            // the transmitter starts its own session, xDrip only follows it
             return false
 
         }
@@ -371,6 +385,9 @@ enum CGMTransmitterType:String, CaseIterable {
         case .anytime:
             return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
 
+        case .mq:
+            return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
+
         }
     }
     
@@ -408,6 +425,9 @@ enum CGMTransmitterType:String, CaseIterable {
             return ""
 
         case .anytime:
+            return ""
+
+        case .mq:
             return ""
 
         }
