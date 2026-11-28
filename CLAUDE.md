@@ -301,6 +301,25 @@ the transmitter's own answer. CT5 identity frames (`0x30/0x31/0x38/0x3F`) bypass
 scanning a sensor code (a CT4 uses `K0` 1.13), reset/unbind/end-cycle commands, CT5 credential export, `tryCt4HandshakeFallback`, the Room import buffer, the older-history
 background pass, the persisted interrupted-backfill record of CT2/CT4, periodic telemetry for CT2/CT5, a device picker.
 
+MQ / Glutec CGM (`docs/mq.md`, JugglucoNG `drivers/mq`; **uncompiled, never tried on a real sensor**):
+`xDrip/BluetoothTransmitter/CGM/MQ/MQProtocol.swift` (pure: Nordic UART layout, `5A A5 CMD LEN payload CRC` frames, CRC16-Modbus with inbound mismatches accepted, 6-byte
+record parser, captured acknowledgements `MQAckFrames`, `MQResetCommand`, `MQVendorIdentity`, `MQProfile`, name prefixes), `MQAlgorithm.swift` (vendor current → mmol/L
+algorithm, K/B truncated to two decimals, `Float` storage recovered through its decimal text, `MQBootstrapSeed` first reference), `MQSession.swift` (`MQSessionTracker`,
+burst buffer, session timing/restore/link policies, `MQConfiguration`, `MQInputText`) and `CGMMQTransmitter.swift` (connection; `MQDeviceStore` per-address state and
+`MQConfigurationStore` user inputs in UserDefaults, both cleared with the peripheral; no Keychain item, the link is not encrypted; vectors in `MQProtocolTests`/
+`MQAlgorithmTests`/`MQSessionTests` come from the unchanged Kotlin run on the JVM, cross-checked in Python). Own Core Data entity `MQ` (model `xdrip v42 MQ` = v41 Anytime +
+entity, only a link to `BLEPeripheral`), `BluetoothPeripheralType.mqType`, `CGMTransmitterType.mq` (`NoCalibrator`, `overruleIsWebOOPEnabled()` true so xDrip's calibration
+button reaches `calibrate(calibration:)`; 3-minute readings, rated life 16 days, `sensorWarmupDurationInMinutes()` 0). **The vendor cloud is not ported** (`MQCloudClient`,
+`MQCloudRecovery`, `MQCloudWorkQueue`, `MQFollowerManager`, `MQBootstrapClient`; no network call to the vendor), so the factory sensitivity, algorithm version, packages and
+multiplier are not available: **no value is shown until the user types the sensitivity and its scale (used from packet 19; an unknown scale withholds the seed) or enters a
+fingerstick (after packet 8)**, never a guessed slope. Defaults are JugglucoNG's built-ins (version 0, 720, 1.1) while its traces showed 1, 720, 1.0. A changed input bumps
+`MQConfiguration.revision` and discards K/B at the next burst or calibration. The session is announced with `newSensorDetected` before the first value (calibration needs an
+active sensor); `newSensorDetected` always replaces the active sensor, so call it once per session. A fingerstick on a packet that already has a value is a duplicate timestamp
+for xDrip until the next packet. Accuracy was never compared with a reference (JugglucoNG records an unexplained excursion and vendor K/B adjustments it did not port); the
+battery byte is raw, not a percentage. Pure cloud timing/restore policies are ported and tested but unused. Skipped on purpose: the cloud, learned CRC variant, frame
+reassembly across notifications, source journal/replay, `protocolType` from the server (reset uses the observed Protocol02 marker only), native mirror, battery percentage, a
+device picker, history beyond what the transmitter replays.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new

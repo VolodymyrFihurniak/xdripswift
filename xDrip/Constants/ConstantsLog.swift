@@ -115,6 +115,9 @@ enum ConstantsLog {
     /// Anytime / Yuwell cgm
     static let categoryCGMAnytime =                         "CGMAnytime                    "
 
+    /// MQ / Glutec cgm
+    static let categoryCGMMQ =                              "CGMMQ                         "
+
     /// alertmanager
     static let categoryAlertManager =                       "AlertManager                  "
     

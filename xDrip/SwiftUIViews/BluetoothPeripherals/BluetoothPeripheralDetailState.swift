@@ -939,6 +939,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             return makeAiDexSections(bluetoothPeripheral: bluetoothPeripheral)
         case .anytimeType:
             return makeAnytimeSections(bluetoothPeripheral: bluetoothPeripheral)
+        case .mqType:
+            return makeMQSections(bluetoothPeripheral: bluetoothPeripheral)
         case .M5StackType:
             return makeM5StackSections(bluetoothPeripheral: bluetoothPeripheral, includesSpecificM5StackSection: true)
         case .M5StickCType:
@@ -4007,6 +4009,299 @@ private extension BluetoothPeripheralDetailState {
         ]
     }
 
+    /// Status of an MQ / Glutec transmitter, read from the per-address state the transmitter keeps, and the
+    /// algorithm inputs the manufacturer's online service would supply (this app does not use it).
+    func makeMQSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        guard bluetoothPeripheral is MQ else { return [] }
+
+        let address = bluetoothPeripheral.blePeripheral.address
+        let state = MQDeviceStore.load(address: address)
+        let configuration = MQConfigurationStore.load(address: address)
+        let tracker = state.tracker
+        let now = Date()
+
+        var sessionStart: Date?
+        if tracker.sensorStartAtMs > 0 {
+            sessionStart = Date(timeIntervalSince1970: Double(tracker.sensorStartAtMs) / 1000)
+        }
+        // The rated life is advisory: the transmitter decides when the session ends.
+        let expectedEndMs = tracker.officialEndMs()
+        var expectedEnd: Date?
+        if expectedEndMs > 0 {
+            expectedEnd = Date(timeIntervalSince1970: Double(expectedEndMs) / 1000)
+        }
+
+        var lastReadingDetail = Texts_BluetoothPeripheralView.mqWaitingForReading
+        if let date = state.lastReadingDate {
+            lastReadingDetail = RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
+        }
+
+        var calculationDetail = Texts_BluetoothPeripheralView.mqCalculationNeedsInput
+        if tracker.hasSlope {
+            calculationDetail = String(format: Texts_BluetoothPeripheralView.mqSlopeFormat, MQAlgorithm.decimalParameter(tracker.kValue))
+        } else if configuration.hasUsableSeed {
+            calculationDetail = Texts_BluetoothPeripheralView.mqCalculationFromSensitivity
+        }
+
+        var problemDetail = Texts_BluetoothPeripheralView.mqNoLinkProblem
+        if let problem = state.problem {
+            problemDetail = Texts_BluetoothPeripheralView.mqProblem(problem)
+            if let problemDate = state.problemDate {
+                problemDetail += " \u{00B7} " + RelativeDateTimeFormatter().localizedString(for: problemDate, relativeTo: now)
+            }
+        }
+
+        let statusRows = [
+            row(id: "mq-name", title: Texts_BluetoothPeripheralView.mqBluetoothName, detail: state.advertisedName),
+            row(id: "mq-session-start", title: Texts_BluetoothPeripheralView.mqSessionStart, detail: sessionStart?.formatted()),
+            row(id: "mq-expected-end", title: Texts_BluetoothPeripheralView.mqExpectedEnd, detail: expectedEnd?.formatted()),
+            row(
+                id: "mq-packet",
+                title: Texts_BluetoothPeripheralView.mqPacketNumber,
+                detail: tracker.lastObservedPacketIndex >= 0 ? String(tracker.lastObservedPacketIndex) : nil
+            ),
+            row(
+                id: "mq-battery",
+                title: Texts_BluetoothPeripheralView.mqBattery,
+                detail: tracker.lastBatteryRaw >= 0 ? String(tracker.lastBatteryRaw) : nil
+            ),
+            row(id: "mq-last-reading", title: Texts_BluetoothPeripheralView.mqLastReading, detail: lastReadingDetail),
+            row(id: "mq-calculation", title: Texts_BluetoothPeripheralView.mqCalculation, detail: calculationDetail, detailLineLimit: 3),
+            row(
+                id: "mq-last-link-problem",
+                title: Texts_BluetoothPeripheralView.mqLastLinkProblem,
+                detail: problemDetail,
+                detailIndicator: state.problem != nil ? SettingsIndicator(color: Color.orange) : nil
+            )
+        ]
+
+        let sensitivityDetail = configuration.sensitivity.map { MQInputText.format($0) } ?? Texts_BluetoothPeripheralView.mqSensitivityNotSet
+
+        let inputRows = [
+            row(
+                id: "mq-sensitivity",
+                title: Texts_BluetoothPeripheralView.mqSensitivity,
+                detail: sensitivityDetail,
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.requestMQSensitivity(for: bluetoothPeripheral)
+                }
+            ),
+            row(
+                id: "mq-sensitivity-scale",
+                title: Texts_BluetoothPeripheralView.mqSensitivityScale,
+                detail: Texts_BluetoothPeripheralView.mqSensitivityScaleTitle(configuration.scale),
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.requestMQSensitivityScale(for: bluetoothPeripheral)
+                }
+            ),
+            row(
+                id: "mq-algorithm-version",
+                title: Texts_BluetoothPeripheralView.mqAlgorithmVersion,
+                detail: String(format: Texts_BluetoothPeripheralView.mqAlgorithmVersionFormat, Int32(configuration.algorithmVersion)),
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.requestMQAlgorithmVersion(for: bluetoothPeripheral)
+                }
+            ),
+            row(
+                id: "mq-packages",
+                title: Texts_BluetoothPeripheralView.mqPackages,
+                detail: String(configuration.packages),
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.requestMQPackages(for: bluetoothPeripheral)
+                }
+            ),
+            row(
+                id: "mq-multiplier",
+                title: Texts_BluetoothPeripheralView.mqMultiplier,
+                detail: MQInputText.format(configuration.multiplier),
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.requestMQMultiplier(for: bluetoothPeripheral)
+                }
+            ),
+            row(
+                id: "mq-reset",
+                title: Texts_BluetoothPeripheralView.mqReset,
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.confirmMQReset(for: bluetoothPeripheral)
+                }
+            )
+        ]
+
+        return [
+            BluetoothPeripheralDetailSection(
+                id: "mq",
+                title: Texts_BluetoothPeripheralView.mqSectionTitle,
+                footer: Texts_BluetoothPeripheralView.mqSectionFooter,
+                rows: statusRows
+            ),
+            BluetoothPeripheralDetailSection(
+                id: "mq-inputs",
+                title: Texts_BluetoothPeripheralView.mqInputsTitle,
+                footer: Texts_BluetoothPeripheralView.mqInputsFooter,
+                rows: inputRows
+            )
+        ]
+    }
+
+    /// Factory sensitivity typed by hand; empty removes it. The scale decides whether it is used.
+    func requestMQSensitivity(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        func isAccepted(_ text: String) -> Bool {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { return true }
+            guard let value = MQInputText.decimal(trimmed) else { return false }
+            return MQConfiguration.sensitivityRange.contains(value)
+        }
+        presentTextEntryView(BluetoothPeripheralTextEntry(
+            title: Texts_BluetoothPeripheralView.mqSensitivity,
+            message: Texts_BluetoothPeripheralView.mqSensitivityMessage,
+            keyboardType: .decimalPad,
+            text: MQConfigurationStore.load(address: address).sensitivity.map { MQInputText.format($0) },
+            placeholder: "2.93",
+            actionTitle: Texts_Common.Ok,
+            cancelTitle: Texts_Common.Cancel,
+            actionHandler: { [weak self] text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let value: Float? = trimmed.isEmpty ? nil : MQInputText.decimal(trimmed)
+                MQConfigurationStore.update(address: address) { $0.sensitivity = value }
+                self?.refresh()
+            },
+            actionIsEnabled: { text in
+                isAccepted(text)
+            },
+            inputValidator: { text in
+                isAccepted(text) ? nil : Texts_BluetoothPeripheralView.mqSensitivityMessage
+            }
+        ))
+    }
+
+    func requestMQSensitivityScale(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        let scales = MQSensitivityScale.allCases
+        presentSelectionListView(BluetoothPeripheralSelectionList(
+            title: Texts_BluetoothPeripheralView.mqSensitivityScale,
+            explanation: Texts_BluetoothPeripheralView.mqSensitivityScaleMessage,
+            data: scales.map { Texts_BluetoothPeripheralView.mqSensitivityScaleTitle($0) },
+            selectedRow: scales.firstIndex(of: MQConfigurationStore.load(address: address).scale)
+        ) { [weak self] index in
+            guard scales.indices.contains(index) else { return }
+            MQConfigurationStore.update(address: address) { $0.scale = scales[index] }
+            self?.refresh()
+        })
+    }
+
+    func requestMQAlgorithmVersion(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        let versions = MQConfiguration.algorithmVersions
+        presentSelectionListView(BluetoothPeripheralSelectionList(
+            title: Texts_BluetoothPeripheralView.mqAlgorithmVersion,
+            data: versions.map { String(format: Texts_BluetoothPeripheralView.mqAlgorithmVersionFormat, Int32($0)) },
+            selectedRow: versions.firstIndex(of: MQConfigurationStore.load(address: address).algorithmVersion)
+        ) { [weak self] index in
+            guard versions.indices.contains(index) else { return }
+            MQConfigurationStore.update(address: address) { $0.algorithmVersion = versions[index] }
+            self?.refresh()
+        })
+    }
+
+    func requestMQPackages(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        func isAccepted(_ text: String) -> Bool {
+            guard let value = MQInputText.integer(text) else { return false }
+            return MQConfiguration.packagesRange.contains(value)
+        }
+        presentTextEntryView(BluetoothPeripheralTextEntry(
+            title: Texts_BluetoothPeripheralView.mqPackages,
+            message: Texts_BluetoothPeripheralView.mqPackagesMessage,
+            keyboardType: .numberPad,
+            text: String(MQConfigurationStore.load(address: address).packages),
+            placeholder: String(MQConstants.algoDefaultPackages),
+            actionTitle: Texts_Common.Ok,
+            cancelTitle: Texts_Common.Cancel,
+            actionHandler: { [weak self] text in
+                guard let value = MQInputText.integer(text), MQConfiguration.packagesRange.contains(value) else { return }
+                MQConfigurationStore.update(address: address) { $0.packages = value }
+                self?.refresh()
+            },
+            actionIsEnabled: { text in
+                isAccepted(text)
+            },
+            inputValidator: { text in
+                isAccepted(text) ? nil : Texts_BluetoothPeripheralView.mqPackagesMessage
+            }
+        ))
+    }
+
+    func requestMQMultiplier(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        func isAccepted(_ text: String) -> Bool {
+            guard let value = MQInputText.decimal(text) else { return false }
+            return MQConfiguration.multiplierRange.contains(value)
+        }
+        presentTextEntryView(BluetoothPeripheralTextEntry(
+            title: Texts_BluetoothPeripheralView.mqMultiplier,
+            message: Texts_BluetoothPeripheralView.mqMultiplierMessage,
+            keyboardType: .decimalPad,
+            text: MQInputText.format(MQConfigurationStore.load(address: address).multiplier),
+            placeholder: MQInputText.format(Float(MQConstants.algoDefaultMultiplier)),
+            actionTitle: Texts_Common.Ok,
+            cancelTitle: Texts_Common.Cancel,
+            actionHandler: { [weak self] text in
+                guard let value = MQInputText.decimal(text), MQConfiguration.multiplierRange.contains(value) else { return }
+                MQConfigurationStore.update(address: address) { $0.multiplier = value }
+                self?.refresh()
+            },
+            actionIsEnabled: { text in
+                isAccepted(text)
+            },
+            inputValidator: { text in
+                isAccepted(text) ? nil : Texts_BluetoothPeripheralView.mqMultiplierMessage
+            }
+        ))
+    }
+
+    func confirmMQReset(for bluetoothPeripheral: BluetoothPeripheral) {
+        pendingAlert = BluetoothPeripheralDetailAlert(
+            title: Texts_BluetoothPeripheralView.mqResetConfirmTitle,
+            message: Texts_BluetoothPeripheralView.mqResetConfirmMessage,
+            primaryButtonTitle: Texts_BluetoothPeripheralView.mqReset,
+            primaryAction: { [weak self] in
+                guard let self = self else { return }
+                let transmitter = self.bluetoothPeripheralManager?.getBluetoothTransmitter(
+                    for: bluetoothPeripheral,
+                    createANewOneIfNecesssary: false
+                ) as? CGMMQTransmitter
+                // The alert view clears `pendingAlert` right after this action, so the result is
+                // shown on the next turn of the main queue.
+                guard let mqTransmitter = transmitter else {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.pendingAlert = BluetoothPeripheralDetailAlert(
+                            title: Texts_BluetoothPeripheralView.mqReset,
+                            message: Texts_BluetoothPeripheralView.mqResetNotSent
+                        )
+                    }
+                    return
+                }
+                mqTransmitter.resetSensor { [weak self] sent in
+                    DispatchQueue.main.async { [weak self] in
+                        self?.pendingAlert = BluetoothPeripheralDetailAlert(
+                            title: Texts_BluetoothPeripheralView.mqReset,
+                            message: sent ? Texts_BluetoothPeripheralView.mqResetSent : Texts_BluetoothPeripheralView.mqResetNotSent
+                        )
+                        self?.refresh()
+                    }
+                }
+            },
+            secondaryButtonTitle: Texts_Common.Cancel
+        )
+    }
+
     func makeLibreBridgeRows(
         idPrefix: String,
         sensorType: String?,
@@ -4103,6 +4398,12 @@ private extension BluetoothPeripheralType {
             return BluetoothPeripheralScanPreparationNotice(
                 title: Texts_BluetoothPeripheralView.anytimeScanNoticeTitle,
                 message: Texts_BluetoothPeripheralView.anytimeScanNoticeMessage
+            )
+
+        case .mqType:
+            return BluetoothPeripheralScanPreparationNotice(
+                title: Texts_BluetoothPeripheralView.mqScanNoticeTitle,
+                message: Texts_BluetoothPeripheralView.mqScanNoticeMessage
             )
 
         default:

@@ -610,7 +610,8 @@ extension BluetoothPeripheralType {
             .Sibionics2Type,
             .iCanType,
             .aiDexType,
-            .anytimeType
+            .anytimeType,
+            .mqType
         ]
     ]
 }

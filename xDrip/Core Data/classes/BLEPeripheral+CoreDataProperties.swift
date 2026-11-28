@@ -78,6 +78,9 @@ extension BLEPeripheral {
 
     /// Anytime / Yuwell CGM peripheral.
     @NSManaged public var anytime: Anytime?
+
+    /// MQ / Glutec CGM peripheral.
+    @NSManaged public var mq: MQ?
     
     /// sensorSerialNumber of last sensor that was read
     @NSManaged public var sensorSerialNumber: String?
