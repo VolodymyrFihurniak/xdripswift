@@ -102,6 +102,12 @@ that broke the CI before. Before every commit: `python3 tools/check_swift.py` an
   Support/sibionics-source, new session = new journal. `probeCodeDidChange` (sensitivity, model, GS3) replays
   the contiguous journal locally a day per step (`replayFromJournal`), then asks the sensor for newer minutes.
   Backups carry the journals (`BackupPayload.sibionicsSourceJournals`), restored by merge, phone wins.
+- **Skin temperature** (`SibionicsSkinTemperatureStore`, end of `Sibionics2ReadingBatchProcessor.swift`; JugglucoNG
+  `SensorTemperature` + Statistics temperature card; display only, never feeds glucose): recorded in `process` for every
+  unique minute (live, history, journal replay), one sample per five-minute window (newest wins, keyed by time so replays
+  never double count), last 48 h from the newest sample, one JSON per sensor in Application Support/`sibionics-temperature`,
+  cleared with the peripheral. Shown as a row in the device info section and as a card in Statistics > CGM data (series of
+  whichever sensor reported last). Always °C: the app has no temperature unit setting.
 - **Last link problem** (`Sibionics2DeviceStatus.lastLinkProblem`, JugglucoNG "Last BLE status"): set by
   `noteLinkProblem` on lost links, refusals, stalls and auth failures, cleared by a reading; shown on the
   device screen. Home says "no signal" after 3 min for 1-minute sensors (`RootHomeSensorReach`).
@@ -137,6 +143,8 @@ watch and notification extensions. A treatment's insulin is named in its `notes`
 prediction periods/body weight/protein-fat/intensity (notes tokens `P:20 F:15`, `intensity:light`),
 `TherapyParameterEstimator` (sensitivity / carb ratio suggestions from clean corrections and meals, per
 period, applied only on tap), `AlertKind.predictedHigh` (raw 17, `PredictedHighAlert`, JugglucoNG PRE_HIGH + `ForecastIobCoverage`),
+`AlertKind.persistentHigh` (raw 18, `PersistentHighAlert`, JugglucoNG PERSISTENT_HIGH: stateless replay of 4 h of readings, run of values
+above the alert value for `experimentalPersistentHighMinutes`, quiet while falling ≥ 1 mg/dL/min without ending the run, own group after High),
 accuracy recorder (Application Support JSON, 14 days; `PredictionInspector` + `ExperimentalPredictionInspectorView` = JugglucoNG prediction inspector), Nightscout devicestatus forecast
 (`openaps.suggested.predBGs.IOB`, only when no AID status is followed), and
 `ExperimentalCompanionForecast` for widgets, Live Activity and watch (optional fields).
@@ -163,6 +171,32 @@ to 5 min), `SameDirectionAlertRule` (Fast Drop ↔ predicted low after a snooze)
 `ExperimentalQuietWindow` (sound/vibration held back, lows always break through) — all off by default. Basal injections
 (Nightscout event type Note) always count in `ExperimentalTreatment.fetch`.
 
+IOB and COB through Nightscout (`docs/experimental-features.md`, Settings → Experimental features → "IOB and COB
+through Nightscout", UserDefaults `experimentalNightscoutIobUpload` / `experimentalNightscoutIobFollow`, both off;
+JugglucoNG `NightscoutIobDeviceStatus` / `RemoteIobSnapshot`): `ExperimentalNightscoutIob` builds the devicestatus
+(`openaps.iob.{iob,timestamp}` classic IOB + `jugglucong.{iob,eiob,cob}`, two decimals, device xDrip4iOS), the
+cadence (5 min while insulin is on board or values move, 10 min idle — JugglucoNG's 15 would outlast the follower's
+window) and the snapshot from this phone's own treatments only (`DataFlowPolicy.localTreatmentsOnly`, rapid insulins,
+needs a dose in 24 h); uploaded by `NightscoutSyncManager.uploadExperimentalIobIfDue` next to the forecast upload and
+never while an AID's status is followed. Follower: `NightscoutSyncManager.updateRemoteIob` polls `devicestatus?count=10`
+(≥ 60 s apart) into `ExperimentalRemoteIobStore`; `ExperimentalRemoteIob` is fresh for 15 min (JugglucoNG 30);
+`TherapyMetricsManager.resolve(remoteIob:)` shows it as `TherapyMetricSource.remote` on the Home IOB/COB row only
+(`snapshot(includesRemoteIob:)`, labelled "Remote IOB/COB", details sheet shows eIOB), and only when
+`DataFlowPolicy.showsRemoteIob` holds and the local treatment window is confirmed empty — a phone with treatments keeps
+its own values (JugglucoNG prefers remote), so remote and local never mix. Watch, widgets, Live Activity and chart never see
+remote values. Uncompiled, never tried on a real Nightscout or a JugglucoNG phone.
+
+Trend engine (`TrendEngine`, `CausalGlucoseFilter`, `ExperimentalTrendEngine` at the end of ExperimentalTherapy.swift;
+JugglucoNG `logic/TrendEngine.kt`, `CausalGlucoseFilter.kt`, `TrendWindows.kt`; keys `experimentalTrendEngine` and
+`experimentalTrendEngineCausalFilter`, both off): for Sibionics 1/2 in master mode only (`cgmTransmitterType == .sibionics2`) it
+overwrites `calculatedValueSlope`/`hideSlope` at the end of `BgPostProcessingManager.recomputeSlopes` (it runs after every new
+reading and every replay and replaces the slope `Calibrator.findSlope` gave at creation, which only the Loop-delay minute list
+still sees), with a cadence-scaled, recency-weighted regression over the readings before each
+one (suppressed 5-minute-cadence readings are input, never written); no engine trend (< 2 readings) keeps xDrip's slope. Arrow
+thresholds stay xDrip's (the engine's `stateFor` 0.5/1/2 is ported and tested, not used for the arrow). Values, uploads of values,
+Fast Drop/Rise (they compare two readings) and the delta are untouched; the causal Kalman filter feeds only the regression and
+never a stored/displayed value. Vectors in `TrendEngineTests` come from the unchanged Kotlin run on the JVM.
+
 Food library (`xDrip/SwiftUIViews/Treatments/FoodLibrary.swift`, button in the carbs treatment
 editor, no setting): JugglucoNG staples embedded as a `key|carbs|protein|fat|portions|en|uk` table,
 custom foods and recents as UserDefaults JSON, Open Food Facts search/barcode (network only on
@@ -183,6 +217,16 @@ that confirms a hand-written insulin entry (same insulin, amount, ≤ 15 min, in
 pen's time instead of adding it twice; imported doses carry `enteredBy` "Insulin pen". CoreNFC needs the NDEF AID
 `D2760000850101` in Info.plist `...iso7816.select-identifiers`. Tested only against the
 `SimulatedPen` in the tests (verified with a Python port) — never against a real pen.
+
+Outbound API (`docs/outbound-api.md`, JugglucoNG `OutboundApi`, Settings → Sharing and services; no VK / Delta Chat): Telegram bot
+(`sendMessage`, then `editMessageText` on the last message inside a window, unchanged values skipped) and custom JSON webhook (standard body
+`xdrip.outbound.glucose.v1` or a body template), one trigger (every reading / low / high / outside range) and minimum interval per destination.
+`xDrip/Managers/OutboundApi/OutboundApi.swift` (`OutboundApiPlanner`, `OutboundApiDispatcher` over `OutboundApiTransport`, `@MainActor OutboundApiManager`),
+`OutboundApiSettingsView.swift`. Hooked in `RootApplicationCoordinator.processNewGlucoseData` beside the Dexcom Share upload (foreground or BLE wake,
+with a background task); `ExperimentalPowerSaving` raises the interval to 5 min unless urgent. Token, URL and headers live in the Keychain
+(`OutboundApiKeychainSecretStore`, one item per destination), config/state in UserDefaults `outboundApiDestinations` / `outboundApiState`, all excluded
+from backups. iOS has no timer, so JugglucoNG's stale/missed message is a note posted before the next reading (`gapNotice`), never on time. Not ported:
+IOB/COB/raw/battery tokens, retries, Activity Log entries. Never compiled or tried against Telegram.
 
 Libre sensor activation (`docs/libre-activation.md`): `LibreSensorActivation` (plan) and
 `LibreSensorActivator` (CoreNFC) at the end of `Libre/Utilities/LibreNFC.swift`, row on the Libre 2,
@@ -218,6 +262,82 @@ Quick treatment logging (`AppShortcuts.swift`): `LogCarbsIntent` / `LogInsulinIn
 Action button; unlocked phone only) save a `TreatmentEntry` like the editor (`QuickTreatmentLog`, app's store
 when running, else `CoreDataManager.create`) and request a Nightscout sync. Strings in `Localizable.strings`.
 
+iCan (Sinocare) i3/i6 CGM (`docs/ican.md`, JugglucoNG `drivers/icanhealth`; **uncompiled, never tried on a real sensor**):
+`xDrip/BluetoothTransmitter/CGM/ICan/ICanProtocol.swift` (pure maths: key families, AES-128-CBC frames, F3/F4/F6 handshake, live
+frames, RACP/SN history, timeline; vectors in `ICanProtocolTests` come from a Python port and JugglucoNG's captured frames) and
+`CGMICanTransmitter.swift` (connection; `ICanDeviceStore` keeps per-address state in UserDefaults, cleared with the peripheral).
+Own Core Data entity `ICan` (model `xdrip v39 iCan` = v38 + entity, only a link to `BLEPeripheral`), `BluetoothPeripheralType.iCanType`,
+`CGMTransmitterType.iCan` (own switch cases everywhere; `NoCalibrator`, readings from the sensor's own algorithm). Foreground scan with
+no service filter, first connect takes the first name that looks like an iCan sensor (no picker). Skipped on purpose: vendor cloud and
+provisioning, native-library rebuild, finger calibration (CE), battery, original-history RACP phase, direct 16-bit encoding, ENDED
+28-day cap, covered-edge persistence, `0x1A`/`F2`/`F7` writes, history beyond 24 h. JugglucoNG's hyphenated `h6-14/15/7` checks never
+match and are ported as they are.
+
+AiDex X / LinX CGM (`docs/aidex.md`, JugglucoNG `drivers/aidex`; **uncompiled, never tried on a real sensor**):
+`xDrip/BluetoothTransmitter/CGM/AiDex/AiDexProtocol.swift` (pure: serial-derived MD5 secret/IV, AES-128-CFB, CRC-8/MAXIM and CRC-16, F001/F002/F003
+key exchange, command builder, live/history parsers, `AiDexHistoryMerge`, key-exchange / streaming / history policies; vectors in `AiDexProtocolTests`
+come from the unchanged Kotlin run on the JVM, cross-checked in Python) and `CGMAiDexTransmitter.swift` (connection; `AiDexDeviceStore` per-address state
+in UserDefaults, `AiDexPairKeyStore` the PAIR key in the Keychain; both cleared with the peripheral). Own Core Data entity `AiDex` (model `xdrip v40 AiDex` =
+v39 iCan + entity, only a link to `BLEPeripheral`), `BluetoothPeripheralType.aiDexType`, `CGMTransmitterType.aiDex` (`NoCalibrator`, the sensor's own
+factory-calibrated values, 1-minute readings). iOS has no bond-state API: "paired here" = a stored key, pairing happens on the first `F001` access, and the
+`F001` values bypass `super` (the base class traces every received value). F-series sensors (`AiDEX F-…`, cloud-provisioned keys) are refused with a clear
+link problem. Skipped on purpose: `AiDexCnCloudClient` (China cloud key endpoint, spoofed `X-Forwarded-For`; never port it), default-parameter provisioning,
+wear-profile catalogue, broadcast scan / `0x11` parser and BLE continuity sync, blood-glucose calibration / BloodControl, Adaptive V2, temperature sidecar,
+reset/unpair actions, PAIR key backup, history beyond 24 h.
+
+Anytime / Yuwell CGM (`docs/anytime.md`, JugglucoNG `drivers/anytime`; **uncompiled, never tried on a real sensor**):
+`xDrip/BluetoothTransmitter/CGM/Anytime/AnytimeProtocol.swift` (pure: frame builders/parsers, CT5 cipher, sensor code `AnytimeQr`, family table and
+profiles), `AnytimeSession.swift` (connect/session retry, history gap arithmetic, caught-up cooldown, CT5 live clock and learned current scale,
+calibration policy, trend estimator), `AnytimeAlgorithm.swift` (CT2 CT-14 model, CT4 MK4 `AnytimeCalibrator`, CT5 computed by the transmitter; float
+arithmetic kept in `Float`, tests compare bit patterns; vectors in `AnytimeProtocolTests`/`AnytimeSessionTests`/`AnytimeAlgorithmTests` come from the unchanged
+Kotlin run on the JVM) and `CGMAnytimeTransmitter.swift` (connection, one write slot with priorities, CT2/CT4/CT5 handshakes, history engine, CT5 gap repair
+persisted; `AnytimeDeviceStore` per-address state in UserDefaults, `AnytimeCt5SecretStore` the CT5 cipher key in the Keychain, `AnytimeConfiguration`; all cleared
+with the peripheral). Own Core Data entity `Anytime` (model `xdrip v41 Anytime` = v40 AiDex + entity, only a link to `BLEPeripheral`), `BluetoothPeripheralType.anytimeType`,
+`CGMTransmitterType.anytime` (`NoCalibrator`, 3-minute readings, warm-up held back by the driver itself, `sensorWarmupDurationInMinutes()` 0). Families by BLE name: CT2
+(`SN04…`, legacy `FFF0`), CT4 (`SN72…SN90`), CT5 (`Anytime…`, encrypted); **CT2.5, every CT3 family and unknown names are refused** with a link problem (their glucose is
+JugglucoNG's `AnytimeNativeAlgorithm`, a decompiled vendor kernel, not ported). The CT5 "estimate from current after the rated life" (JugglucoNG `AnytimeCt5RawScale`) is
+an opt-in toggle, off by default, because the estimates look like ordinary readings (`AnytimeConfiguration.ct5EstimatesFromCurrent`). iOS has no bond-state API: "bound" is
+the transmitter's own answer. CT5 identity frames (`0x30/0x31/0x38/0x3F`) bypass `super.didUpdateValueFor`. Skipped on purpose: fingerstick calibration, typing or
+scanning a sensor code (a CT4 uses `K0` 1.13), reset/unbind/end-cycle commands, CT5 credential export, `tryCt4HandshakeFallback`, the Room import buffer, the older-history
+background pass, the persisted interrupted-backfill record of CT2/CT4, periodic telemetry for CT2/CT5, a device picker.
+
+MQ / Glutec CGM (`docs/mq.md`, JugglucoNG `drivers/mq`; **uncompiled, never tried on a real sensor**):
+`xDrip/BluetoothTransmitter/CGM/MQ/MQProtocol.swift` (pure: Nordic UART layout, `5A A5 CMD LEN payload CRC` frames, CRC16-Modbus with inbound mismatches accepted, 6-byte
+record parser, captured acknowledgements `MQAckFrames`, `MQResetCommand`, `MQVendorIdentity`, `MQProfile`, name prefixes), `MQAlgorithm.swift` (vendor current → mmol/L
+algorithm, K/B truncated to two decimals, `Float` storage recovered through its decimal text, `MQBootstrapSeed` first reference), `MQSession.swift` (`MQSessionTracker`,
+burst buffer, session timing/restore/link policies, `MQConfiguration`, `MQInputText`) and `CGMMQTransmitter.swift` (connection; `MQDeviceStore` per-address state and
+`MQConfigurationStore` user inputs in UserDefaults, both cleared with the peripheral; no Keychain item, the link is not encrypted; vectors in `MQProtocolTests`/
+`MQAlgorithmTests`/`MQSessionTests` come from the unchanged Kotlin run on the JVM, cross-checked in Python). Own Core Data entity `MQ` (model `xdrip v42 MQ` = v41 Anytime +
+entity, only a link to `BLEPeripheral`), `BluetoothPeripheralType.mqType`, `CGMTransmitterType.mq` (`NoCalibrator`, `overruleIsWebOOPEnabled()` true so xDrip's calibration
+button reaches `calibrate(calibration:)`; 3-minute readings, rated life 16 days, `sensorWarmupDurationInMinutes()` 0). **The vendor cloud is not ported** (`MQCloudClient`,
+`MQCloudRecovery`, `MQCloudWorkQueue`, `MQFollowerManager`, `MQBootstrapClient`; no network call to the vendor), so the factory sensitivity, algorithm version, packages and
+multiplier are not available: **no value is shown until the user types the sensitivity and its scale (used from packet 19; an unknown scale withholds the seed) or enters a
+fingerstick (after packet 8)**, never a guessed slope. Defaults are JugglucoNG's built-ins (version 0, 720, 1.1) while its traces showed 1, 720, 1.0. A changed input bumps
+`MQConfiguration.revision` and discards K/B at the next burst or calibration. The session is announced with `newSensorDetected` before the first value (calibration needs an
+active sensor); `newSensorDetected` always replaces the active sensor, so call it once per session. A fingerstick on a packet that already has a value is a duplicate timestamp
+for xDrip until the next packet. Accuracy was never compared with a reference (JugglucoNG records an unexplained excursion and vendor K/B adjustments it did not port); the
+battery byte is raw, not a percentage. Pure cloud timing/restore policies are ported and tested but unused. Skipped on purpose: the cloud, learned CRC variant, frame
+reassembly across notifications, source journal/replay, `protocolType` from the server (reset uses the observed Protocol02 marker only), native mirror, battery percentage, a
+device picker, history beyond what the transmitter replays.
+
+Ottai / Syai CGM (`docs/ottai.md`, JugglucoNG `drivers/ottai`; **uncompiled, never tried on a real sensor**):
+`xDrip/BluetoothTransmitter/CGM/Ottai/OttaiProtocol.swift` (pure: BLE layout 180A/181F/E06E1D43, "BLE Auth V2" secp256r1 ECDH + SHA-256 signatures, AES-ECB zero-padded
+payloads, 8/9-byte record parser, RPN glucose expression `OttaiFormula`, `OttaiOutputFilter`, `OttaiMaterials` portable JSON), `OttaiSession.swift` (`OttaiTiming`,
+stream clock `OttaiArrivalStartCorrection`, `OttaiPipeline`, history window/chain, `OttaiCgmInfo`) and `CGMOttaiTransmitter.swift` (connection; `OttaiDeviceStore`
+per-address state and the rejected-address list in UserDefaults, `OttaiMaterialsStore` the keys in the Keychain, one item per address plus a "pending" item the add
+screen fills, adopted by the first sensor whose signature matches; all cleared with the peripheral; vectors in `OttaiProtocolTests`/`OttaiFormulaTests`/`OttaiSessionTests`
+come from the unchanged Kotlin run on the JVM). Own Core Data entity `Ottai` (model `xdrip v43 Ottai` = v42 MQ + entity, only a link to `BLEPeripheral`),
+`BluetoothPeripheralType.ottaiType`, `CGMTransmitterType.ottai` (`NoCalibrator`, 1-minute readings, `sensorWarmupDurationInMinutes()` 0, the pipeline withholds the first
+10 minutes). **The six authentication keys and the per-sensor glucose coefficients exist only in the vendor cloud** (account that owns the sensor), so the driver never
+contacts it and **shows a sensor as unsupported until the user imports the material** (JugglucoNG's portable JSON v1 from the clipboard, device screen or add screen);
+nothing is guessed. Never port the cloud client (`OttaiCloudClient` sends spoofed forwarded-IP headers), `OttaiNetSecurity`, `OttaiRegionalTransport` or the phone-number login. A first signature that does
+not match the material rejects the peripheral for good (address kept in `OttaiDeviceStore.rejectedAddresses`, max 20; importing other material forgives it); the manager
+still creates a Core Data peripheral for it before the handshake (accepted). iOS has no MAC (the 12-digit sensor id comes from the material), no bond-state API, no way to tell a
+read from a notification of `2AA7` (reads in flight counter), and a 185-byte MTU against Android's 247 (history frames may arrive truncated: the largest untested risk). The
+transmitter owns its copy of the state: the screen calls `sensorMaterialsDidChange(removed:)` instead of writing the store. Skipped on purpose: the cloud, firmware/OTA,
+activation of a new sensor (command status 0-2 only hangs up and retries after 5 minutes), NFC wake reminder, ended-sensor history, Room diff / persistent hole ledger,
+provisional start from the CGM info, CN V3 server-mediated active authentication, native mirror, fingerstick calibration, battery, a device picker.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new
@@ -229,6 +349,11 @@ literal as a key there (en + uk); a `String` parameter is shown verbatim, so wra
 speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strings`.
 
 ## Not ported (yet)
+
+Automatic sensor handover (JugglucoNG `SensorHandoverRuntime`, `ManagedSensorHandoff`, `MultiSensorSelection`): not ported. It
+relies on several sensors running at once and one of them taking over as primary when the other reaches its official end.
+xDrip4iOS keeps exactly one active CGM transmitter and one active `Sensor`, so a switch at expiry would only automate what the
+user does by hand and would not remove the gap the handover exists to close. It needs a multi-sensor architecture first.
 
 NovoPen unattended background read: iOS opens an NFC session only on the user's tap (no background
 ISO 7816 reading), so a pen is always read from the Insulin pens screen.

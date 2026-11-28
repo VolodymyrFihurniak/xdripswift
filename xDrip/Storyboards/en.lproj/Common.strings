@@ -91,6 +91,10 @@
 "common_statistics_riseAfterBreakfast" = "After breakfast glucose rose by %@ on average (%ld meals)";
 "common_statistics_riseAfterLunch" = "After lunch glucose rose by %@ on average (%ld meals)";
 "common_statistics_riseAfterDinner" = "After dinner glucose rose by %@ on average (%ld meals)";
+"common_statistics_skinTemperature" = "Skin temperature";
+"common_statistics_skinTemperatureFooter" = "Measured by the sensor over the last 48 hours. For information only: it does not change your readings.";
+"common_statistics_minimum" = "Min";
+"common_statistics_maximum" = "Max";
 "common_statistics_veryHigh" = "Very high";
 "common_statistics_veryLow" = "Very low";
 "common_statistics_night" = "Night";

@@ -784,6 +784,99 @@ final class TherapyMetricsTests: XCTestCase {
         }
     }
 
+    // MARK: Remote IOB and COB (the main phone's devicestatus, Home only)
+
+    private func followerPolicy(master: Bool = false, therapy: TherapyDataSourceType = .none, follow: NightscoutFollowType = .none) -> DataFlowPolicy {
+        DataFlowPolicy(isMaster: master, followerDataSource: .nightscout, therapyDataSourceSelection: therapy,
+            nightscoutEnabled: true, masterUploadsGlucoseToNightscout: false, followerUploadsGlucoseToNightscout: false,
+            nightscoutFollowType: follow)
+    }
+    private func remote(iob: Double = 1.8, eiob: Double? = 1.5, cob: Double? = 24, secondsAgo: TimeInterval = 120) -> ExperimentalRemoteIob {
+        ExperimentalRemoteIob(iob: iob, eiob: eiob, cob: cob, date: now.addingTimeInterval(-secondsAgo))
+    }
+
+    func testPhoneWithoutTreatmentsShowsTheMainPhonesIOBAndCOBAsRemote() throws {
+        let result = TherapyMetricsManager.resolve(at: now, external: nil, policy: followerPolicy(), settings: settings,
+            entries: [], remoteIob: remote())
+        XCTAssertEqual(result.iob.source, .remote)
+        XCTAssertEqual(result.cob.source, .remote)
+        XCTAssertEqual(try XCTUnwrap(result.iob.value(at: now)), 1.8, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(result.iob.effectiveAmount), 1.5, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(result.cob.value(at: now)), 24, accuracy: 1e-9)
+        XCTAssertTrue(result.iob.isVisible(at: now))
+        XCTAssertTrue(result.cob.isVisible(at: now))
+        // The numbers age out with the document: 15 minutes after the main phone computed them.
+        XCTAssertNotNil(result.iob.value(at: now.addingTimeInterval(779)))
+        XCTAssertNil(result.iob.value(at: now.addingTimeInterval(780)))
+    }
+
+    func testPhoneWithTreatmentsOfItsOwnKeepsItsOwnValuesAndNeverMixes() throws {
+        let result = TherapyMetricsManager.resolve(at: now, external: nil, policy: followerPolicy(), settings: settings,
+            entries: [entry(2), entry(30, isIOB: false)], remoteIob: remote())
+        XCTAssertEqual(result.iob.source, .local)
+        XCTAssertEqual(result.cob.source, .local)
+        XCTAssertEqual(try XCTUnwrap(result.cob.value(at: now)), 30, accuracy: 1e-9)
+        XCTAssertNotEqual(try XCTUnwrap(result.iob.value(at: now)), 1.8)
+        XCTAssertNil(result.iob.effectiveAmount)
+    }
+
+    func testRemoteIOBIsOnlyUsedWhileFreshAndWhenTheLocalWindowIsConfirmedEmpty() {
+        func resolve(_ remote: ExperimentalRemoteIob?, entries: [TherapyTreatment]? = [], settings: TherapyModelSettings? = nil) -> TherapyMetricsSnapshot {
+            TherapyMetricsManager.resolve(at: now, external: nil, policy: followerPolicy(), settings: settings ?? self.settings,
+                entries: entries, remoteIob: remote)
+        }
+        // 900 seconds is the end of the window; a document from the future beyond the clock tolerance is not trusted.
+        XCTAssertEqual(resolve(remote(secondsAgo: 899)).iob.source, .remote)
+        for stale in [remote(secondsAgo: 900), remote(secondsAgo: -61)] {
+            let result = resolve(stale)
+            XCTAssertEqual(result.iob.source, .local)
+            XCTAssertFalse(result.iob.isVisible(at: now))
+            XCTAssertFalse(result.cob.isVisible(at: now))
+        }
+        // A pending or failed read of the treatments proves nothing: no remote value stands in for it.
+        let unread = resolve(remote(), entries: nil)
+        XCTAssertEqual(unread.iob.source, .local)
+        XCTAssertEqual(unread.iob.reason, .readFailed)
+        var invalid = settings
+        invalid.insulinDuration = 180
+        invalid.insulinPeak = 90
+        XCTAssertEqual(resolve(remote(), settings: invalid).iob.source, .local)
+        XCTAssertEqual(resolve(nil).iob.source, .local)
+    }
+
+    func testRemoteIOBNeverReachesAMasterOrAnAIDFollower() {
+        let master = TherapyMetricsManager.resolve(at: now, external: nil, policy: followerPolicy(master: true), settings: settings,
+            entries: [], remoteIob: remote())
+        XCTAssertEqual(master.iob.source, .local)
+        XCTAssertEqual(master.cob.source, .local)
+        let aid = TherapyMetricsManager.resolve(at: now, external: nil, policy: followerPolicy(therapy: .nightscout, follow: .loop),
+            settings: settings, entries: [], remoteIob: remote())
+        XCTAssertEqual(aid.iob.source, .nightscout)
+        XCTAssertEqual(aid.iob.reason, .missingExternalData)
+        XCTAssertNil(aid.iob.value(at: now))
+        XCTAssertNil(aid.cob.value(at: now))
+    }
+
+    func testRemoteCOBTheDocumentLacksIsHiddenNotFilledFromElsewhere() throws {
+        let result = TherapyMetricsManager.resolve(at: now, external: nil, policy: followerPolicy(), settings: settings,
+            entries: [], remoteIob: remote(eiob: nil, cob: nil))
+        XCTAssertEqual(result.iob.source, .remote)
+        XCTAssertEqual(try XCTUnwrap(result.iob.value(at: now)), 1.8, accuracy: 1e-9)
+        XCTAssertNil(result.iob.effectiveAmount)
+        XCTAssertEqual(result.cob.source, .remote)
+        XCTAssertFalse(result.cob.isVisible(at: now))
+        XCTAssertNil(result.cob.value(at: now))
+    }
+
+    func testRemoteMetricsSurviveTheSharedPayloadRoundTrip() throws {
+        let result = TherapyMetricsManager.resolve(at: now, external: nil, policy: followerPolicy(), settings: settings,
+            entries: [], remoteIob: remote())
+        let decoded = try JSONDecoder().decode(TherapyMetricsSnapshot.self, from: JSONEncoder().encode(result))
+        XCTAssertEqual(decoded, result)
+        XCTAssertEqual(decoded.iob.source, .remote)
+        XCTAssertEqual(decoded.iob.effectiveAmount, 1.5)
+    }
+
     func testCollapsedChartRangesAndUnrepresentableJumpsHaveNoDuplicateIDs() {
         let series = TherapyChartSeries(iob: [TherapyChartPoint(date: now.addingTimeInterval(-60), amount: 2, segment: 0),
                                              TherapyChartPoint(date: now.addingTimeInterval(60), amount: 1, segment: 0)])

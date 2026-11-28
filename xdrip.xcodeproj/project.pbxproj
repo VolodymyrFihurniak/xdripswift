@@ -7,6 +7,50 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		077010170000000000000001 /* OttaiDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010160000000000000001 /* OttaiDriverTests.swift */; };
+		077010040000000000000001 /* CGMOttaiTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010030000000000000001 /* CGMOttaiTransmitter.swift */; };
+		0770100A0000000000000001 /* Ottai+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010090000000000000001 /* Ottai+CoreDataProperties.swift */; };
+		077010080000000000000001 /* Ottai+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010070000000000000001 /* Ottai+CoreDataClass.swift */; };
+		077010060000000000000001 /* Ottai+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010050000000000000001 /* Ottai+BluetoothPeripheral.swift */; };
+		077010150000000000000001 /* OttaiSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010140000000000000001 /* OttaiSessionTests.swift */; };
+		077010130000000000000001 /* OttaiSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010120000000000000001 /* OttaiSession.swift */; };
+		077010110000000000000001 /* OttaiFormulaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010100000000000000001 /* OttaiFormulaTests.swift */; };
+		0770100F0000000000000001 /* OttaiProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0770100E0000000000000001 /* OttaiProtocolTests.swift */; };
+		077010020000000000000001 /* OttaiProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010010000000000000001 /* OttaiProtocol.swift */; };
+		3A5D00190000000000000001 /* MQDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00180000000000000001 /* MQDriverTests.swift */; };
+		3A5D00080000000000000001 /* CGMMQTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00070000000000000001 /* CGMMQTransmitter.swift */; };
+		3A5D000E0000000000000001 /* MQ+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D000D0000000000000001 /* MQ+CoreDataProperties.swift */; };
+		3A5D000C0000000000000001 /* MQ+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D000B0000000000000001 /* MQ+CoreDataClass.swift */; };
+		3A5D000A0000000000000001 /* MQ+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00090000000000000001 /* MQ+BluetoothPeripheral.swift */; };
+		3A5D00170000000000000001 /* MQSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00160000000000000001 /* MQSessionTests.swift */; };
+		3A5D00150000000000000001 /* MQAlgorithmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00140000000000000001 /* MQAlgorithmTests.swift */; };
+		3A5D00130000000000000001 /* MQProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00120000000000000001 /* MQProtocolTests.swift */; };
+		3A5D00060000000000000001 /* MQSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00050000000000000001 /* MQSession.swift */; };
+		3A5D00040000000000000001 /* MQAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00030000000000000001 /* MQAlgorithm.swift */; };
+		3A5D00020000000000000001 /* MQProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00010000000000000001 /* MQProtocol.swift */; };
+		AE7110190000000000000001 /* AnytimeDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110180000000000000001 /* AnytimeDriverTests.swift */; };
+		AE7110040000000000000001 /* CGMAnytimeTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110030000000000000001 /* CGMAnytimeTransmitter.swift */; };
+		AE71100A0000000000000001 /* Anytime+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */; };
+		AE7110080000000000000001 /* Anytime+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110070000000000000001 /* Anytime+CoreDataProperties.swift */; };
+		AE7110060000000000000001 /* Anytime+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110050000000000000001 /* Anytime+CoreDataClass.swift */; };
+		AE7110170000000000000001 /* AnytimeAlgorithmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110160000000000000001 /* AnytimeAlgorithmTests.swift */; };
+		AE7110130000000000000001 /* AnytimeAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110120000000000000001 /* AnytimeAlgorithm.swift */; };
+		AE7110150000000000000001 /* AnytimeSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110140000000000000001 /* AnytimeSessionTests.swift */; };
+		AE7110110000000000000001 /* AnytimeSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110100000000000000001 /* AnytimeSession.swift */; };
+		AE71100B0000000000000001 /* AnytimeProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE71100C0000000000000001 /* AnytimeProtocolTests.swift */; };
+		AE7110020000000000000001 /* AnytimeProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110010000000000000001 /* AnytimeProtocol.swift */; };
+		A1DE100A0000000000000001 /* AiDex+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE10090000000000000001 /* AiDex+BluetoothPeripheral.swift */; };
+		A1DE10080000000000000001 /* AiDex+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE10070000000000000001 /* AiDex+CoreDataProperties.swift */; };
+		A1DE10060000000000000001 /* AiDex+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE10050000000000000001 /* AiDex+CoreDataClass.swift */; };
+		A1DE10020000000000000001 /* AiDexProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE10010000000000000001 /* AiDexProtocol.swift */; };
+		A1DE10040000000000000001 /* CGMAiDexTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE10030000000000000001 /* CGMAiDexTransmitter.swift */; };
+		A1DE100B0000000000000001 /* AiDexProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE100C0000000000000001 /* AiDexProtocolTests.swift */; };
+		1CA210040000000000000001 /* CGMICanTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210030000000000000001 /* CGMICanTransmitter.swift */; };
+		1CA2100A0000000000000001 /* ICan+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */; };
+		1CA210080000000000000001 /* ICan+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210070000000000000001 /* ICan+CoreDataProperties.swift */; };
+		1CA210060000000000000001 /* ICan+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210050000000000000001 /* ICan+CoreDataClass.swift */; };
+		1CA2100B0000000000000001 /* ICanProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA2100C0000000000000001 /* ICanProtocolTests.swift */; };
+		1CA210020000000000000001 /* ICanProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210010000000000000001 /* ICanProtocol.swift */; };
 		A19A00370000000000000001 /* RepeatingAlarmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19A00370000000000000002 /* RepeatingAlarmTests.swift */; };
 		7E7760013000000100000001 /* SensorExpiryReminderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7760013000000100000002 /* SensorExpiryReminderManager.swift */; };
 		7E7760013000000100000003 /* SensorExpiryReminderManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7760013000000100000004 /* SensorExpiryReminderManagerTests.swift */; };
@@ -443,6 +487,9 @@
 		2C229BAE87FD2F6384A8D7DD /* ExperimentalTherapy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 488707C346AA445BFFCEF57A /* ExperimentalTherapy.swift */; };
 		F0A870E01F7A5873CA43B0A8 /* AdaptiveGlucoseForecast.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A8F6242D143E2DC4F185FF /* AdaptiveGlucoseForecast.swift */; };
 		F0A870E21F7A5873CA43B0AA /* InsulinPenReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A8F6262D143E2DC4F18601 /* InsulinPenReader.swift */; };
+		0B7A1D0100000000000000B1 /* OutboundApi.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B7A1D0100000000000000A1 /* OutboundApi.swift */; };
+		0B7A1D0100000000000000B2 /* OutboundApiSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B7A1D0100000000000000A2 /* OutboundApiSettingsView.swift */; };
+		0B7A1D0100000000000000B3 /* OutboundApiTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B7A1D0100000000000000A3 /* OutboundApiTests.swift */; };
 		C2385D0CA6579919114B060A /* AlertTypesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 102D337E1C2160C7B03D5184 /* AlertTypesSettingsView.swift */; };
 		C606CA18273EF9F800BA199E /* DexcomG6InitialCalibrationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = C606CA17273EF9F800BA199E /* DexcomG6InitialCalibrationPolicy.swift */; };
 		C859C6C1B4CE6B335D4C86E6 /* Libre3NFCActivationCommandTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34D9952479A5C8B9A161631A /* Libre3NFCActivationCommandTests.swift */; };
@@ -1030,6 +1077,54 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		077010160000000000000001 /* OttaiDriverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiDriverTests.swift; sourceTree = "<group>"; };
+		077010030000000000000001 /* CGMOttaiTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMOttaiTransmitter.swift; sourceTree = "<group>"; };
+		0770100B0000000000000001 /* xdrip v43 Ottai.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v43 Ottai.xcdatamodel"; sourceTree = "<group>"; };
+		077010090000000000000001 /* Ottai+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Ottai+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		077010070000000000000001 /* Ottai+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Ottai+CoreDataClass.swift"; sourceTree = "<group>"; };
+		077010050000000000000001 /* Ottai+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Ottai+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
+		077010140000000000000001 /* OttaiSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiSessionTests.swift; sourceTree = "<group>"; };
+		077010120000000000000001 /* OttaiSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiSession.swift; sourceTree = "<group>"; };
+		077010100000000000000001 /* OttaiFormulaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiFormulaTests.swift; sourceTree = "<group>"; };
+		0770100E0000000000000001 /* OttaiProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiProtocolTests.swift; sourceTree = "<group>"; };
+		077010010000000000000001 /* OttaiProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiProtocol.swift; sourceTree = "<group>"; };
+		3A5D00180000000000000001 /* MQDriverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQDriverTests.swift; sourceTree = "<group>"; };
+		3A5D00070000000000000001 /* CGMMQTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMMQTransmitter.swift; sourceTree = "<group>"; };
+		3A5D000F0000000000000001 /* xdrip v42 MQ.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v42 MQ.xcdatamodel"; sourceTree = "<group>"; };
+		3A5D000D0000000000000001 /* MQ+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MQ+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		3A5D000B0000000000000001 /* MQ+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MQ+CoreDataClass.swift"; sourceTree = "<group>"; };
+		3A5D00090000000000000001 /* MQ+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MQ+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
+		3A5D00160000000000000001 /* MQSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQSessionTests.swift; sourceTree = "<group>"; };
+		3A5D00140000000000000001 /* MQAlgorithmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQAlgorithmTests.swift; sourceTree = "<group>"; };
+		3A5D00120000000000000001 /* MQProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQProtocolTests.swift; sourceTree = "<group>"; };
+		3A5D00050000000000000001 /* MQSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQSession.swift; sourceTree = "<group>"; };
+		3A5D00030000000000000001 /* MQAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQAlgorithm.swift; sourceTree = "<group>"; };
+		3A5D00010000000000000001 /* MQProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQProtocol.swift; sourceTree = "<group>"; };
+		AE7110180000000000000001 /* AnytimeDriverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeDriverTests.swift; sourceTree = "<group>"; };
+		AE7110030000000000000001 /* CGMAnytimeTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMAnytimeTransmitter.swift; sourceTree = "<group>"; };
+		AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
+		AE7110070000000000000001 /* Anytime+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		AE7110050000000000000001 /* Anytime+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+CoreDataClass.swift"; sourceTree = "<group>"; };
+		AE71100F0000000000000001 /* xdrip v41 Anytime.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v41 Anytime.xcdatamodel"; sourceTree = "<group>"; };
+		AE7110160000000000000001 /* AnytimeAlgorithmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeAlgorithmTests.swift; sourceTree = "<group>"; };
+		AE7110120000000000000001 /* AnytimeAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeAlgorithm.swift; sourceTree = "<group>"; };
+		AE7110140000000000000001 /* AnytimeSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeSessionTests.swift; sourceTree = "<group>"; };
+		AE7110100000000000000001 /* AnytimeSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeSession.swift; sourceTree = "<group>"; };
+		AE71100C0000000000000001 /* AnytimeProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeProtocolTests.swift; sourceTree = "<group>"; };
+		AE7110010000000000000001 /* AnytimeProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeProtocol.swift; sourceTree = "<group>"; };
+		A1DE10090000000000000001 /* AiDex+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AiDex+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
+		A1DE10070000000000000001 /* AiDex+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AiDex+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		A1DE10050000000000000001 /* AiDex+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AiDex+CoreDataClass.swift"; sourceTree = "<group>"; };
+		A1DE100F0000000000000001 /* xdrip v40 AiDex.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v40 AiDex.xcdatamodel"; sourceTree = "<group>"; };
+		A1DE10010000000000000001 /* AiDexProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiDexProtocol.swift; sourceTree = "<group>"; };
+		A1DE10030000000000000001 /* CGMAiDexTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMAiDexTransmitter.swift; sourceTree = "<group>"; };
+		A1DE100C0000000000000001 /* AiDexProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiDexProtocolTests.swift; sourceTree = "<group>"; };
+		1CA210030000000000000001 /* CGMICanTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMICanTransmitter.swift; sourceTree = "<group>"; };
+		1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
+		1CA210070000000000000001 /* ICan+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		1CA210050000000000000001 /* ICan+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+CoreDataClass.swift"; sourceTree = "<group>"; };
+		1CA2100C0000000000000001 /* ICanProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICanProtocolTests.swift; sourceTree = "<group>"; };
+		1CA210010000000000000001 /* ICanProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICanProtocol.swift; sourceTree = "<group>"; };
 		A19A00370000000000000002 /* RepeatingAlarmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepeatingAlarmTests.swift; sourceTree = "<group>"; };
 		7E7760013000000100000002 /* SensorExpiryReminderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorExpiryReminderManager.swift; sourceTree = "<group>"; };
 		7E7760013000000100000004 /* SensorExpiryReminderManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorExpiryReminderManagerTests.swift; sourceTree = "<group>"; };
@@ -1351,6 +1446,9 @@
 		488707C346AA445BFFCEF57A /* ExperimentalTherapy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExperimentalTherapy.swift; sourceTree = "<group>"; };
 		F0A8F6242D143E2DC4F185FF /* AdaptiveGlucoseForecast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveGlucoseForecast.swift; sourceTree = "<group>"; };
 		F0A8F6262D143E2DC4F18601 /* InsulinPenReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InsulinPenReader.swift; sourceTree = "<group>"; };
+		0B7A1D0100000000000000A1 /* OutboundApi.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundApi.swift; sourceTree = "<group>"; };
+		0B7A1D0100000000000000A2 /* OutboundApiSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundApiSettingsView.swift; sourceTree = "<group>"; };
+		0B7A1D0100000000000000A3 /* OutboundApiTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutboundApiTests.swift; sourceTree = "<group>"; };
 		4D7B00013014000200000001 /* CGMG5SensorSessionDetectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMG5SensorSessionDetectionTests.swift; sourceTree = "<group>"; };
 		AB1101022026110100000001 /* GlucoseAdjustmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseAdjustmentTests.swift; sourceTree = "<group>"; };
 		4D7C00013015000100000001 /* CalibrationReadinessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationReadinessTests.swift; sourceTree = "<group>"; };
@@ -2239,6 +2337,7 @@
 		D3E3000D0000000000000001 /* xdrip v33 Sibionics.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v33 Sibionics.xcdatamodel"; sourceTree = "<group>"; };
 		D3E4000D0000000000000001 /* xdrip v34 Sibionics.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v34 Sibionics.xcdatamodel"; sourceTree = "<group>"; };
 		D3E5000D0000000000000001 /* xdrip v38.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v38.xcdatamodel"; sourceTree = "<group>"; };
+		1CA2100F0000000000000001 /* xdrip v39 iCan.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v39 iCan.xcdatamodel"; sourceTree = "<group>"; };
 		D3E400020000000000000001 /* Sibionics2Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Configuration.swift; sourceTree = "<group>"; };
 		D3E500020000000000000001 /* Sibionics2Calibrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Calibrator.swift; sourceTree = "<group>"; };
 		FFE7AB5B458803F795CE6EA9 /* Libre3HistoricalBackfill.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Libre3HistoricalBackfill.swift; path = Libre3HistoricalBackfill.swift; sourceTree = "<group>"; };
@@ -2920,6 +3019,20 @@
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
+				077010160000000000000001 /* OttaiDriverTests.swift */,
+				077010140000000000000001 /* OttaiSessionTests.swift */,
+				077010100000000000000001 /* OttaiFormulaTests.swift */,
+				0770100E0000000000000001 /* OttaiProtocolTests.swift */,
+				3A5D00180000000000000001 /* MQDriverTests.swift */,
+				3A5D00160000000000000001 /* MQSessionTests.swift */,
+				3A5D00140000000000000001 /* MQAlgorithmTests.swift */,
+				3A5D00120000000000000001 /* MQProtocolTests.swift */,
+				AE7110180000000000000001 /* AnytimeDriverTests.swift */,
+				AE7110160000000000000001 /* AnytimeAlgorithmTests.swift */,
+				AE7110140000000000000001 /* AnytimeSessionTests.swift */,
+				AE71100C0000000000000001 /* AnytimeProtocolTests.swift */,
+				A1DE100C0000000000000001 /* AiDexProtocolTests.swift */,
+				1CA2100C0000000000000001 /* ICanProtocolTests.swift */,
 				C2BBCA83D24E98D08C260FC2 /* Libre3 */,
 				BA0709260000000000000002 /* BasalInjectionTests.swift */,
 				4F3100153007000100000001 /* BatteryHistoryTests.swift */,
@@ -2957,6 +3070,7 @@
 				4F2600113002000200000001 /* SensorNoisePersistenceTests.swift */,
 				4D7A00053014000100000001 /* TroubleshootingLogTests.swift */,
 				3C58142BB54891C87BB6CA2C /* ExperimentalFeaturesTests.swift */,
+				0B7A1D0100000000000000A3 /* OutboundApiTests.swift */,
 				50E2401E5ED94424A2FEC5E8 /* xDrip Tests/TherapyMetricsTests.swift */,
 			);
 			path = "xDrip Tests";
@@ -2995,6 +3109,14 @@
 				F8E51D6824549E2C001C9E5A /* SettingsViewTraceSettingsViewModel.swift */,
 			);
 			path = Models;
+			sourceTree = "<group>";
+		};
+		0B7A1D0100000000000000C1 /* OutboundApi */ = {
+			isa = PBXGroup;
+			children = (
+				0B7A1D0100000000000000A1 /* OutboundApi.swift */,
+			);
+			path = OutboundApi;
 			sourceTree = "<group>";
 		};
 		71E8A1042D9E49A5B2260C34 /* Therapy */ = {
@@ -3323,6 +3445,7 @@
 				F8E51D5B2448D8A3001C9E5A /* Loop */,
 				47A05CC42EF160A9004DABE7 /* MedtrumEasyView */,
 				F821CF4F229BF43A005C1E43 /* Nightscout */,
+				0B7A1D0100000000000000C1 /* OutboundApi */,
 				4A9B10212F0A000100000001 /* PostProcessing */,
 				F64039AE281C3F8D0051EFFE /* QuickActions */,
 				4F2500213002000100000001 /* SensorHealth */,
@@ -3429,6 +3552,7 @@
 				D9C75EA5D78E3497AC44D3C8 /* SettingsView.swift */,
 				05272484BD024BDAAA341C1C /* TherapyMetricsSettingsView.swift */,
 				57DC5CC6AB8F0B8B84EB06E1 /* ExperimentalSettingsView.swift */,
+				0B7A1D0100000000000000A2 /* OutboundApiSettingsView.swift */,
 				CD00FB5270FD0E5E2F710BE6 /* TimeScheduleView.swift */,
 				4D7A00033014000100000001 /* TroubleshootingLogView.swift */,
 				A30000000000000000000001 /* Followers */,
@@ -3851,6 +3975,16 @@
 		F8EA6CA421B9A25B0082976B /* classes */ = {
 			isa = PBXGroup;
 			children = (
+				077010090000000000000001 /* Ottai+CoreDataProperties.swift */,
+				077010070000000000000001 /* Ottai+CoreDataClass.swift */,
+				3A5D000D0000000000000001 /* MQ+CoreDataProperties.swift */,
+				3A5D000B0000000000000001 /* MQ+CoreDataClass.swift */,
+				AE7110070000000000000001 /* Anytime+CoreDataProperties.swift */,
+				AE7110050000000000000001 /* Anytime+CoreDataClass.swift */,
+				A1DE10070000000000000001 /* AiDex+CoreDataProperties.swift */,
+				A1DE10050000000000000001 /* AiDex+CoreDataClass.swift */,
+				1CA210070000000000000001 /* ICan+CoreDataProperties.swift */,
+				1CA210050000000000000001 /* ICan+CoreDataClass.swift */,
 				D3E300020000000000000001 /* Sibionics2+CoreDataClass.swift */,
 				D3E300040000000000000001 /* Sibionics2+CoreDataProperties.swift */,
 				327E7A39ACA06F8CA491D1F3 /* Libre3+CoreDataClass.swift */,
@@ -4030,6 +4164,11 @@
 		F8F971AE23A5914C00C3F17D /* CGM */ = {
 			isa = PBXGroup;
 			children = (
+				0770100D0000000000000001 /* Ottai peripheral group */,
+				3A5D00110000000000000001 /* MQ peripheral group */,
+				AE71100E0000000000000001 /* Anytime peripheral group */,
+				A1DE100E0000000000000001 /* AiDex peripheral group */,
+				1CA2100E0000000000000001 /* ICan peripheral group */,
 				D3E300100000000000000001 /* Sibionics2 peripheral group */,
 				F8DF765923E350B100063910 /* Dexcom */,
 				F808D2CF240329D40084B5DB /* Libre */,
@@ -4087,6 +4226,11 @@
 		F8F971BA23A5915900C3F17D /* CGM */ = {
 			isa = PBXGroup;
 			children = (
+				0770100C0000000000000001 /* Ottai */,
+				3A5D00100000000000000001 /* MQ */,
+				AE71100D0000000000000001 /* Anytime */,
+				A1DE100D0000000000000001 /* AiDex */,
+				1CA2100D0000000000000001 /* ICan */,
 				F8F971BB23A5915900C3F17D /* Dexcom */,
 				F8F971F023A5915900C3F17D /* Generic */,
 				F8F971D623A5915900C3F17D /* Libre */,
@@ -4310,6 +4454,96 @@
 				6153AEEF5A9ABACAA3B9181E /* Pairing */,
 			);
 			path = Protocol;
+			sourceTree = "<group>";
+		};
+		AE71100D0000000000000001 /* Anytime */ = {
+			isa = PBXGroup;
+			children = (
+				AE7110030000000000000001 /* CGMAnytimeTransmitter.swift */,
+				AE7110120000000000000001 /* AnytimeAlgorithm.swift */,
+				AE7110100000000000000001 /* AnytimeSession.swift */,
+				AE7110010000000000000001 /* AnytimeProtocol.swift */,
+			);
+			path = Anytime;
+			sourceTree = "<group>";
+		};
+		A1DE100D0000000000000001 /* AiDex */ = {
+			isa = PBXGroup;
+			children = (
+				A1DE10030000000000000001 /* CGMAiDexTransmitter.swift */,
+				A1DE10010000000000000001 /* AiDexProtocol.swift */,
+			);
+			path = AiDex;
+			sourceTree = "<group>";
+		};
+		1CA2100D0000000000000001 /* ICan */ = {
+			isa = PBXGroup;
+			children = (
+				1CA210030000000000000001 /* CGMICanTransmitter.swift */,
+				1CA210010000000000000001 /* ICanProtocol.swift */,
+			);
+			path = ICan;
+			sourceTree = "<group>";
+		};
+		AE71100E0000000000000001 /* Anytime peripheral group */ = {
+			isa = PBXGroup;
+			children = (
+				AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */,
+			);
+			path = Anytime;
+			sourceTree = "<group>";
+		};
+		A1DE100E0000000000000001 /* AiDex peripheral group */ = {
+			isa = PBXGroup;
+			children = (
+				A1DE10090000000000000001 /* AiDex+BluetoothPeripheral.swift */,
+			);
+			path = AiDex;
+			sourceTree = "<group>";
+		};
+		1CA2100E0000000000000001 /* ICan peripheral group */ = {
+			isa = PBXGroup;
+			children = (
+				1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */,
+			);
+			path = ICan;
+			sourceTree = "<group>";
+		};
+		3A5D00100000000000000001 /* MQ */ = {
+			isa = PBXGroup;
+			children = (
+				3A5D00070000000000000001 /* CGMMQTransmitter.swift */,
+				3A5D00050000000000000001 /* MQSession.swift */,
+				3A5D00030000000000000001 /* MQAlgorithm.swift */,
+				3A5D00010000000000000001 /* MQProtocol.swift */,
+			);
+			path = MQ;
+			sourceTree = "<group>";
+		};
+		3A5D00110000000000000001 /* MQ peripheral group */ = {
+			isa = PBXGroup;
+			children = (
+				3A5D00090000000000000001 /* MQ+BluetoothPeripheral.swift */,
+			);
+			path = MQ;
+			sourceTree = "<group>";
+		};
+		0770100C0000000000000001 /* Ottai */ = {
+			isa = PBXGroup;
+			children = (
+				077010030000000000000001 /* CGMOttaiTransmitter.swift */,
+				077010120000000000000001 /* OttaiSession.swift */,
+				077010010000000000000001 /* OttaiProtocol.swift */,
+			);
+			path = Ottai;
+			sourceTree = "<group>";
+		};
+		0770100D0000000000000001 /* Ottai peripheral group */ = {
+			isa = PBXGroup;
+			children = (
+				077010050000000000000001 /* Ottai+BluetoothPeripheral.swift */,
+			);
+			path = Ottai;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -4908,6 +5142,20 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				077010170000000000000001 /* OttaiDriverTests.swift in Sources */,
+				077010150000000000000001 /* OttaiSessionTests.swift in Sources */,
+				077010110000000000000001 /* OttaiFormulaTests.swift in Sources */,
+				0770100F0000000000000001 /* OttaiProtocolTests.swift in Sources */,
+				3A5D00190000000000000001 /* MQDriverTests.swift in Sources */,
+				3A5D00170000000000000001 /* MQSessionTests.swift in Sources */,
+				3A5D00150000000000000001 /* MQAlgorithmTests.swift in Sources */,
+				3A5D00130000000000000001 /* MQProtocolTests.swift in Sources */,
+				AE7110190000000000000001 /* AnytimeDriverTests.swift in Sources */,
+				AE7110170000000000000001 /* AnytimeAlgorithmTests.swift in Sources */,
+				AE7110150000000000000001 /* AnytimeSessionTests.swift in Sources */,
+				AE71100B0000000000000001 /* AnytimeProtocolTests.swift in Sources */,
+				A1DE100B0000000000000001 /* AiDexProtocolTests.swift in Sources */,
+				1CA2100B0000000000000001 /* ICanProtocolTests.swift in Sources */,
 				51B200063102000100000001 /* Sibionics2ProtocolTests.swift in Sources */,
 				51B210023102000100000001 /* Sibionics2GlucoseProcessorTests.swift in Sources */,
 				D3E200013102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift in Sources */,
@@ -4930,6 +5178,7 @@
 				4D7F00023018000100000001 /* DexcomG7CalibrationTests.swift in Sources */,
 				4D7A00063014000100000001 /* TroubleshootingLogTests.swift in Sources */,
 				A746A9242623F6B1163BB84B /* ExperimentalFeaturesTests.swift in Sources */,
+				0B7A1D0100000000000000B3 /* OutboundApiTests.swift in Sources */,
 				A50000030000000000000001 /* OnlineHelpTests.swift in Sources */,
 				FBA100040000000000000001 /* FollowerBackgroundKeepAliveManagerTests.swift in Sources */,
 				BA0000020000000000000002 /* NightscoutFollowerGapFillTests.swift in Sources */,
@@ -4959,6 +5208,36 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				077010040000000000000001 /* CGMOttaiTransmitter.swift in Sources */,
+				0770100A0000000000000001 /* Ottai+CoreDataProperties.swift in Sources */,
+				077010080000000000000001 /* Ottai+CoreDataClass.swift in Sources */,
+				077010060000000000000001 /* Ottai+BluetoothPeripheral.swift in Sources */,
+				077010130000000000000001 /* OttaiSession.swift in Sources */,
+				077010020000000000000001 /* OttaiProtocol.swift in Sources */,
+				3A5D00080000000000000001 /* CGMMQTransmitter.swift in Sources */,
+				3A5D000E0000000000000001 /* MQ+CoreDataProperties.swift in Sources */,
+				3A5D000C0000000000000001 /* MQ+CoreDataClass.swift in Sources */,
+				3A5D000A0000000000000001 /* MQ+BluetoothPeripheral.swift in Sources */,
+				3A5D00060000000000000001 /* MQSession.swift in Sources */,
+				3A5D00040000000000000001 /* MQAlgorithm.swift in Sources */,
+				3A5D00020000000000000001 /* MQProtocol.swift in Sources */,
+				AE7110040000000000000001 /* CGMAnytimeTransmitter.swift in Sources */,
+				AE71100A0000000000000001 /* Anytime+BluetoothPeripheral.swift in Sources */,
+				AE7110080000000000000001 /* Anytime+CoreDataProperties.swift in Sources */,
+				AE7110060000000000000001 /* Anytime+CoreDataClass.swift in Sources */,
+				AE7110130000000000000001 /* AnytimeAlgorithm.swift in Sources */,
+				AE7110110000000000000001 /* AnytimeSession.swift in Sources */,
+				AE7110020000000000000001 /* AnytimeProtocol.swift in Sources */,
+				A1DE100A0000000000000001 /* AiDex+BluetoothPeripheral.swift in Sources */,
+				A1DE10080000000000000001 /* AiDex+CoreDataProperties.swift in Sources */,
+				A1DE10060000000000000001 /* AiDex+CoreDataClass.swift in Sources */,
+				A1DE10020000000000000001 /* AiDexProtocol.swift in Sources */,
+				A1DE10040000000000000001 /* CGMAiDexTransmitter.swift in Sources */,
+				1CA210040000000000000001 /* CGMICanTransmitter.swift in Sources */,
+				1CA2100A0000000000000001 /* ICan+BluetoothPeripheral.swift in Sources */,
+				1CA210080000000000000001 /* ICan+CoreDataProperties.swift in Sources */,
+				1CA210060000000000000001 /* ICan+CoreDataClass.swift in Sources */,
+				1CA210020000000000000001 /* ICanProtocol.swift in Sources */,
 				A1B200043102000100000001 /* Sibionics2FactorySensitivity.swift in Sources */,
 				A1B200023102000100000001 /* Sibionics2GlucoseProcessor.swift in Sources */,
 				51B200023102000100000001 /* Sibionics2Protocol.swift in Sources */,
@@ -5387,6 +5666,8 @@
 				2C229BAE87FD2F6384A8D7DD /* ExperimentalTherapy.swift in Sources */,
 				F0A870E01F7A5873CA43B0A8 /* AdaptiveGlucoseForecast.swift in Sources */,
 				F0A870E21F7A5873CA43B0AA /* InsulinPenReader.swift in Sources */,
+				0B7A1D0100000000000000B1 /* OutboundApi.swift in Sources */,
+				0B7A1D0100000000000000B2 /* OutboundApiSettingsView.swift in Sources */,
 				B3DBAE6F4DF8465BBF554DE4 /* TherapyMetricsManager.swift in Sources */,
 				4D20C0042FF1000100000001 /* RootHomeView.swift in Sources */,
 				4D21B0022FF8000100000001 /* RootHomeChartRange.swift in Sources */,
@@ -6744,6 +7025,11 @@
 		F85FF3C2252D0C32004E6FF1 /* xdrip.xcdatamodeld */ = {
 			isa = XCVersionGroup;
 			children = (
+				0770100B0000000000000001 /* xdrip v43 Ottai.xcdatamodel */,
+				3A5D000F0000000000000001 /* xdrip v42 MQ.xcdatamodel */,
+				AE71100F0000000000000001 /* xdrip v41 Anytime.xcdatamodel */,
+				A1DE100F0000000000000001 /* xdrip v40 AiDex.xcdatamodel */,
+				1CA2100F0000000000000001 /* xdrip v39 iCan.xcdatamodel */,
 				D3E5000D0000000000000001 /* xdrip v38.xcdatamodel */,
 				D3E3000D0000000000000001 /* xdrip v33 Sibionics.xcdatamodel */,
 				D3E4000D0000000000000001 /* xdrip v34 Sibionics.xcdatamodel */,
@@ -6775,7 +7061,7 @@
 				F85FF3C3252D0C32004E6FF1 /* xdrip v12.xcdatamodel */,
 				F7936B31E35D82919DCDE294 /* xdrip v33.xcdatamodel */,
 			);
-			currentVersion = D3E5000D0000000000000001 /* xdrip v38.xcdatamodel */;
+			currentVersion = 0770100B0000000000000001 /* xdrip v43 Ottai.xcdatamodel */;
 			path = xdrip.xcdatamodeld;
 			sourceTree = "<group>";
 			versionGroupType = wrapper.xcdatamodel;

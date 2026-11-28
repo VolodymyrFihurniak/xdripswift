@@ -470,6 +470,11 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             sections.append(libreActivationSection)
         }
 
+        // Shown while adding the device too: the sensor's keys have to be imported before it can be found.
+        if bluetoothPeripheral == nil, expectedBluetoothPeripheralType == .ottaiType {
+            sections.append(makeOttaiMaterialAddSection())
+        }
+
         guard bluetoothPeripheral != nil else {
             if let dexcomG6BluetoothSlotSection = makeDexcomG6BluetoothSlotSection() {
                 sections.append(dexcomG6BluetoothSlotSection)
@@ -933,6 +938,16 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             return makeMedtrumTouchCareNanoSections(bluetoothPeripheral: bluetoothPeripheral)
         case .Sibionics1Type, .Sibionics2Type:
             return makeSibionics2Sections(bluetoothPeripheral: bluetoothPeripheral)
+        case .iCanType:
+            return makeICanSections(bluetoothPeripheral: bluetoothPeripheral)
+        case .aiDexType:
+            return makeAiDexSections(bluetoothPeripheral: bluetoothPeripheral)
+        case .anytimeType:
+            return makeAnytimeSections(bluetoothPeripheral: bluetoothPeripheral)
+        case .mqType:
+            return makeMQSections(bluetoothPeripheral: bluetoothPeripheral)
+        case .ottaiType:
+            return makeOttaiSections(bluetoothPeripheral: bluetoothPeripheral)
         case .M5StackType:
             return makeM5StackSections(bluetoothPeripheral: bluetoothPeripheral, includesSpecificM5StackSection: true)
         case .M5StickCType:
@@ -1247,6 +1262,15 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
                 ?? Texts_BluetoothPeripheralView.sibionicsNotReported,
             detailIndicator: battery.map { SettingsIndicator(color: $0.percentage <= 10 ? Color.red : $0.percentage <= 25 ? Color.orange : Color.green) }
         )) }
+        // The sensor's own thermometer, from the minutes it reported (display only).
+        let skinTemperature = SibionicsSkinTemperatureStore.latest(for: address)
+        rows.append(row(
+            id: "sibionics-skin-temperature",
+            title: Texts_BluetoothPeripheralView.sibionicsSkinTemperature,
+            detail: skinTemperature.map {
+                "\(SibionicsSkinTemperatureStore.text($0.celsius)) · \(RelativeDateTimeFormatter().localizedString(for: $0.date, relativeTo: Date()))"
+            } ?? Texts_BluetoothPeripheralView.sibionicsNotReported
+        ))
         let fields: [(Sibionics2DeviceStatus.Field, String)] = [
             (.modelNumber, Texts_BluetoothPeripheralView.sibionicsModel),
             (.firmwareRevision, Texts_BluetoothPeripheralView.sibionicsFirmware),
@@ -1941,6 +1965,15 @@ private extension DexcomG7BluetoothSlot {
 
 private extension BluetoothPeripheralDetailState {
     func requestScanForBluetoothPeripheral(type: BluetoothPeripheralType) {
+        // An Ottai sensor is recognised by the signature of the imported material: no material, no scan.
+        if type == .ottaiType, OttaiMaterialsStore.loadPending() == nil {
+            pendingAlert = BluetoothPeripheralDetailAlert(
+                title: Texts_BluetoothPeripheralView.ottaiMaterialSectionTitle,
+                message: Texts_BluetoothPeripheralView.ottaiScanNeedsMaterial
+            )
+            return
+        }
+
         guard let notice = type.scanPreparationNotice else {
             scanForBluetoothPeripheral(type: type)
             return
@@ -3713,6 +3746,781 @@ private extension BluetoothPeripheralDetailState {
         ]
     }
 
+    /// Identity and link status of an iCan sensor, read from the per-address state the transmitter keeps.
+    func makeICanSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        guard bluetoothPeripheral is ICan else { return [] }
+
+        let state = ICanDeviceStore.load(address: bluetoothPeripheral.blePeripheral.address)
+        let now = Date()
+
+        let authenticationDetail: String
+        switch state.authAccepted {
+        case .some(true): authenticationDetail = Texts_BluetoothPeripheralView.iCanAuthAccepted
+        case .some(false): authenticationDetail = Texts_BluetoothPeripheralView.iCanAuthRejected
+        case .none: authenticationDetail = Texts_BluetoothPeripheralView.iCanAuthNotTried
+        }
+
+        var sensorStateDetail: String?
+        if let launcherState = state.launcherState {
+            switch launcherState {
+            case ICanConstants.launcherStateIdle: sensorStateDetail = Texts_BluetoothPeripheralView.iCanStateIdle
+            case ICanConstants.launcherStateWarmup: sensorStateDetail = Texts_BluetoothPeripheralView.iCanStateWarmup
+            case ICanConstants.launcherStateRunning: sensorStateDetail = Texts_BluetoothPeripheralView.iCanStateRunning
+            case ICanConstants.launcherStateEnded: sensorStateDetail = Texts_BluetoothPeripheralView.iCanStateEnded
+            default: sensorStateDetail = String(format: Texts_BluetoothPeripheralView.iCanStateUnknownFormat, launcherState)
+            }
+        }
+
+        // The rated life is advisory: the sensor itself decides when the session ends.
+        let ratedDays = state.ratedLifetimeDays ?? ICanProfile.defaultProfile.ratedLifetimeDays
+        let expectedEnd = state.sensorStartDate.map { $0.addingTimeInterval(Double(ratedDays) * 24 * 3600) }
+
+        var problemDetail = Texts_BluetoothPeripheralView.iCanNoLinkProblem
+        if let problem = state.problem {
+            problemDetail = Texts_BluetoothPeripheralView.iCanProblem(problem)
+            if let problemDate = state.problemDate {
+                problemDetail += " · " + RelativeDateTimeFormatter().localizedString(for: problemDate, relativeTo: now)
+            }
+        }
+
+        var rows = [
+            row(id: "ican-model", title: Texts_BluetoothPeripheralView.iCanModel, detail: state.model),
+            row(id: "ican-family", title: Texts_BluetoothPeripheralView.iCanFamily, detail: state.profileFamily),
+            row(id: "ican-serial", title: Texts_BluetoothPeripheralView.sensorSerialNumber, detail: state.rawSerial),
+            row(id: "ican-firmware", title: Texts_Common.firmware, detail: state.firmware),
+            row(id: "ican-software", title: Texts_BluetoothPeripheralView.iCanSoftware, detail: state.software),
+            row(
+                id: "ican-authentication",
+                title: Texts_BluetoothPeripheralView.iCanAuthentication,
+                detail: authenticationDetail,
+                detailIndicator: state.authAccepted == false ? SettingsIndicator(color: Color.orange) : nil
+            )
+        ]
+
+        if let marker = state.calibrationMarker {
+            rows.append(row(
+                id: "ican-calibration",
+                title: Texts_BluetoothPeripheralView.iCanCalibration,
+                detail: marker == 0xFFFF
+                    ? Texts_BluetoothPeripheralView.iCanCalibrationNotInstalled
+                    : String(format: Texts_BluetoothPeripheralView.iCanCalibrationMarkerFormat, marker)
+            ))
+        }
+
+        rows.append(contentsOf: [
+            row(id: "ican-sensor-state", title: Texts_BluetoothPeripheralView.iCanSensorState, detail: sensorStateDetail),
+            row(id: "ican-session-start", title: Texts_BluetoothPeripheralView.iCanSensorStart, detail: state.sensorStartDate?.formatted()),
+            row(id: "ican-expected-end", title: Texts_BluetoothPeripheralView.iCanExpectedEnd, detail: expectedEnd?.formatted()),
+            row(
+                id: "ican-last-reading",
+                title: Texts_BluetoothPeripheralView.iCanLastReading,
+                detail: state.lastReadingDate.map { RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: now) }
+                    ?? Texts_BluetoothPeripheralView.iCanWaitingForReading
+            ),
+            row(
+                id: "ican-last-link-problem",
+                title: Texts_BluetoothPeripheralView.iCanLastLinkProblem,
+                detail: problemDetail,
+                detailIndicator: state.problem != nil ? SettingsIndicator(color: Color.orange) : nil
+            )
+        ])
+
+        return [
+            BluetoothPeripheralDetailSection(
+                id: "ican",
+                title: Texts_BluetoothPeripheralView.iCanSectionTitle,
+                footer: Texts_BluetoothPeripheralView.iCanSectionFooter,
+                rows: rows
+            )
+        ]
+    }
+
+    /// Identity, pairing and link status of an AiDex sensor, read from the per-address state the transmitter keeps.
+    func makeAiDexSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        guard bluetoothPeripheral is AiDex else { return [] }
+
+        let address = bluetoothPeripheral.blePeripheral.address
+        let state = AiDexDeviceStore.load(address: address)
+        let hasPairKey = AiDexPairKeyStore.hasKey(address: address)
+        let now = Date()
+
+        var wearDetail: String?
+        if let days = state.wearDays {
+            wearDetail = String(format: Texts_BluetoothPeripheralView.aiDexWearDaysFormat, days)
+        }
+
+        // The wear time is the sensor's own; until it has reported one the X and LinX run 15 days.
+        let wearDays = state.wearDays ?? 15
+        let expectedEnd = state.sensorStartDate.map { $0.addingTimeInterval(Double(wearDays) * 24 * 3600) }
+
+        var batteryDetail: String?
+        if let millivolts = state.batteryMillivolts {
+            batteryDetail = String(format: Texts_BluetoothPeripheralView.aiDexBatteryFormat, Double(millivolts) / 1000)
+        }
+
+        var problemDetail = Texts_BluetoothPeripheralView.aiDexNoLinkProblem
+        if let problem = state.problem {
+            problemDetail = Texts_BluetoothPeripheralView.aiDexProblem(problem)
+            if let problemDate = state.problemDate {
+                problemDetail += " \u{00B7} " + RelativeDateTimeFormatter().localizedString(for: problemDate, relativeTo: now)
+            }
+        }
+
+        let rows = [
+            row(id: "aidex-model", title: Texts_BluetoothPeripheralView.aiDexModel, detail: state.model),
+            row(id: "aidex-serial", title: Texts_BluetoothPeripheralView.sensorSerialNumber, detail: state.serial),
+            row(id: "aidex-firmware", title: Texts_Common.firmware, detail: state.firmware),
+            row(id: "aidex-hardware", title: Texts_Common.hardware, detail: state.hardware),
+            row(id: "aidex-wear-time", title: Texts_BluetoothPeripheralView.aiDexWearTime, detail: wearDetail),
+            row(
+                id: "aidex-pairing-key",
+                title: Texts_BluetoothPeripheralView.aiDexPairingKey,
+                detail: hasPairKey ? Texts_BluetoothPeripheralView.aiDexPairingKeyStored : Texts_BluetoothPeripheralView.aiDexPairingKeyNotStored
+            ),
+            row(id: "aidex-session-start", title: Texts_BluetoothPeripheralView.aiDexSessionStart, detail: state.sensorStartDate?.formatted()),
+            row(id: "aidex-expected-end", title: Texts_BluetoothPeripheralView.aiDexExpectedEnd, detail: expectedEnd?.formatted()),
+            row(id: "aidex-battery", title: Texts_BluetoothPeripheralView.aiDexBattery, detail: batteryDetail),
+            row(
+                id: "aidex-last-reading",
+                title: Texts_BluetoothPeripheralView.aiDexLastReading,
+                detail: state.lastReadingDate.map { RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: now) }
+                    ?? Texts_BluetoothPeripheralView.aiDexWaitingForReading
+            ),
+            row(
+                id: "aidex-last-link-problem",
+                title: Texts_BluetoothPeripheralView.aiDexLastLinkProblem,
+                detail: problemDetail,
+                detailIndicator: state.problem != nil ? SettingsIndicator(color: Color.orange) : nil
+            )
+        ]
+
+        return [
+            BluetoothPeripheralDetailSection(
+                id: "aidex",
+                title: Texts_BluetoothPeripheralView.aiDexSectionTitle,
+                footer: Texts_BluetoothPeripheralView.aiDexSectionFooter,
+                rows: rows
+            )
+        ]
+    }
+
+    /// Identity, battery, electrode currents and link status of an Anytime sensor, read from the per-address
+    /// state the transmitter keeps.
+    func makeAnytimeSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        guard bluetoothPeripheral is Anytime else { return [] }
+
+        let address = bluetoothPeripheral.blePeripheral.address
+        let state = AnytimeDeviceStore.load(address: address)
+        let now = Date()
+
+        let family = state.family.flatMap { AnytimeFamily(rawValue: $0) }
+        let profile = AnytimeProfileResolver.resolve(state.advertisedName)
+
+        var sessionStart: Date?
+        if state.sensorStartMs > 0 {
+            sessionStart = Date(timeIntervalSince1970: Double(state.sensorStartMs) / 1000)
+        }
+        // The rated life is advisory: the transmitter and the sensor decide when the session ends.
+        let expectedEnd = sessionStart.map { $0.addingTimeInterval(Double(profile.ratedLifetimeDays) * 24 * 3600) }
+
+        var batteryDetail: String?
+        if let volts = state.batteryVolts, let percent = state.batteryPercent {
+            batteryDetail = String(format: Texts_BluetoothPeripheralView.anytimeBatteryVoltsPercentFormat, Double(volts), Int32(percent))
+        } else if let volts = state.batteryVolts {
+            batteryDetail = String(format: Texts_BluetoothPeripheralView.anytimeBatteryVoltsFormat, Double(volts))
+        } else if let percent = state.batteryPercent {
+            batteryDetail = String(format: Texts_BluetoothPeripheralView.anytimeBatteryPercentFormat, Int32(percent))
+        }
+
+        var lastReadingDetail = Texts_BluetoothPeripheralView.anytimeWaitingForReading
+        if let date = state.lastReadingDate {
+            lastReadingDetail = RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
+            if state.lastWasEstimate {
+                lastReadingDetail = String(format: Texts_BluetoothPeripheralView.anytimeLastReadingEstimatedFormat, lastReadingDetail)
+            }
+        }
+
+        var problemDetail = Texts_BluetoothPeripheralView.anytimeNoLinkProblem
+        if let problem = state.problem {
+            problemDetail = Texts_BluetoothPeripheralView.anytimeProblem(problem)
+            if let problemDate = state.problemDate {
+                problemDetail += " \u{00B7} " + RelativeDateTimeFormatter().localizedString(for: problemDate, relativeTo: now)
+            }
+        }
+
+        func currentDetail(_ value: Float?) -> String? {
+            value.map { String(format: Texts_BluetoothPeripheralView.anytimeCurrentFormat, Double($0)) }
+        }
+
+        var rows = [
+            row(id: "anytime-family", title: Texts_BluetoothPeripheralView.anytimeFamily, detail: family?.displayName),
+            row(id: "anytime-name", title: Texts_BluetoothPeripheralView.anytimeBluetoothName, detail: state.advertisedName),
+            row(id: "anytime-version", title: Texts_BluetoothPeripheralView.anytimeTransmitterVersion, detail: state.transmitterVersion),
+            row(id: "anytime-bound", title: Texts_BluetoothPeripheralView.anytimeBound, detail: state.bound ? Texts_Common.yes : Texts_Common.no)
+        ]
+
+        if let code = state.qrRaw, !code.isEmpty {
+            rows.append(row(id: "anytime-sensor-code", title: Texts_BluetoothPeripheralView.anytimeSensorCode, detail: code))
+        }
+
+        rows.append(contentsOf: [
+            row(id: "anytime-session-start", title: Texts_BluetoothPeripheralView.anytimeSessionStart, detail: sessionStart?.formatted()),
+            row(id: "anytime-expected-end", title: Texts_BluetoothPeripheralView.anytimeExpectedEnd, detail: expectedEnd?.formatted()),
+            row(
+                id: "anytime-record-number",
+                title: Texts_BluetoothPeripheralView.anytimeRecordNumber,
+                detail: state.lastGlucoseId >= 0 ? String(state.lastGlucoseId) : nil
+            ),
+            row(id: "anytime-battery", title: Texts_BluetoothPeripheralView.anytimeBattery, detail: batteryDetail),
+            row(id: "anytime-last-reading", title: Texts_BluetoothPeripheralView.anytimeLastReading, detail: lastReadingDetail),
+            row(id: "anytime-working-current", title: Texts_BluetoothPeripheralView.anytimeWorkingCurrent, detail: currentDetail(state.iwNa)),
+            row(id: "anytime-baseline-current", title: Texts_BluetoothPeripheralView.anytimeBaselineCurrent, detail: currentDetail(state.ibNa)),
+            row(
+                id: "anytime-temperature",
+                title: Texts_BluetoothPeripheralView.anytimeTemperature,
+                detail: state.temperatureC.map { String(format: Texts_BluetoothPeripheralView.anytimeTemperatureFormat, Double($0)) }
+            ),
+            row(
+                id: "anytime-counter-voltage",
+                title: Texts_BluetoothPeripheralView.anytimeCounterVoltage,
+                detail: state.ceVoltageMv.map { String(format: Texts_BluetoothPeripheralView.anytimeCounterVoltageFormat, Int32($0)) }
+            )
+        ])
+
+        if family == .ct5 {
+            rows.append(toggleRow(
+                id: "anytime-current-estimate",
+                title: Texts_BluetoothPeripheralView.anytimeCurrentEstimateTitle,
+                isOn: AnytimeConfiguration.ct5EstimatesFromCurrent(for: address),
+                setValue: { [weak self] isOn in
+                    guard isOn != AnytimeConfiguration.ct5EstimatesFromCurrent(for: address) else { return }
+                    AnytimeConfiguration.setCt5EstimatesFromCurrent(isOn, for: address)
+                    self?.refresh()
+                }
+            ))
+        }
+
+        if let scale = state.rawScale {
+            rows.append(row(
+                id: "anytime-current-scale",
+                title: Texts_BluetoothPeripheralView.anytimeCurrentScale,
+                detail: String(format: Texts_BluetoothPeripheralView.anytimeCurrentScaleFormat, Double(scale), Int32(state.rawScaleSamples))
+            ))
+        }
+
+        rows.append(row(
+            id: "anytime-last-link-problem",
+            title: Texts_BluetoothPeripheralView.anytimeLastLinkProblem,
+            detail: problemDetail,
+            detailIndicator: state.problem != nil ? SettingsIndicator(color: Color.orange) : nil
+        ))
+
+        return [
+            BluetoothPeripheralDetailSection(
+                id: "anytime",
+                title: Texts_BluetoothPeripheralView.anytimeSectionTitle,
+                footer: Texts_BluetoothPeripheralView.anytimeSectionFooter,
+                rows: rows
+            )
+        ]
+    }
+
+    /// Status of an Ottai transmitter, read from the per-address state the transmitter keeps, and the sensor
+    /// material (keys and coefficients) that the manufacturer's online service would issue (this app does
+    /// not use it, the user imports the material).
+    func makeOttaiSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        guard bluetoothPeripheral is Ottai else { return [] }
+
+        let address = bluetoothPeripheral.blePeripheral.address
+        let state = OttaiDeviceStore.load(address: address)
+        let materials = OttaiMaterialsStore.load(address: address)
+        let formatter = RelativeDateTimeFormatter()
+        let now = Date()
+
+        // The same start the transmitter works from: the material's, else the one the stream confirmed.
+        var startMs = materials?.activeTimeMs ?? 0
+        if startMs <= 0 { startMs = state.pipeline.confirmedActiveTimeMs }
+        if startMs <= 0 { startMs = state.pipeline.streamStartMs }
+        var sessionStart: Date?
+        var expectedEnd: Date?
+        if startMs > 0 {
+            let lifetimeMs = OttaiConstants.expectedLifetimeMs(
+                cloudActiveExpireMs: materials?.activeExpireTimeMs ?? 0,
+                acceptedMaxActiveMs: state.activatedMaxActiveMs
+            )
+            sessionStart = Date(timeIntervalSince1970: Double(startMs) / 1000)
+            expectedEnd = Date(timeIntervalSince1970: Double(startMs + lifetimeMs) / 1000)
+        }
+
+        var lifetimeDetail: String?
+        if state.activatedMaxActiveMs > 0 {
+            lifetimeDetail = String(format: Texts_BluetoothPeripheralView.ottaiDaysFormat, Double(state.activatedMaxActiveMs) / 86_400_000)
+        }
+
+        var lastReadingDetail = Texts_BluetoothPeripheralView.ottaiWaitingForReading
+        if let date = state.lastReadingDate {
+            lastReadingDetail = formatter.localizedString(for: date, relativeTo: now)
+        }
+
+        var temperatureDetail: String?
+        if let temperature = state.lastTemperatureC {
+            temperatureDetail = String(format: Texts_BluetoothPeripheralView.ottaiTemperatureFormat, temperature)
+        }
+
+        var problemDetail = Texts_BluetoothPeripheralView.ottaiNoLinkProblem
+        if let problem = state.problem {
+            problemDetail = Texts_BluetoothPeripheralView.ottaiProblem(problem)
+            if let problemDate = state.problemDate {
+                problemDetail += " \u{00B7} " + formatter.localizedString(for: problemDate, relativeTo: now)
+            }
+        }
+
+        let statusRows = [
+            row(id: "ottai-name", title: Texts_BluetoothPeripheralView.ottaiBluetoothName, detail: state.advertisedName),
+            row(
+                id: "ottai-sensor-state",
+                title: Texts_BluetoothPeripheralView.ottaiSensorState,
+                detail: Texts_BluetoothPeripheralView.ottaiSensorStateText(commandStatus: state.commandStatus)
+            ),
+            row(id: "ottai-session-start", title: Texts_BluetoothPeripheralView.ottaiSessionStart, detail: sessionStart?.formatted()),
+            row(id: "ottai-expected-end", title: Texts_BluetoothPeripheralView.ottaiExpectedEnd, detail: expectedEnd?.formatted()),
+            row(id: "ottai-lifetime", title: Texts_BluetoothPeripheralView.ottaiLifetimeFromSensor, detail: lifetimeDetail),
+            row(id: "ottai-temperature", title: Texts_BluetoothPeripheralView.ottaiTemperature, detail: temperatureDetail),
+            row(id: "ottai-last-reading", title: Texts_BluetoothPeripheralView.ottaiLastReading, detail: lastReadingDetail),
+            row(
+                id: "ottai-last-link-problem",
+                title: Texts_BluetoothPeripheralView.ottaiLastLinkProblem,
+                detail: problemDetail,
+                detailIndicator: state.problem != nil ? SettingsIndicator(color: Color.orange) : nil,
+                detailLineLimit: 3
+            )
+        ]
+
+        return [
+            BluetoothPeripheralDetailSection(
+                id: "ottai",
+                title: Texts_BluetoothPeripheralView.ottaiSectionTitle,
+                footer: Texts_BluetoothPeripheralView.ottaiSectionFooter,
+                rows: statusRows
+            ),
+            BluetoothPeripheralDetailSection(
+                id: "ottai-material",
+                title: Texts_BluetoothPeripheralView.ottaiMaterialSectionTitle,
+                footer: Texts_BluetoothPeripheralView.ottaiMaterialDeviceFooter,
+                rows: makeOttaiMaterialRows(materials: materials, bluetoothPeripheral: bluetoothPeripheral)
+            )
+        ]
+    }
+
+    /// While adding an Ottai sensor: the material the first connection will be checked against.
+    func makeOttaiMaterialAddSection() -> BluetoothPeripheralDetailSection {
+        return BluetoothPeripheralDetailSection(
+            id: "ottai-material",
+            title: Texts_BluetoothPeripheralView.ottaiMaterialSectionTitle,
+            footer: Texts_BluetoothPeripheralView.ottaiMaterialAddFooter,
+            rows: makeOttaiMaterialRows(materials: OttaiMaterialsStore.loadPending(), bluetoothPeripheral: nil)
+        )
+    }
+
+    /// The import and remove rows, for a stored sensor (`bluetoothPeripheral`) or the pending material of
+    /// the add screen (nil).
+    func makeOttaiMaterialRows(materials: OttaiMaterials?, bluetoothPeripheral: BluetoothPeripheral?) -> [BluetoothPeripheralDetailRow] {
+        var materialDetail = Texts_BluetoothPeripheralView.ottaiMaterialMissing
+        if let materials = materials {
+            materialDetail = String(format: Texts_BluetoothPeripheralView.ottaiMaterialImportedFormat, materials.sensorId)
+        }
+
+        var rows = [
+            row(id: "ottai-material-state", title: Texts_BluetoothPeripheralView.ottaiMaterialRow, detail: materialDetail),
+            row(
+                id: "ottai-material-import",
+                title: Texts_BluetoothPeripheralView.ottaiMaterialImport,
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.importOttaiMaterialsFromClipboard(for: bluetoothPeripheral)
+                }
+            )
+        ]
+        if materials != nil {
+            rows.append(row(
+                id: "ottai-material-remove",
+                title: Texts_BluetoothPeripheralView.ottaiMaterialRemove,
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.confirmOttaiMaterialRemoval(for: bluetoothPeripheral)
+                }
+            ))
+        }
+        return rows
+    }
+
+    /// Reads the sensor material JSON (the portable form JugglucoNG exports) from the clipboard and keeps it in
+    /// the Keychain, for the sensor of the device screen or, while adding, as the pending material.
+    func importOttaiMaterialsFromClipboard(for bluetoothPeripheral: BluetoothPeripheral?) {
+        let title = Texts_BluetoothPeripheralView.ottaiImportTitle
+
+        guard let text = UIPasteboard.general.string,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            pendingAlert = BluetoothPeripheralDetailAlert(title: title, message: Texts_BluetoothPeripheralView.ottaiImportClipboardEmpty)
+            return
+        }
+
+        let parsed = OttaiMaterials.parse(json: text)
+        guard let materials = parsed.materials else {
+            let message = parsed.failure.map { Texts_BluetoothPeripheralView.ottaiImportFailure($0) } ?? Texts_BluetoothPeripheralView.ottaiImportNotJson
+            pendingAlert = BluetoothPeripheralDetailAlert(title: title, message: message)
+            return
+        }
+
+        let saved: Bool
+        if let bluetoothPeripheral = bluetoothPeripheral {
+            saved = OttaiMaterialsStore.save(materials, address: bluetoothPeripheral.blePeripheral.address)
+        } else {
+            saved = OttaiMaterialsStore.savePending(materials)
+        }
+        guard saved else {
+            pendingAlert = BluetoothPeripheralDetailAlert(title: title, message: Texts_BluetoothPeripheralView.ottaiImportSaveFailed)
+            return
+        }
+
+        var message = bluetoothPeripheral == nil ? Texts_BluetoothPeripheralView.ottaiImportDoneAdding : Texts_BluetoothPeripheralView.ottaiImportDoneDevice
+        if !materials.canAuthenticateAndCompute {
+            message += Texts_BluetoothPeripheralView.ottaiImportNoExpression
+        }
+        if let bluetoothPeripheral = bluetoothPeripheral {
+            notifyOttaiTransmitterOfMaterialChange(for: bluetoothPeripheral, removed: false)
+        }
+
+        pendingAlert = BluetoothPeripheralDetailAlert(title: title, message: message)
+        refresh()
+    }
+
+    func confirmOttaiMaterialRemoval(for bluetoothPeripheral: BluetoothPeripheral?) {
+        pendingAlert = BluetoothPeripheralDetailAlert(
+            title: Texts_BluetoothPeripheralView.ottaiRemoveConfirmTitle,
+            message: Texts_BluetoothPeripheralView.ottaiRemoveConfirmMessage,
+            primaryButtonTitle: Texts_BluetoothPeripheralView.ottaiMaterialRemove,
+            primaryAction: { [weak self] in
+                guard let self = self else { return }
+                if let bluetoothPeripheral = bluetoothPeripheral {
+                    OttaiMaterialsStore.clear(address: bluetoothPeripheral.blePeripheral.address)
+                    self.notifyOttaiTransmitterOfMaterialChange(for: bluetoothPeripheral, removed: true)
+                } else {
+                    OttaiMaterialsStore.clearPending()
+                }
+                self.refresh()
+            },
+            secondaryButtonTitle: Texts_Common.Cancel
+        )
+    }
+
+    /// The transmitter keeps its own copy of the persisted state, so it applies the change itself.
+    func notifyOttaiTransmitterOfMaterialChange(for bluetoothPeripheral: BluetoothPeripheral, removed: Bool) {
+        let transmitter = bluetoothPeripheralManager?.getBluetoothTransmitter(
+            for: bluetoothPeripheral,
+            createANewOneIfNecesssary: false
+        ) as? CGMOttaiTransmitter
+        if let transmitter = transmitter {
+            transmitter.sensorMaterialsDidChange(removed: removed)
+        } else if !removed {
+            // no transmitter yet: creating one connects to the stored address
+            bluetoothPeripheralManager?.connect(to: bluetoothPeripheral)
+        }
+    }
+
+    /// Status of an MQ / Glutec transmitter, read from the per-address state the transmitter keeps, and the
+    /// algorithm inputs the manufacturer's online service would supply (this app does not use it).
+    func makeMQSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        guard bluetoothPeripheral is MQ else { return [] }
+
+        let address = bluetoothPeripheral.blePeripheral.address
+        let state = MQDeviceStore.load(address: address)
+        let configuration = MQConfigurationStore.load(address: address)
+        let tracker = state.tracker
+        let now = Date()
+
+        var sessionStart: Date?
+        if tracker.sensorStartAtMs > 0 {
+            sessionStart = Date(timeIntervalSince1970: Double(tracker.sensorStartAtMs) / 1000)
+        }
+        // The rated life is advisory: the transmitter decides when the session ends.
+        let expectedEndMs = tracker.officialEndMs()
+        var expectedEnd: Date?
+        if expectedEndMs > 0 {
+            expectedEnd = Date(timeIntervalSince1970: Double(expectedEndMs) / 1000)
+        }
+
+        var lastReadingDetail = Texts_BluetoothPeripheralView.mqWaitingForReading
+        if let date = state.lastReadingDate {
+            lastReadingDetail = RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
+        }
+
+        var calculationDetail = Texts_BluetoothPeripheralView.mqCalculationNeedsInput
+        if tracker.hasSlope {
+            calculationDetail = String(format: Texts_BluetoothPeripheralView.mqSlopeFormat, MQAlgorithm.decimalParameter(tracker.kValue))
+        } else if configuration.hasUsableSeed {
+            calculationDetail = Texts_BluetoothPeripheralView.mqCalculationFromSensitivity
+        }
+
+        var problemDetail = Texts_BluetoothPeripheralView.mqNoLinkProblem
+        if let problem = state.problem {
+            problemDetail = Texts_BluetoothPeripheralView.mqProblem(problem)
+            if let problemDate = state.problemDate {
+                problemDetail += " \u{00B7} " + RelativeDateTimeFormatter().localizedString(for: problemDate, relativeTo: now)
+            }
+        }
+
+        let statusRows = [
+            row(id: "mq-name", title: Texts_BluetoothPeripheralView.mqBluetoothName, detail: state.advertisedName),
+            row(id: "mq-session-start", title: Texts_BluetoothPeripheralView.mqSessionStart, detail: sessionStart?.formatted()),
+            row(id: "mq-expected-end", title: Texts_BluetoothPeripheralView.mqExpectedEnd, detail: expectedEnd?.formatted()),
+            row(
+                id: "mq-packet",
+                title: Texts_BluetoothPeripheralView.mqPacketNumber,
+                detail: tracker.lastObservedPacketIndex >= 0 ? String(tracker.lastObservedPacketIndex) : nil
+            ),
+            row(
+                id: "mq-battery",
+                title: Texts_BluetoothPeripheralView.mqBattery,
+                detail: tracker.lastBatteryRaw >= 0 ? String(tracker.lastBatteryRaw) : nil
+            ),
+            row(id: "mq-last-reading", title: Texts_BluetoothPeripheralView.mqLastReading, detail: lastReadingDetail),
+            row(id: "mq-calculation", title: Texts_BluetoothPeripheralView.mqCalculation, detail: calculationDetail, detailLineLimit: 3),
+            row(
+                id: "mq-last-link-problem",
+                title: Texts_BluetoothPeripheralView.mqLastLinkProblem,
+                detail: problemDetail,
+                detailIndicator: state.problem != nil ? SettingsIndicator(color: Color.orange) : nil
+            )
+        ]
+
+        let sensitivityDetail = configuration.sensitivity.map { MQInputText.format($0) } ?? Texts_BluetoothPeripheralView.mqSensitivityNotSet
+
+        let inputRows = [
+            row(
+                id: "mq-sensitivity",
+                title: Texts_BluetoothPeripheralView.mqSensitivity,
+                detail: sensitivityDetail,
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.requestMQSensitivity(for: bluetoothPeripheral)
+                }
+            ),
+            row(
+                id: "mq-sensitivity-scale",
+                title: Texts_BluetoothPeripheralView.mqSensitivityScale,
+                detail: Texts_BluetoothPeripheralView.mqSensitivityScaleTitle(configuration.scale),
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.requestMQSensitivityScale(for: bluetoothPeripheral)
+                }
+            ),
+            row(
+                id: "mq-algorithm-version",
+                title: Texts_BluetoothPeripheralView.mqAlgorithmVersion,
+                detail: String(format: Texts_BluetoothPeripheralView.mqAlgorithmVersionFormat, Int32(configuration.algorithmVersion)),
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.requestMQAlgorithmVersion(for: bluetoothPeripheral)
+                }
+            ),
+            row(
+                id: "mq-packages",
+                title: Texts_BluetoothPeripheralView.mqPackages,
+                detail: String(configuration.packages),
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.requestMQPackages(for: bluetoothPeripheral)
+                }
+            ),
+            row(
+                id: "mq-multiplier",
+                title: Texts_BluetoothPeripheralView.mqMultiplier,
+                detail: MQInputText.format(configuration.multiplier),
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.requestMQMultiplier(for: bluetoothPeripheral)
+                }
+            ),
+            row(
+                id: "mq-reset",
+                title: Texts_BluetoothPeripheralView.mqReset,
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.confirmMQReset(for: bluetoothPeripheral)
+                }
+            )
+        ]
+
+        return [
+            BluetoothPeripheralDetailSection(
+                id: "mq",
+                title: Texts_BluetoothPeripheralView.mqSectionTitle,
+                footer: Texts_BluetoothPeripheralView.mqSectionFooter,
+                rows: statusRows
+            ),
+            BluetoothPeripheralDetailSection(
+                id: "mq-inputs",
+                title: Texts_BluetoothPeripheralView.mqInputsTitle,
+                footer: Texts_BluetoothPeripheralView.mqInputsFooter,
+                rows: inputRows
+            )
+        ]
+    }
+
+    /// Factory sensitivity typed by hand; empty removes it. The scale decides whether it is used.
+    func requestMQSensitivity(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        func isAccepted(_ text: String) -> Bool {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { return true }
+            guard let value = MQInputText.decimal(trimmed) else { return false }
+            return MQConfiguration.sensitivityRange.contains(value)
+        }
+        presentTextEntryView(BluetoothPeripheralTextEntry(
+            title: Texts_BluetoothPeripheralView.mqSensitivity,
+            message: Texts_BluetoothPeripheralView.mqSensitivityMessage,
+            keyboardType: .decimalPad,
+            text: MQConfigurationStore.load(address: address).sensitivity.map { MQInputText.format($0) },
+            placeholder: "2.93",
+            actionTitle: Texts_Common.Ok,
+            cancelTitle: Texts_Common.Cancel,
+            actionHandler: { [weak self] text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let value: Float? = trimmed.isEmpty ? nil : MQInputText.decimal(trimmed)
+                MQConfigurationStore.update(address: address) { $0.sensitivity = value }
+                self?.refresh()
+            },
+            actionIsEnabled: { text in
+                isAccepted(text)
+            },
+            inputValidator: { text in
+                isAccepted(text) ? nil : Texts_BluetoothPeripheralView.mqSensitivityMessage
+            }
+        ))
+    }
+
+    func requestMQSensitivityScale(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        let scales = MQSensitivityScale.allCases
+        presentSelectionListView(BluetoothPeripheralSelectionList(
+            title: Texts_BluetoothPeripheralView.mqSensitivityScale,
+            explanation: Texts_BluetoothPeripheralView.mqSensitivityScaleMessage,
+            data: scales.map { Texts_BluetoothPeripheralView.mqSensitivityScaleTitle($0) },
+            selectedRow: scales.firstIndex(of: MQConfigurationStore.load(address: address).scale)
+        ) { [weak self] index in
+            guard scales.indices.contains(index) else { return }
+            MQConfigurationStore.update(address: address) { $0.scale = scales[index] }
+            self?.refresh()
+        })
+    }
+
+    func requestMQAlgorithmVersion(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        let versions = MQConfiguration.algorithmVersions
+        presentSelectionListView(BluetoothPeripheralSelectionList(
+            title: Texts_BluetoothPeripheralView.mqAlgorithmVersion,
+            data: versions.map { String(format: Texts_BluetoothPeripheralView.mqAlgorithmVersionFormat, Int32($0)) },
+            selectedRow: versions.firstIndex(of: MQConfigurationStore.load(address: address).algorithmVersion)
+        ) { [weak self] index in
+            guard versions.indices.contains(index) else { return }
+            MQConfigurationStore.update(address: address) { $0.algorithmVersion = versions[index] }
+            self?.refresh()
+        })
+    }
+
+    func requestMQPackages(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        func isAccepted(_ text: String) -> Bool {
+            guard let value = MQInputText.integer(text) else { return false }
+            return MQConfiguration.packagesRange.contains(value)
+        }
+        presentTextEntryView(BluetoothPeripheralTextEntry(
+            title: Texts_BluetoothPeripheralView.mqPackages,
+            message: Texts_BluetoothPeripheralView.mqPackagesMessage,
+            keyboardType: .numberPad,
+            text: String(MQConfigurationStore.load(address: address).packages),
+            placeholder: String(MQConstants.algoDefaultPackages),
+            actionTitle: Texts_Common.Ok,
+            cancelTitle: Texts_Common.Cancel,
+            actionHandler: { [weak self] text in
+                guard let value = MQInputText.integer(text), MQConfiguration.packagesRange.contains(value) else { return }
+                MQConfigurationStore.update(address: address) { $0.packages = value }
+                self?.refresh()
+            },
+            actionIsEnabled: { text in
+                isAccepted(text)
+            },
+            inputValidator: { text in
+                isAccepted(text) ? nil : Texts_BluetoothPeripheralView.mqPackagesMessage
+            }
+        ))
+    }
+
+    func requestMQMultiplier(for bluetoothPeripheral: BluetoothPeripheral) {
+        let address = bluetoothPeripheral.blePeripheral.address
+        func isAccepted(_ text: String) -> Bool {
+            guard let value = MQInputText.decimal(text) else { return false }
+            return MQConfiguration.multiplierRange.contains(value)
+        }
+        presentTextEntryView(BluetoothPeripheralTextEntry(
+            title: Texts_BluetoothPeripheralView.mqMultiplier,
+            message: Texts_BluetoothPeripheralView.mqMultiplierMessage,
+            keyboardType: .decimalPad,
+            text: MQInputText.format(MQConfigurationStore.load(address: address).multiplier),
+            placeholder: MQInputText.format(Float(MQConstants.algoDefaultMultiplier)),
+            actionTitle: Texts_Common.Ok,
+            cancelTitle: Texts_Common.Cancel,
+            actionHandler: { [weak self] text in
+                guard let value = MQInputText.decimal(text), MQConfiguration.multiplierRange.contains(value) else { return }
+                MQConfigurationStore.update(address: address) { $0.multiplier = value }
+                self?.refresh()
+            },
+            actionIsEnabled: { text in
+                isAccepted(text)
+            },
+            inputValidator: { text in
+                isAccepted(text) ? nil : Texts_BluetoothPeripheralView.mqMultiplierMessage
+            }
+        ))
+    }
+
+    func confirmMQReset(for bluetoothPeripheral: BluetoothPeripheral) {
+        pendingAlert = BluetoothPeripheralDetailAlert(
+            title: Texts_BluetoothPeripheralView.mqResetConfirmTitle,
+            message: Texts_BluetoothPeripheralView.mqResetConfirmMessage,
+            primaryButtonTitle: Texts_BluetoothPeripheralView.mqReset,
+            primaryAction: { [weak self] in
+                guard let self = self else { return }
+                let transmitter = self.bluetoothPeripheralManager?.getBluetoothTransmitter(
+                    for: bluetoothPeripheral,
+                    createANewOneIfNecesssary: false
+                ) as? CGMMQTransmitter
+                // The alert view clears `pendingAlert` right after this action, so the result is
+                // shown on the next turn of the main queue.
+                guard let mqTransmitter = transmitter else {
+                    DispatchQueue.main.async { [weak self] in
+                        self?.pendingAlert = BluetoothPeripheralDetailAlert(
+                            title: Texts_BluetoothPeripheralView.mqReset,
+                            message: Texts_BluetoothPeripheralView.mqResetNotSent
+                        )
+                    }
+                    return
+                }
+                mqTransmitter.resetSensor { [weak self] sent in
+                    DispatchQueue.main.async { [weak self] in
+                        self?.pendingAlert = BluetoothPeripheralDetailAlert(
+                            title: Texts_BluetoothPeripheralView.mqReset,
+                            message: sent ? Texts_BluetoothPeripheralView.mqResetSent : Texts_BluetoothPeripheralView.mqResetNotSent
+                        )
+                        self?.refresh()
+                    }
+                }
+            },
+            secondaryButtonTitle: Texts_Common.Cancel
+        )
+    }
+
     func makeLibreBridgeRows(
         idPrefix: String,
         sensorType: String?,
@@ -3791,6 +4599,36 @@ private extension BluetoothPeripheralType {
             return BluetoothPeripheralScanPreparationNotice(
                 title: Texts_BluetoothPeripheralView.medtrumNanoPumpScanNoticeTitle,
                 message: Texts_BluetoothPeripheralView.medtrumNanoPumpScanNoticeMessage
+            )
+
+        case .iCanType:
+            return BluetoothPeripheralScanPreparationNotice(
+                title: Texts_BluetoothPeripheralView.iCanScanNoticeTitle,
+                message: Texts_BluetoothPeripheralView.iCanScanNoticeMessage
+            )
+
+        case .aiDexType:
+            return BluetoothPeripheralScanPreparationNotice(
+                title: Texts_BluetoothPeripheralView.aiDexScanNoticeTitle,
+                message: Texts_BluetoothPeripheralView.aiDexScanNoticeMessage
+            )
+
+        case .anytimeType:
+            return BluetoothPeripheralScanPreparationNotice(
+                title: Texts_BluetoothPeripheralView.anytimeScanNoticeTitle,
+                message: Texts_BluetoothPeripheralView.anytimeScanNoticeMessage
+            )
+
+        case .mqType:
+            return BluetoothPeripheralScanPreparationNotice(
+                title: Texts_BluetoothPeripheralView.mqScanNoticeTitle,
+                message: Texts_BluetoothPeripheralView.mqScanNoticeMessage
+            )
+
+        case .ottaiType:
+            return BluetoothPeripheralScanPreparationNotice(
+                title: Texts_BluetoothPeripheralView.ottaiScanNoticeTitle,
+                message: Texts_BluetoothPeripheralView.ottaiScanNoticeMessage
             )
 
         default:

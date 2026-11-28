@@ -208,7 +208,8 @@ public class AlertManager: NSObject {
                 
                 // Specify the order in which alerts should be checked and group those with related snoozes.
                 // A current low or high wins over a predicted one; the prediction warns before that.
-                var alertGroupsByPreference: [[AlertKind]] = [[.fastdrop], [.verylow, .low], [.predictedLow], [.fastrise], [.veryhigh, .high], [.predictedHigh], [.calibration]]
+                // Persistent High is its own group with its own snooze: a snoozed High must not hold it back.
+                var alertGroupsByPreference: [[AlertKind]] = [[.fastdrop], [.verylow, .low], [.predictedLow], [.fastrise], [.veryhigh, .high], [.persistentHigh], [.predictedHigh], [.calibration]]
 
                 // Select exactly one persisted battery configuration from the received payload.
                 // The firing path therefore reads the G7 value from the G7 AlertEntry, the G5 value
@@ -1002,6 +1003,15 @@ public class AlertManager: NSObject {
                 .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
                 .sorted { $0.date < $1.date }
         }
+        // Experimental Persistent High replays the last hours of readings (it keeps no timer of its own),
+        // but only while the newest reading is above its value.
+        if alertKind == .persistentHigh, currentAlertEntry.alertType.enabled,
+           let lastBgReading, lastBgReading.finalValue > Double(currentAlertEntry.value) {
+            recentReadings = bgReadingsAccessor.getLatestBgReadings(limit: nil, fromDate: Date().addingTimeInterval(-PersistentHighAlert.history),
+                                                                    forSensor: nil, ignoreRawData: true, ignoreCalculatedValue: false)
+                .map { (date: $0.timeStamp, mgDl: $0.finalValue) }
+                .sorted { $0.date < $1.date }
+        }
         let (alertNeeded, alertBody, alertTitle, delayInSeconds) = alertKind.alertNeeded(currentAlertEntry: currentAlertEntry, nextAlertEntry: nextAlertEntry, lastBgReading: lastBgReading, lastButOneBgReading, lastCalibration: lastCalibration, transmitterBatteryInfo: transmitterBatteryInfo, deviceStatus: deviceStatus, forecast: forecast, recentReadings: recentReadings)
 
         // Experimental (after JugglucoNG's alert episodes): once glucose has clearly left a Low or
@@ -1132,7 +1142,7 @@ public class AlertManager: NSObject {
             // Device, calibration and missing-data warnings remain text-only.
             let includesGlucose: Bool
             switch alertKind {
-            case .verylow, .low, .high, .veryhigh, .fastdrop, .fastrise, .predictedLow, .predictedHigh:
+            case .verylow, .low, .high, .veryhigh, .fastdrop, .fastrise, .predictedLow, .predictedHigh, .persistentHigh:
                 includesGlucose = true
             case .missedreading, .calibration, .batterylow, .phonebatterylow, .notlooping,
                  .sensorTransmitterFailure, .dexcomG5BatteryLow, .dexcomG7BatteryLow, .sensorEndingSoon, .sensorExpectedExpiry:

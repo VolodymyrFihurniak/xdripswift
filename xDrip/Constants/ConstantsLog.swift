@@ -106,6 +106,21 @@ enum ConstantsLog {
     /// medtrum touchcare nano cgm (BLE co-listener)
     static let categoryCGMMedtrumTouchCareNano =            "CGMMedtrumTouchCareNano       "
 
+    /// iCan (Sinocare) cgm
+    static let categoryCGMICan =                            "CGMICan                       "
+
+    /// AiDex X / LinX cgm
+    static let categoryCGMAiDex =                           "CGMAiDex                      "
+
+    /// Anytime / Yuwell cgm
+    static let categoryCGMAnytime =                         "CGMAnytime                    "
+
+    /// MQ / Glutec cgm
+    static let categoryCGMMQ =                              "CGMMQ                         "
+
+    /// Ottai / Syai cgm
+    static let categoryCGMOttai =                           "CGMOttai                      "
+
     /// alertmanager
     static let categoryAlertManager =                       "AlertManager                  "
     
@@ -121,6 +136,9 @@ enum ConstantsLog {
     
     /// dexcom share upload manager
     static let categoryDexcomShareUploadManager =           "DexcomShareUploadManager      "
+    
+    /// outbound API (Telegram bot and JSON webhook destinations)
+    static let categoryOutboundApi =                        "OutboundApi                   "
     
     /// SettingsViewDexcomShareUploadSettingsViewModel
     static let categorySettingsViewDexcomShareUploadSettingsViewModel = 

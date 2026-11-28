@@ -1061,6 +1061,12 @@ class BgPostProcessingManager {
 
             previousVisibleBgReadings.append(bgReading)
         }
+
+        // Experimental (JugglucoNG TrendEngine, Sibionics only, off by default): the trend comes from a
+        // weighted regression over the recent readings instead of one older reading. Values are untouched.
+        if ExperimentalTrendEngine.isActive() {
+            ExperimentalTrendEngine.apply(to: bgReadings, causalFilter: UserDefaults.standard.experimentalTrendEngineCausalFilter)
+        }
     }
 
     /// preview smoothing uses the same grouped path as stored processing so
@@ -1366,7 +1372,7 @@ class BgPostProcessingManager {
             return currentMasterLibreUsesNativeAlgorithm() ? nil : .masterLibreUsesCalibration
         case .dexcom:
             return currentMasterSourceIsDexcomG6() ? .masterDexcomG6UsesCalibration : nil
-        case .dexcomG7, .Libre3, .medtrumTouchCareNano, .sibionics2:
+        case .dexcomG7, .Libre3, .medtrumTouchCareNano, .sibionics2, .iCan, .aiDex, .anytime, .mq, .ottai:
             return nil
         }
     }
@@ -1409,6 +1415,16 @@ class BgPostProcessingManager {
             return connectedCGMPeripherals.first { $0.medtrumTouchCareNano != nil }
         case .sibionics2:
             return connectedCGMPeripherals.first { $0.sibionics2 != nil }
+        case .iCan:
+            return connectedCGMPeripherals.first { $0.iCan != nil }
+        case .aiDex:
+            return connectedCGMPeripherals.first { $0.aiDex != nil }
+        case .anytime:
+            return connectedCGMPeripherals.first { $0.anytime != nil }
+        case .mq:
+            return connectedCGMPeripherals.first { $0.mq != nil }
+        case .ottai:
+            return connectedCGMPeripherals.first { $0.ottai != nil }
         case nil:
             return nil
         }

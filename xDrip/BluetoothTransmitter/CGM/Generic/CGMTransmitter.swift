@@ -201,6 +201,21 @@ enum CGMTransmitterType:String, CaseIterable {
     /// Sibionics 2 V120 CGM with stock V116A correction.
     case sibionics2 = "Sibionics 2"
 
+    /// iCan (Sinocare) i3/i6 CGM. Keep this raw value stable because it is persisted in UserDefaults.
+    case iCan = "iCan"
+
+    /// AiDex X / LinX CGM. Keep this raw value stable because it is persisted in UserDefaults.
+    case aiDex = "AiDex"
+
+    /// Anytime / Yuwell CGM. Keep this raw value stable because it is persisted in UserDefaults.
+    case anytime = "Anytime"
+
+    /// MQ / Glutec CGM. Keep this raw value stable because it is persisted in UserDefaults.
+    case mq = "MQ"
+
+    /// Ottai / Syai CGM. Keep this raw value stable because it is persisted in UserDefaults.
+    case ottai = "Ottai"
+
     /// Direct Medtrum Nano glucose is already consumed by the connected pump and must not be
     /// exported as an independent CGM source to another OS-AID system.
     var osAidSharingPolicy: OSAidSharingPolicy {
@@ -228,6 +243,21 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .sibionics2:
             return .Sibionics2
+
+        case .iCan:
+            return .iCan
+
+        case .aiDex:
+            return .aiDex
+
+        case .anytime:
+            return .anytime
+
+        case .mq:
+            return .mq
+
+        case .ottai:
+            return .ottai
 
         }
         
@@ -265,6 +295,26 @@ enum CGMTransmitterType:String, CaseIterable {
         case .sibionics2:
             return true
 
+        case .iCan:
+            // the sensor start is derived from the sequence counter (minutes since session start)
+            return true
+
+        case .aiDex:
+            // the session start comes from the sensor (CGM Session Start Time), xDrip starts its sensor record from it
+            return true
+
+        case .anytime:
+            // a new sensor is detected from its serial number or, on CT5, from the identity the transmitter reports
+            return true
+
+        case .mq:
+            // a new run is detected when the transmitter starts a session (BEGIN_WORK) or its packet counter restarts
+            return true
+
+        case .ottai:
+            // a new sensor is detected from the box id and the activation time the sensor reports
+            return true
+
         }
     }
     
@@ -289,6 +339,26 @@ enum CGMTransmitterType:String, CaseIterable {
             return false
 
         case .sibionics2:
+            return false
+
+        case .iCan:
+            // the sensor is started with the vendor app, xDrip only follows its session
+            return false
+
+        case .aiDex:
+            // a sensor that was never started is activated by the driver itself, there is no manual start
+            return false
+
+        case .anytime:
+            // the sensor is started with the vendor app, xDrip only follows its session
+            return false
+
+        case .mq:
+            // the transmitter starts its own session, xDrip only follows it
+            return false
+
+        case .ottai:
+            // the sensor is started with the vendor app, xDrip only follows its session
             return false
 
         }
@@ -320,6 +390,21 @@ enum CGMTransmitterType:String, CaseIterable {
         case .sibionics2:
             return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
 
+        case .iCan:
+            return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
+
+        case .aiDex:
+            return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
+
+        case .anytime:
+            return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
+
+        case .mq:
+            return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
+
+        case .ottai:
+            return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
+
         }
     }
     
@@ -348,6 +433,21 @@ enum CGMTransmitterType:String, CaseIterable {
             return ""
 
         case .sibionics2:
+            return ""
+
+        case .iCan:
+            return ""
+
+        case .aiDex:
+            return ""
+
+        case .anytime:
+            return ""
+
+        case .mq:
+            return ""
+
+        case .ottai:
             return ""
 
         }
@@ -413,6 +513,12 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .medtrumTouchCareNano:
             return "Medtrum Nano Pump CGM"
+
+        case .mq:
+            return MQConstants.defaultDisplayName
+
+        case .ottai:
+            return OttaiConstants.displayName
             
         default:
             return self.rawValue

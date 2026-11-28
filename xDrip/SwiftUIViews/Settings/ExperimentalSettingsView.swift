@@ -41,6 +41,12 @@ extension SettingsViewGroupedSettingsViewModel {
                     settingsScreen: { ExperimentalSettingsViewModel.metersScreen }
                 ),
                 SettingsGroupedRow(
+                    id: "experimental.nightscoutIob",
+                    title: ExperimentalTexts.text("nightscoutIob", "IOB and COB through Nightscout"),
+                    detail: { UserDefaults.standard.experimentalNightscoutIobUpload || UserDefaults.standard.experimentalNightscoutIobFollow ? Texts_Common.on : Texts_Common.off },
+                    settingsScreen: { ExperimentalSettingsViewModel.nightscoutIobScreen }
+                ),
+                SettingsGroupedRow(
                     id: "experimental.alerts",
                     title: ExperimentalTexts.text("alerts", "Alarms"),
                     settingsScreen: { ExperimentalSettingsViewModel.alertsScreen }
@@ -60,13 +66,14 @@ extension SettingsViewGroupedSettingsViewModel {
             ],
             leadingRows: { [ExperimentalSettingsViewModel.recommendedSetRow(), ExperimentalSettingsViewModel.chartStyleRow(),
                             ExperimentalSettingsViewModel.chartCursorRow(),
-                            ExperimentalSettingsViewModel.uncertaintyRibbonRow(), ExperimentalSettingsViewModel.sensorDayCounterRow()] }
+                            ExperimentalSettingsViewModel.uncertaintyRibbonRow(), ExperimentalSettingsViewModel.sensorDayCounterRow(),
+                            ExperimentalSettingsViewModel.trendEngineRow(), ExperimentalSettingsViewModel.trendEngineCausalFilterRow()] }
         )
     }
 }
 
 struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
-    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, insulins, powerSaving, alerts, quietWindow, doseHints, restricted, pens, meters }
+    enum Group { case predictionMain, predictionAdaptive, predictionModel, predictionAlert, predictionAccuracy, predictionNightscout, nightscoutIob, insulins, powerSaving, alerts, quietWindow, doseHints, restricted, pens, meters }
     let group: Group
 
     static var predictionScreen: SettingsScreen {
@@ -77,6 +84,12 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                      ExperimentalSettingsViewModel(group: .predictionAlert), ExperimentalSettingsViewModel(group: .predictionAccuracy),
                                      ExperimentalSettingsViewModel(group: .predictionNightscout),
                                      ExperimentalSettingsViewModel(group: .doseHints)] })
+    }
+
+    static var nightscoutIobScreen: SettingsScreen {
+        SettingsScreen(title: ExperimentalTexts.text("nightscoutIob", "IOB and COB through Nightscout"),
+                       introduction: { ExperimentalTexts.text("nightscoutIobIntroduction", "Experimental. The phone that logs the treatments can upload its insulin on board and carbs on board to Nightscout, and a phone that follows Nightscout can show them. The layout is JugglucoNG's, so the two apps can follow each other.") },
+                       providers: { [ExperimentalSettingsViewModel(group: .nightscoutIob)] })
     }
 
     static var insulinScreen: SettingsScreen {
@@ -159,6 +172,22 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                     detail: ExperimentalTexts.text("sensorDayCounterDetail", "Day N / total on Home"),
                     control: .toggle(isOn: { UserDefaults.standard.experimentalSensorDayCounter },
                                      setIsOn: { UserDefaults.standard.experimentalSensorDayCounter = $0 }))
+    }
+
+    /// JugglucoNG's trend engine for the slope and arrow of Sibionics readings. Values are untouched.
+    static func trendEngineRow() -> SettingsRow {
+        SettingsRow(id: "experimental.trendEngine", title: ExperimentalTexts.text("trendEngine", "Trend engine"),
+                    detail: ExperimentalTexts.text("trendEngineDetail", "Sibionics 1 and 2, trend only"),
+                    control: .toggle(isOn: { UserDefaults.standard.experimentalTrendEngine },
+                                     setIsOn: { UserDefaults.standard.experimentalTrendEngine = $0 }))
+    }
+
+    /// The trend engine reads the readings as JugglucoNG's causal filter estimates them. Needs the trend engine.
+    static func trendEngineCausalFilterRow() -> SettingsRow {
+        SettingsRow(id: "experimental.trendEngineCausalFilter", title: ExperimentalTexts.text("trendEngineCausalFilter", "Trend engine: causal filter"),
+                    detail: ExperimentalTexts.text("trendEngineCausalFilterDetail", "Smooths what the trend reads"),
+                    control: .toggle(isOn: { UserDefaults.standard.experimentalTrendEngineCausalFilter },
+                                     setIsOn: { UserDefaults.standard.experimentalTrendEngineCausalFilter = $0 }))
     }
 
     static func chartCursorRow() -> SettingsRow {
@@ -320,6 +349,18 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                                              setIsOn: { UserDefaults.standard.experimentalNightscoutPredictionEnabled = $0 }),
                             isEnabled: !defaults.dataFlowPolicy.importsStatusFromNightscout)
             ]
+        case .nightscoutIob:
+            let policy = defaults.dataFlowPolicy
+            return [
+                SettingsRow(id: "experimental.nightscoutIob.upload", title: ExperimentalTexts.text("nightscoutIobUpload", "Upload IOB and COB"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalNightscoutIobUpload },
+                                             setIsOn: { UserDefaults.standard.experimentalNightscoutIobUpload = $0 }),
+                            isEnabled: !policy.importsStatusFromNightscout),
+                SettingsRow(id: "experimental.nightscoutIob.follow", title: ExperimentalTexts.text("nightscoutIobFollow", "Show the main phone's IOB and COB"),
+                            control: .toggle(isOn: { UserDefaults.standard.experimentalNightscoutIobFollow },
+                                             setIsOn: { UserDefaults.standard.experimentalNightscoutIobFollow = $0 }),
+                            isEnabled: policy.importsGlucoseFromNightscout && !policy.importsStatusFromNightscout)
+            ]
         case .predictionAccuracy:
             return [
                 SettingsRow(id: "experimental.accuracy.enabled", title: ExperimentalTexts.text("accuracyRecord", "Record accuracy"),
@@ -412,6 +453,16 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
                             }, selectOption: { index in
                                 guard Self.sameDirectionChoices.indices.contains(index) else { return }
                                 UserDefaults.standard.experimentalSameDirectionSuppressionMinutes = Self.sameDirectionChoices[index]
+                            })),
+                SettingsRow(id: "experimental.alerts.persistentHigh",
+                            title: Texts_Alerts.persistentHighAlertTitle + ": " + ExperimentalTexts.text("persistentHighDuration", "Alarm after"), accessory: .none,
+                            control: .menu(options: {
+                                let selected = UserDefaults.standard.experimentalPersistentHighMinutes
+                                return PersistentHighAlert.durationChoices.map { SettingsMenuOption(title: Self.minutesText($0), isSelected: $0 == selected) }
+                            }, selectOption: { index in
+                                let choices = PersistentHighAlert.durationChoices
+                                guard choices.indices.contains(index) else { return }
+                                UserDefaults.standard.experimentalPersistentHighMinutes = choices[index]
                             }))
             ]
         case .quietWindow:
@@ -597,7 +648,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
 
     func sectionTitle() -> String? {
         switch group {
-        case .predictionMain, .insulins, .powerSaving, .alerts, .restricted, .pens, .meters: return nil
+        case .predictionMain, .insulins, .powerSaving, .alerts, .restricted, .pens, .meters, .nightscoutIob: return nil
         case .quietWindow: return ExperimentalTexts.text("quietWindow", "Quiet window")
         case .doseHints: return ExperimentalTexts.text("doseHintsTitle", "Dose hints")
         case .predictionAdaptive: return ExperimentalTexts.text("predictionAdaptive", "Adaptive prediction")
@@ -626,6 +677,9 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
         case .predictionAccuracy:
             return ExperimentalTexts.text("accuracyFooter", "Keeps the forecast every five minutes for 14 days and compares it with the glucose that followed. If the forecast is often worse than assuming no change, or runs high or low, adjust sensitivity, carb ratio or absorption.")
                 + "\n\n" + ExperimentalTexts.text("predictionRangeFooter", "Show likely range draws a faint band around the forecast: where glucose ended up eight times in ten after this kind of forecast, from the recorded errors at 15, 30, 60 and 120 minutes (beyond two hours it keeps widening as an estimate). It appears once every horizon has at least 36 compared forecasts and is updated every hour.")
+        case .nightscoutIob:
+            return ExperimentalTexts.text("nightscoutIobFooter", "Upload sends the insulin on board (IOB), how much of it is acting now (eIOB) and the carbs on board (COB) every five minutes while insulin is on board or a value changes, and every ten minutes while everything is zero. They come from the treatments logged on this phone and its insulin curves, only while a rapid insulin dose of the last 24 hours is logged. Not available while xDrip follows an AID's status from Nightscout.")
+                + "\n\n" + ExperimentalTexts.text("nightscoutIobFollowFooter", "Show the main phone's IOB and COB is for a phone that follows Nightscout and has no treatments of its own to work them out from. It shows the newest upload that is under 15 minutes old, labelled Remote, on the Home screen only. A phone that has its own treatments keeps its own numbers, and remote and local values are never shown together.")
         case .restricted, .pens, .meters: return nil
         case .quietWindow:
             return ExperimentalTexts.text("quietFooter", "For the cinema or a lecture: alarms are still raised and shown, only their sound (and, with Notification only, vibration) is held back. The window always ends, after 24 hours at the most. An alarm that stays raised for the break-through time sounds anyway: a low always, the other alarms as chosen above. Snoozes and thresholds work as usual.")
@@ -635,6 +689,7 @@ struct ExperimentalSettingsViewModel: SettingsNativeSectionProvider {
             return ExperimentalTexts.text("alertsFooter", "No High alarm while falling: the High alarm stays quiet while glucose is already falling by at least 0.5 mg/dL (0.03 mmol/L) a minute; Very High always alarms. Notify when signal is restored: one silent notification when readings come back after a gap at least as long as the Missed Reading alarm's delay (30 minutes when that alarm is off).")
                 + "\n\n" + ExperimentalTexts.text("alertsEpisodeFooter", "End snooze when back in range: a snoozed Low, Very Low, High or Very High alarm is unsnoozed once glucose is at least 9 mg/dL (0.5 mmol/L) back on the safe side of its value, so a new episode alarms at once instead of waiting out the old snooze. Snooze All is not affected. Fast change alarms once per episode: Fast Drop and Fast Rise alarm once and then stay quiet until a reading no longer meets their condition.")
                 + "\n\n" + ExperimentalTexts.text("alertsDeltaFooter", "Fast change over 5-minute intervals (GDH, as in JugglucoNG): Fast Drop and Fast Rise alarm when the change per 5 minutes has passed their value for this many intervals in a row, past their trigger level. The change is measured over 5 minutes, so it means the same for a sensor that reads every minute and one that reads every 5 minutes; a change the other way or a gap starts over. Off keeps the comparison of the last two readings. Fast Drop and predicted low, one alarm: once one of them has been snoozed, the other stays quiet for this long.")
+                + "\n\n" + ExperimentalTexts.text("alertsPersistentHighFooter", "Persistent High (JugglucoNG): alarms when glucose has stayed above its value for this long without a break, the sign that a correction was not enough. Turn it on and set the value, sound and snooze in Settings > Alerts > Persistent High. It stays quiet while glucose falls by at least 1 mg/dL (0.06 mmol/L) a minute, but a fall that stays above the value does not restart the count. A reading at or below the value, or a gap of more than 30 minutes in the readings, does. A snoozed High alarm does not hold it back.")
         case .powerSaving:
             return ExperimentalTexts.text("powerSavingFooter", "While it saves: Nightscout, Apple Health and Dexcom Share get one reading every five minutes instead of every reading; the Live Activity and widgets refresh at most every five minutes, at once when glucose leaves the target range; the Home chart redraws its forecast and insulin every five minutes; the adaptive prediction relearns only while charging. Automatic saves while iPhone Low Power Mode is on or the battery is at 25 % or less. Nothing is saved while the phone charges.")
         case .insulins:

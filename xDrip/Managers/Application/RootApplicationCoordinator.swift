@@ -869,6 +869,9 @@ import AppIntents
             loopManager?.shareMetadata()
         }
         
+        // the outbound API reads the newest reading from the same accessor
+        OutboundApiManager.shared.configure(bgReadingsAccessor: bgReadingsAccessor)
+        
         // setup dexcomShareUploadManager
         dexcomShareUploadManager = DexcomShareUploadManager(bgReadingsAccessor: bgReadingsAccessor, state: dexcomShareUploadState, messageHandler: { (title:String, message:String) in
             self.presentAlert(title: title, message: message)
@@ -1499,6 +1502,9 @@ import AppIntents
                 
                 dexcomShareUploadManager?.uploadLatestBgReadings(lastConnectionStatusChangeTimeStamp: lastConnectionStatusChangeTimeStamp())
                 
+                // Outbound API: Telegram bot and JSON webhook destinations, if the user set any up
+                OutboundApiManager.shared.processNewReading()
+                
                 bluetoothPeripheralManager?.sendLatestReading()
 
                 // Experimental: keep the forecast made now to score it later against what happened.
@@ -2110,6 +2116,26 @@ import AppIntents
             } else {
                 calibrator = Sibionics2XDripCalibrator()
             }
+
+        case .iCan:
+            // Values arrive in mg/dL from the sensor's own calibration; xDrip does not calibrate them.
+            calibrator = NoCalibrator()
+
+        case .aiDex:
+            // Values arrive in mg/dL from the sensor's own factory calibration; xDrip does not calibrate them.
+            calibrator = NoCalibrator()
+
+        case .anytime:
+            // The driver turns the sensor's record into mg/dL itself (transmitter value on CT5, the vendor models on CT2 and CT4); xDrip does not calibrate them.
+            calibrator = NoCalibrator()
+
+        case .ottai:
+            // The driver evaluates the sensor's own expression and coefficients (user-supplied sensor material) into mg/dL; xDrip does not calibrate it.
+            calibrator = NoCalibrator()
+
+        case .mq:
+            // The driver's own port of the transmitter algorithm turns the raw current into mg/dL; a fingerstick moves its reference inside the driver, xDrip's calibrator is not used.
+            calibrator = NoCalibrator()
 
         }
         
@@ -2880,7 +2906,7 @@ import AppIntents
             }
             startDate = sensorStartDate ?? startDate
             switch transmitter?.cgmTransmitterType().sensorType() {
-            case .Libre, .Sibionics2:
+            case .Libre, .Sibionics2, .iCan, .aiDex, .anytime, .mq, .ottai:
                 duration = transmitter?.sensorWarmupDurationInMinutes() ?? ConstantsMaster.minimumSensorWarmUpRequiredInMinutes
             case .Dexcom:
                 if transmitter?.cgmTransmitterType() == .dexcomG7 {

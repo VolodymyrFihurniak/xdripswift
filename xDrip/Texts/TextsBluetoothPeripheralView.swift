@@ -64,6 +64,7 @@ class Texts_BluetoothPeripheralView {
     static let sibionicsProblemAddressRefused = NSLocalizedString("sibionics.problemAddressRefused", tableName: filename, bundle: .main, value: "Sensor refused every address", comment: "Sibionics device screen, link status")
     static let sibionicsProblemAuthentication = NSLocalizedString("sibionics.problemAuthentication", tableName: filename, bundle: .main, value: "Authentication failed", comment: "Sibionics device screen, link status")
     static let sibionicsNotReported = NSLocalizedString("sibionics.notReported", tableName: filename, bundle: .main, value: "Not reported yet", comment: "Sibionics device screen, sensor information")
+    static let sibionicsSkinTemperature = NSLocalizedString("sibionics.skinTemperature", tableName: filename, bundle: .main, value: "Skin temperature", comment: "Sibionics device screen, the temperature the sensor last reported")
     static let sibionicsModel = NSLocalizedString("sibionics.model", tableName: filename, bundle: .main, value: "Model", comment: "Sibionics device screen, sensor information")
     static let sibionicsFirmware = NSLocalizedString("sibionics.firmware", tableName: filename, bundle: .main, value: "Firmware", comment: "Sibionics device screen, sensor information")
     static let sibionicsHardware = NSLocalizedString("sibionics.hardware", tableName: filename, bundle: .main, value: "Hardware", comment: "Sibionics device screen, sensor information")
@@ -581,5 +582,349 @@ class Texts_BluetoothPeripheralView {
 
     static func readSuccessTimelineAccessibility(success: Double, actual: Int, expected: Int) -> String {
         return String(format: NSLocalizedString("readSuccessTimelineAccessibility", tableName: filename, bundle: Bundle.main, value: "%0.1f percent, %d of %d readings", comment: "Bluetooth peripheral Read Success screen. Accessibility label for an hourly timeline bucket"), success, actual, expected)
+    }
+}
+
+// MARK: - iCan
+
+extension Texts_BluetoothPeripheralView {
+
+    static let iCanScanNoticeTitle = NSLocalizedString("ican.scanNoticeTitle", tableName: filename, bundle: .main, value: "iCan Sensor Connection", comment: "Title of the notice shown before scanning for an iCan sensor")
+    static let iCanScanNoticeMessage = NSLocalizedString("ican.scanNoticeMessage", tableName: filename, bundle: .main, value: "This app connects directly to an iCan (Sinocare) i3 or i6 sensor, but it cannot start a sensor. Start the sensor with the manufacturer's app first.\n\nBefore scanning, close the manufacturer's app and keep other iCan sensors out of range: a sensor talks to one phone at a time and the first connection takes the first iCan sensor it finds.\n\nScanning works only while this app is open. This driver has not been tried on a real sensor.", comment: "Notice shown before scanning for an iCan sensor")
+    static let iCanSectionTitle = NSLocalizedString("ican.sectionTitle", tableName: filename, bundle: .main, value: "iCan sensor", comment: "Device screen section title")
+    static let iCanSectionFooter = NSLocalizedString("ican.sectionFooter", tableName: filename, bundle: .main, value: "Values are the sensor's own readings. Finger-stick calibration, battery level and the manufacturer's cloud are not supported. Never tried on a real sensor.", comment: "Footer of the iCan section on the device screen")
+    static let iCanModel = NSLocalizedString("ican.model", tableName: filename, bundle: .main, value: "Model", comment: "iCan device screen row")
+    static let iCanFamily = NSLocalizedString("ican.family", tableName: filename, bundle: .main, value: "Sensor family", comment: "iCan device screen row: product family the driver recognised from the model and serial")
+    static let iCanSoftware = NSLocalizedString("ican.software", tableName: filename, bundle: .main, value: "Software", comment: "iCan device screen row")
+    static let iCanAuthentication = NSLocalizedString("ican.authentication", tableName: filename, bundle: .main, value: "Authentication", comment: "iCan device screen row: vendor handshake result")
+    static let iCanAuthAccepted = NSLocalizedString("ican.authAccepted", tableName: filename, bundle: .main, value: "Accepted", comment: "iCan authentication state")
+    static let iCanAuthRejected = NSLocalizedString("ican.authRejected", tableName: filename, bundle: .main, value: "Rejected", comment: "iCan authentication state")
+    static let iCanAuthNotTried = NSLocalizedString("ican.authNotTried", tableName: filename, bundle: .main, value: "Not tried yet", comment: "iCan authentication state")
+    static let iCanCalibration = NSLocalizedString("ican.calibration", tableName: filename, bundle: .main, value: "Factory calibration", comment: "iCan device screen row: calibration marker reported by the sensor")
+    static let iCanCalibrationNotInstalled = NSLocalizedString("ican.calibrationNotInstalled", tableName: filename, bundle: .main, value: "Not installed", comment: "iCan calibration marker 0xFFFF")
+    static let iCanCalibrationMarkerFormat = NSLocalizedString("ican.calibrationMarkerFormat", tableName: filename, bundle: .main, value: "Marker %d", comment: "iCan calibration marker value")
+    static let iCanSensorState = NSLocalizedString("ican.sensorState", tableName: filename, bundle: .main, value: "Sensor state", comment: "iCan device screen row")
+    static let iCanStateIdle = NSLocalizedString("ican.stateIdle", tableName: filename, bundle: .main, value: "Not started", comment: "iCan sensor state")
+    static let iCanStateWarmup = NSLocalizedString("ican.stateWarmup", tableName: filename, bundle: .main, value: "Warming up", comment: "iCan sensor state")
+    static let iCanStateRunning = NSLocalizedString("ican.stateRunning", tableName: filename, bundle: .main, value: "Running", comment: "iCan sensor state")
+    static let iCanStateEnded = NSLocalizedString("ican.stateEnded", tableName: filename, bundle: .main, value: "Ended", comment: "iCan sensor state")
+    static let iCanStateUnknownFormat = NSLocalizedString("ican.stateUnknownFormat", tableName: filename, bundle: .main, value: "Unknown (%d)", comment: "iCan sensor state byte not recognised")
+    static let iCanSensorStart = NSLocalizedString("ican.sensorStart", tableName: filename, bundle: .main, value: "Session start", comment: "iCan device screen row")
+    static let iCanExpectedEnd = NSLocalizedString("ican.expectedEnd", tableName: filename, bundle: .main, value: "Expected end", comment: "iCan device screen row: session start plus the rated life of the model")
+    static let iCanLastReading = NSLocalizedString("ican.lastReading", tableName: filename, bundle: .main, value: "Last reading", comment: "iCan device screen row")
+    static let iCanWaitingForReading = NSLocalizedString("ican.waitingForReading", tableName: filename, bundle: .main, value: "Waiting for reading", comment: "iCan device screen row before the first reading")
+    static let iCanLastLinkProblem = NSLocalizedString("ican.lastLinkProblem", tableName: filename, bundle: .main, value: "Last link problem", comment: "iCan device screen row")
+    static let iCanNoLinkProblem = NSLocalizedString("ican.noLinkProblem", tableName: filename, bundle: .main, value: "None since the last reading", comment: "iCan device screen row")
+    static let iCanProblemLinkLost = NSLocalizedString("ican.problemLinkLost", tableName: filename, bundle: .main, value: "Link lost", comment: "iCan link problem")
+    static let iCanProblemNoAnswer = NSLocalizedString("ican.problemNoAnswer", tableName: filename, bundle: .main, value: "Sensor not responding", comment: "iCan link problem")
+    static let iCanProblemRejected = NSLocalizedString("ican.problemRejected", tableName: filename, bundle: .main, value: "Authentication rejected", comment: "iCan link problem")
+    static let iCanProblemNoReadings = NSLocalizedString("ican.problemNoReadings", tableName: filename, bundle: .main, value: "No readings while connected", comment: "iCan link problem")
+    static let iCanProblemHistoryRefused = NSLocalizedString("ican.problemHistoryRefused", tableName: filename, bundle: .main, value: "History request refused", comment: "iCan link problem")
+    static let iCanProblemNotACGM = NSLocalizedString("ican.problemNotACGM", tableName: filename, bundle: .main, value: "Device is not an iCan sensor", comment: "iCan link problem")
+    static let iCanProblemNotStarted = NSLocalizedString("ican.problemNotStarted", tableName: filename, bundle: .main, value: "Sensor not started: start it with the manufacturer's app", comment: "iCan link problem")
+    static let iCanProblemEnded = NSLocalizedString("ican.problemEnded", tableName: filename, bundle: .main, value: "Sensor session ended", comment: "iCan link problem")
+
+    static func iCanProblem(_ problem: ICanLinkProblem) -> String {
+        switch problem {
+        case .linkLost: return iCanProblemLinkLost
+        case .noAuthenticationAnswer: return iCanProblemNoAnswer
+        case .authenticationRejected: return iCanProblemRejected
+        case .noReadings: return iCanProblemNoReadings
+        case .historyRefused: return iCanProblemHistoryRefused
+        case .notACGM: return iCanProblemNotACGM
+        case .sensorNotStarted: return iCanProblemNotStarted
+        case .sensorEnded: return iCanProblemEnded
+        }
+    }
+}
+
+// MARK: - AiDex
+
+extension Texts_BluetoothPeripheralView {
+
+    static let aiDexScanNoticeTitle = NSLocalizedString("aidex.scanNoticeTitle", tableName: filename, bundle: .main, value: "AiDex Sensor Connection", comment: "Title of the notice shown before scanning for an AiDex sensor")
+    static let aiDexScanNoticeMessage = NSLocalizedString("aidex.scanNoticeMessage", tableName: filename, bundle: .main, value: "This app connects directly to an AiDex X or LinX sensor and starts one that has not been started yet. Sensors of the F series (named AiDEX F-…) need a key from the manufacturer's cloud, which this app does not use, so they cannot be connected.\n\nBefore scanning, close the manufacturer's app and keep other AiDex sensors out of range: a sensor talks to one phone at a time and the first connection takes the first AiDex sensor it finds. If iOS asks to pair with the sensor, accept.\n\nScanning works only while this app is open. This driver has not been tried on a real sensor.", comment: "Notice shown before scanning for an AiDex sensor")
+    static let aiDexSectionTitle = NSLocalizedString("aidex.sectionTitle", tableName: filename, bundle: .main, value: "AiDex sensor", comment: "Device screen section title")
+    static let aiDexSectionFooter = NSLocalizedString("aidex.sectionFooter", tableName: filename, bundle: .main, value: "Values are the sensor's own factory-calibrated readings. Calibration, the manufacturer's cloud and F-series sensors are not supported. Never tried on a real sensor.", comment: "Footer of the AiDex section on the device screen")
+    static let aiDexModel = NSLocalizedString("aidex.model", tableName: filename, bundle: .main, value: "Model", comment: "AiDex device screen row")
+    static let aiDexWearTime = NSLocalizedString("aidex.wearTime", tableName: filename, bundle: .main, value: "Rated wear time", comment: "AiDex device screen row: wear days the sensor reported")
+    static let aiDexWearDaysFormat = NSLocalizedString("aidex.wearDaysFormat", tableName: filename, bundle: .main, value: "%d days", comment: "AiDex wear time value")
+    static let aiDexPairingKey = NSLocalizedString("aidex.pairingKey", tableName: filename, bundle: .main, value: "Pairing key", comment: "AiDex device screen row: the key the sensor handed out")
+    static let aiDexPairingKeyStored = NSLocalizedString("aidex.pairingKeyStored", tableName: filename, bundle: .main, value: "Stored on this phone", comment: "AiDex pairing key state")
+    static let aiDexPairingKeyNotStored = NSLocalizedString("aidex.pairingKeyNotStored", tableName: filename, bundle: .main, value: "Not stored yet", comment: "AiDex pairing key state")
+    static let aiDexSessionStart = NSLocalizedString("aidex.sessionStart", tableName: filename, bundle: .main, value: "Session start", comment: "AiDex device screen row")
+    static let aiDexExpectedEnd = NSLocalizedString("aidex.expectedEnd", tableName: filename, bundle: .main, value: "Expected end", comment: "AiDex device screen row: session start plus the wear time")
+    static let aiDexBattery = NSLocalizedString("aidex.battery", tableName: filename, bundle: .main, value: "Sensor battery", comment: "AiDex device screen row: battery voltage from the keepalive frames")
+    static let aiDexBatteryFormat = NSLocalizedString("aidex.batteryFormat", tableName: filename, bundle: .main, value: "%.2f V", comment: "AiDex battery voltage in volts")
+    static let aiDexLastReading = NSLocalizedString("aidex.lastReading", tableName: filename, bundle: .main, value: "Last reading", comment: "AiDex device screen row")
+    static let aiDexWaitingForReading = NSLocalizedString("aidex.waitingForReading", tableName: filename, bundle: .main, value: "Waiting for reading", comment: "AiDex device screen row before the first reading")
+    static let aiDexLastLinkProblem = NSLocalizedString("aidex.lastLinkProblem", tableName: filename, bundle: .main, value: "Last link problem", comment: "AiDex device screen row")
+    static let aiDexNoLinkProblem = NSLocalizedString("aidex.noLinkProblem", tableName: filename, bundle: .main, value: "None since the last reading", comment: "AiDex device screen row")
+    static let aiDexProblemLinkLost = NSLocalizedString("aidex.problemLinkLost", tableName: filename, bundle: .main, value: "Link lost", comment: "AiDex link problem")
+    static let aiDexProblemKeyExchange = NSLocalizedString("aidex.problemKeyExchange", tableName: filename, bundle: .main, value: "Key exchange with the sensor failed", comment: "AiDex link problem")
+    static let aiDexProblemSavedKeyRejected = NSLocalizedString("aidex.problemSavedKeyRejected", tableName: filename, bundle: .main, value: "Stored pairing key rejected by the sensor", comment: "AiDex link problem")
+    static let aiDexProblemPairingRefused = NSLocalizedString("aidex.problemPairingRefused", tableName: filename, bundle: .main, value: "Sensor refused to pair: keep other phones and apps away from it", comment: "AiDex link problem")
+    static let aiDexProblemUnsupportedFSeries = NSLocalizedString("aidex.problemUnsupportedFSeries", tableName: filename, bundle: .main, value: "F-series sensor: needs a manufacturer's cloud key, not supported", comment: "AiDex link problem")
+    static let aiDexProblemSerialUnknown = NSLocalizedString("aidex.problemSerialUnknown", tableName: filename, bundle: .main, value: "Sensor serial number not found in its Bluetooth name", comment: "AiDex link problem")
+    static let aiDexProblemNoReadings = NSLocalizedString("aidex.problemNoReadings", tableName: filename, bundle: .main, value: "No readings while connected", comment: "AiDex link problem")
+    static let aiDexProblemHistoryFailed = NSLocalizedString("aidex.problemHistoryFailed", tableName: filename, bundle: .main, value: "History download did not finish", comment: "AiDex link problem")
+    static let aiDexProblemNotStarted = NSLocalizedString("aidex.problemNotStarted", tableName: filename, bundle: .main, value: "Sensor not started", comment: "AiDex link problem")
+    static let aiDexProblemEnded = NSLocalizedString("aidex.problemEnded", tableName: filename, bundle: .main, value: "Sensor session ended", comment: "AiDex link problem")
+    static let aiDexProblemNotAnAiDex = NSLocalizedString("aidex.problemNotAnAiDex", tableName: filename, bundle: .main, value: "Device is not an AiDex sensor", comment: "AiDex link problem")
+
+    static func aiDexProblem(_ problem: AiDexLinkProblem) -> String {
+        switch problem {
+        case .linkLost: return aiDexProblemLinkLost
+        case .keyExchangeFailed: return aiDexProblemKeyExchange
+        case .savedKeyRejected: return aiDexProblemSavedKeyRejected
+        case .pairingRefused: return aiDexProblemPairingRefused
+        case .unsupportedFSeries: return aiDexProblemUnsupportedFSeries
+        case .serialUnknown: return aiDexProblemSerialUnknown
+        case .noReadings: return aiDexProblemNoReadings
+        case .historyFailed: return aiDexProblemHistoryFailed
+        case .sensorNotStarted: return aiDexProblemNotStarted
+        case .sensorEnded: return aiDexProblemEnded
+        case .notAnAiDex: return aiDexProblemNotAnAiDex
+        }
+    }
+}
+
+// MARK: - Anytime
+
+extension Texts_BluetoothPeripheralView {
+
+    static let anytimeScanNoticeTitle = NSLocalizedString("anytime.scanNoticeTitle", tableName: filename, bundle: .main, value: "Anytime Sensor Connection", comment: "Title of the notice shown before scanning for an Anytime sensor")
+    static let anytimeScanNoticeMessage = NSLocalizedString("anytime.scanNoticeMessage", tableName: filename, bundle: .main, value: "This app connects directly to an Anytime (Yuwell) transmitter of the CT2, CT4 or CT5 family and binds it to this phone. The CT2.5 and CT3 lines compute their glucose in a manufacturer's native library that this app does not have, so they are refused.\n\nBefore scanning, close the manufacturer's app and keep other Anytime transmitters out of range: a transmitter talks to one phone at a time and the first connection takes the first supported one it finds.\n\nScanning works only while this app is open. This driver has not been tried on a real sensor.", comment: "Notice shown before scanning for an Anytime sensor")
+    static let anytimeSectionTitle = NSLocalizedString("anytime.sectionTitle", tableName: filename, bundle: .main, value: "Anytime sensor", comment: "Device screen section title")
+    static let anytimeSectionFooter = NSLocalizedString("anytime.sectionFooter", tableName: filename, bundle: .main, value: "Values come from the transmitter or from this app's port of the manufacturer's model, depending on the family. Finger calibration is not available, and a CT4 without a sensor code uses a default factory slope. After its rated life a CT5 stops computing glucose; with \"Estimate from current after rated life\" on (off by default) readings are derived from the sensor current instead. They are less accurate and look like any other reading outside this screen. Never tried on a real sensor.", comment: "Footer of the Anytime section on the device screen")
+    static let anytimeFamily = NSLocalizedString("anytime.family", tableName: filename, bundle: .main, value: "Sensor family", comment: "Anytime device screen row")
+    static let anytimeBluetoothName = NSLocalizedString("anytime.bluetoothName", tableName: filename, bundle: .main, value: "Bluetooth name", comment: "Anytime device screen row: the name the transmitter advertises")
+    static let anytimeTransmitterVersion = NSLocalizedString("anytime.transmitterVersion", tableName: filename, bundle: .main, value: "Transmitter version", comment: "Anytime device screen row")
+    static let anytimeBound = NSLocalizedString("anytime.bound", tableName: filename, bundle: .main, value: "Bound to this phone", comment: "Anytime device screen row")
+    static let anytimeSensorCode = NSLocalizedString("anytime.sensorCode", tableName: filename, bundle: .main, value: "Sensor code", comment: "Anytime device screen row: the factory calibration code")
+    static let anytimeSessionStart = NSLocalizedString("anytime.sessionStart", tableName: filename, bundle: .main, value: "Session start", comment: "Anytime device screen row")
+    static let anytimeExpectedEnd = NSLocalizedString("anytime.expectedEnd", tableName: filename, bundle: .main, value: "Expected end", comment: "Anytime device screen row: session start plus the rated life")
+    static let anytimeRecordNumber = NSLocalizedString("anytime.recordNumber", tableName: filename, bundle: .main, value: "Latest record number", comment: "Anytime device screen row: the sensor's glucose record counter")
+    static let anytimeBattery = NSLocalizedString("anytime.battery", tableName: filename, bundle: .main, value: "Transmitter battery", comment: "Anytime device screen row")
+    static let anytimeBatteryVoltsFormat = NSLocalizedString("anytime.batteryVoltsFormat", tableName: filename, bundle: .main, value: "%.2f V", comment: "Anytime battery voltage in volts")
+    static let anytimeBatteryVoltsPercentFormat = NSLocalizedString("anytime.batteryVoltsPercentFormat", tableName: filename, bundle: .main, value: "%.2f V · %d %%", comment: "Anytime battery voltage in volts and percent")
+    static let anytimeBatteryPercentFormat = NSLocalizedString("anytime.batteryPercentFormat", tableName: filename, bundle: .main, value: "%d %%", comment: "Anytime battery in percent")
+    static let anytimeLastReading = NSLocalizedString("anytime.lastReading", tableName: filename, bundle: .main, value: "Last reading", comment: "Anytime device screen row")
+    static let anytimeLastReadingEstimatedFormat = NSLocalizedString("anytime.lastReadingEstimatedFormat", tableName: filename, bundle: .main, value: "%@ · estimated from current", comment: "Anytime last reading with the note that the value was estimated from the sensor current")
+    static let anytimeWaitingForReading = NSLocalizedString("anytime.waitingForReading", tableName: filename, bundle: .main, value: "Waiting for reading", comment: "Anytime device screen row before the first reading")
+    static let anytimeWorkingCurrent = NSLocalizedString("anytime.workingCurrent", tableName: filename, bundle: .main, value: "Working electrode current", comment: "Anytime device screen row")
+    static let anytimeBaselineCurrent = NSLocalizedString("anytime.baselineCurrent", tableName: filename, bundle: .main, value: "Baseline current", comment: "Anytime device screen row")
+    static let anytimeCurrentFormat = NSLocalizedString("anytime.currentFormat", tableName: filename, bundle: .main, value: "%.2f nA", comment: "Anytime current in nanoamperes")
+    static let anytimeTemperature = NSLocalizedString("anytime.temperature", tableName: filename, bundle: .main, value: "Temperature", comment: "Anytime device screen row")
+    static let anytimeTemperatureFormat = NSLocalizedString("anytime.temperatureFormat", tableName: filename, bundle: .main, value: "%.1f °C", comment: "Anytime temperature in degrees Celsius")
+    static let anytimeCounterVoltage = NSLocalizedString("anytime.counterVoltage", tableName: filename, bundle: .main, value: "Counter electrode voltage", comment: "Anytime device screen row")
+    static let anytimeCounterVoltageFormat = NSLocalizedString("anytime.counterVoltageFormat", tableName: filename, bundle: .main, value: "%d mV", comment: "Anytime counter electrode voltage in millivolts")
+    static let anytimeCurrentEstimateTitle = NSLocalizedString("anytime.currentEstimateTitle", tableName: filename, bundle: .main, value: "Estimate from current after rated life", comment: "Anytime device screen toggle: estimate glucose from the sensor current once a CT5 stops computing glucose")
+    static let anytimeCurrentScale = NSLocalizedString("anytime.currentScale", tableName: filename, bundle: .main, value: "Current to glucose scale", comment: "Anytime device screen row: learned while the transmitter still computed glucose")
+    static let anytimeCurrentScaleFormat = NSLocalizedString("anytime.currentScaleFormat", tableName: filename, bundle: .main, value: "%.2f (%d samples)", comment: "Anytime current scale with the number of samples it was learned from")
+    static let anytimeLastLinkProblem = NSLocalizedString("anytime.lastLinkProblem", tableName: filename, bundle: .main, value: "Last link problem", comment: "Anytime device screen row")
+    static let anytimeNoLinkProblem = NSLocalizedString("anytime.noLinkProblem", tableName: filename, bundle: .main, value: "None since the last reading", comment: "Anytime device screen row")
+    static let anytimeProblemLinkLost = NSLocalizedString("anytime.problemLinkLost", tableName: filename, bundle: .main, value: "Link lost", comment: "Anytime link problem")
+    static let anytimeProblemNotAnAnytime = NSLocalizedString("anytime.problemNotAnAnytime", tableName: filename, bundle: .main, value: "Device is not a supported Anytime transmitter", comment: "Anytime link problem")
+    static let anytimeProblemUnsupportedFamily = NSLocalizedString("anytime.problemUnsupportedFamily", tableName: filename, bundle: .main, value: "Unsupported family: its glucose needs a native library this app does not have", comment: "Anytime link problem")
+    static let anytimeProblemHandshakeStalled = NSLocalizedString("anytime.problemHandshakeStalled", tableName: filename, bundle: .main, value: "The start-up exchange got no answer", comment: "Anytime link problem")
+    static let anytimeProblemProtocolTimeout = NSLocalizedString("anytime.problemProtocolTimeout", tableName: filename, bundle: .main, value: "The transmitter stopped answering commands", comment: "Anytime link problem")
+    static let anytimeProblemCheckMalformed = NSLocalizedString("anytime.problemCheckMalformed", tableName: filename, bundle: .main, value: "The status reply was not understood", comment: "Anytime link problem")
+    static let anytimeProblemLowBattery = NSLocalizedString("anytime.problemLowBattery", tableName: filename, bundle: .main, value: "Transmitter battery is low", comment: "Anytime link problem")
+    static let anytimeProblemBindNeverStreamed = NSLocalizedString("anytime.problemBindNeverStreamed", tableName: filename, bundle: .main, value: "Reconnected with a stored key but no data followed", comment: "Anytime link problem")
+    static let anytimeProblemNoData = NSLocalizedString("anytime.problemNoData", tableName: filename, bundle: .main, value: "No sensor data while connected", comment: "Anytime link problem")
+    static let anytimeProblemHistoryFailed = NSLocalizedString("anytime.problemHistoryFailed", tableName: filename, bundle: .main, value: "History download did not finish", comment: "Anytime link problem")
+    static let anytimeProblemSensorRestarted = NSLocalizedString("anytime.problemSensorRestarted", tableName: filename, bundle: .main, value: "The sensor's record counter went back: treated as a new session", comment: "Anytime link problem")
+
+    static func anytimeProblem(_ problem: AnytimeLinkProblem) -> String {
+        switch problem {
+        case .linkLost: return anytimeProblemLinkLost
+        case .notAnAnytime: return anytimeProblemNotAnAnytime
+        case .unsupportedFamily: return anytimeProblemUnsupportedFamily
+        case .handshakeStalled: return anytimeProblemHandshakeStalled
+        case .protocolTimeout: return anytimeProblemProtocolTimeout
+        case .checkMalformed: return anytimeProblemCheckMalformed
+        case .lowBattery: return anytimeProblemLowBattery
+        case .bindNeverStreamed: return anytimeProblemBindNeverStreamed
+        case .noData: return anytimeProblemNoData
+        case .historyFailed: return anytimeProblemHistoryFailed
+        case .sensorRestarted: return anytimeProblemSensorRestarted
+        }
+    }
+}
+
+// MARK: - MQ / Glutec
+
+extension Texts_BluetoothPeripheralView {
+
+    static let mqScanNoticeTitle = NSLocalizedString("mq.scanNoticeTitle", tableName: filename, bundle: .main, value: "MQ / Glutec Sensor Connection", comment: "Title of the notice shown before scanning for an MQ / Glutec sensor")
+    static let mqScanNoticeMessage = NSLocalizedString("mq.scanNoticeMessage", tableName: filename, bundle: .main, value: "This app connects directly to an MQ / Glutec transmitter over Bluetooth and does not use the manufacturer's online service. That service is what gives the official app the sensor's factory sensitivity, so here a value appears only after you enter that sensitivity or calibrate with a fingerstick.\n\nBefore scanning, close the manufacturer's app: a transmitter talks to one phone at a time, and the first connection takes the first MQ transmitter it finds.\n\nScanning works only while this app is open. This driver has not been tried on a real sensor.", comment: "Notice shown before scanning for an MQ / Glutec sensor")
+    static let mqSectionTitle = NSLocalizedString("mq.sectionTitle", tableName: filename, bundle: .main, value: "Glutec CGM", comment: "Device screen section title")
+    static let mqSectionFooter = NSLocalizedString("mq.sectionFooter", tableName: filename, bundle: .main, value: "Glucose is calculated in this app from the sensor current with the manufacturer's algorithm. A value needs a slope: either the factory sensitivity entered below (used from packet 19) or a fingerstick calibration with xDrip's calibration button (after packet 8). Until one of them exists the transmitter is followed but no value is shown. Accuracy has not been compared with a reference. Never tried on a real sensor.", comment: "Footer of the MQ section on the device screen")
+    static let mqBluetoothName = NSLocalizedString("mq.bluetoothName", tableName: filename, bundle: .main, value: "Bluetooth name", comment: "MQ device screen row")
+    static let mqSessionStart = NSLocalizedString("mq.sessionStart", tableName: filename, bundle: .main, value: "Session start", comment: "MQ device screen row")
+    static let mqExpectedEnd = NSLocalizedString("mq.expectedEnd", tableName: filename, bundle: .main, value: "Expected end", comment: "MQ device screen row")
+    static let mqPacketNumber = NSLocalizedString("mq.packetNumber", tableName: filename, bundle: .main, value: "Latest packet number", comment: "MQ device screen row")
+    static let mqBattery = NSLocalizedString("mq.battery", tableName: filename, bundle: .main, value: "Battery (raw value)", comment: "MQ device screen row: the transmitter's raw battery byte, not a percentage")
+    static let mqLastReading = NSLocalizedString("mq.lastReading", tableName: filename, bundle: .main, value: "Last reading", comment: "MQ device screen row")
+    static let mqWaitingForReading = NSLocalizedString("mq.waitingForReading", tableName: filename, bundle: .main, value: "Waiting for a reading", comment: "MQ device screen row detail")
+    static let mqCalculation = NSLocalizedString("mq.calculation", tableName: filename, bundle: .main, value: "Glucose calculation", comment: "MQ device screen row")
+    static let mqCalculationNeedsInput = NSLocalizedString("mq.calculationNeedsInput", tableName: filename, bundle: .main, value: "Needs a sensitivity or a fingerstick", comment: "MQ device screen row detail")
+    static let mqCalculationFromSensitivity = NSLocalizedString("mq.calculationFromSensitivity", tableName: filename, bundle: .main, value: "Slope comes from the sensitivity at packet 19", comment: "MQ device screen row detail")
+    static let mqSlopeFormat = NSLocalizedString("mq.slopeFormat", tableName: filename, bundle: .main, value: "Slope %.2f", comment: "MQ device screen row detail. %.2f is the solved slope")
+    static let mqLastLinkProblem = NSLocalizedString("mq.lastLinkProblem", tableName: filename, bundle: .main, value: "Last link problem", comment: "MQ device screen row")
+    static let mqNoLinkProblem = NSLocalizedString("mq.noLinkProblem", tableName: filename, bundle: .main, value: "None since the last reading", comment: "MQ device screen row detail")
+    static let mqProblemLinkLost = NSLocalizedString("mq.problemLinkLost", tableName: filename, bundle: .main, value: "Link lost", comment: "MQ link problem")
+    static let mqProblemNotAnMQ = NSLocalizedString("mq.problemNotAnMQ", tableName: filename, bundle: .main, value: "Device is not an MQ transmitter", comment: "MQ link problem")
+    static let mqProblemNotificationsFailed = NSLocalizedString("mq.problemNotificationsFailed", tableName: filename, bundle: .main, value: "Notifications could not be switched on", comment: "MQ link problem")
+    static let mqProblemNoFramesAfterConnect = NSLocalizedString("mq.problemNoFramesAfterConnect", tableName: filename, bundle: .main, value: "Connected, but the transmitter sent nothing", comment: "MQ link problem")
+    static let mqProblemLinkSilent = NSLocalizedString("mq.problemLinkSilent", tableName: filename, bundle: .main, value: "The transmitter went silent", comment: "MQ link problem")
+    static let mqProblemNoGlucose = NSLocalizedString("mq.problemNoGlucose", tableName: filename, bundle: .main, value: "No glucose for a long time while connected", comment: "MQ link problem")
+    static let mqProblemBeginWorkLoop = NSLocalizedString("mq.problemBeginWorkLoop", tableName: filename, bundle: .main, value: "The transmitter kept restarting its session", comment: "MQ link problem")
+    static let mqProblemWriteFailed = NSLocalizedString("mq.problemWriteFailed", tableName: filename, bundle: .main, value: "A command could not be written", comment: "MQ link problem")
+    static let mqInputsTitle = NSLocalizedString("mq.inputsTitle", tableName: filename, bundle: .main, value: "Algorithm inputs", comment: "Title of the section with the values the manufacturer's service would supply")
+    static let mqInputsFooter = NSLocalizedString("mq.inputsFooter", tableName: filename, bundle: .main, value: "Without the manufacturer's service this app does not know these values. Leave them as they are unless you know them. Changing any of them discards the slope solved so far; readings already shown are not changed. The defaults are the built-in values of the app this driver comes from (version 0, 720 packages, multiplier 1.1); the traces in its notes showed version 1, 720 packages and multiplier 1.0.", comment: "Footer of the MQ algorithm inputs section")
+    static let mqSensitivity = NSLocalizedString("mq.sensitivity", tableName: filename, bundle: .main, value: "Sensitivity", comment: "MQ device screen row: the factory sensitivity of the sensor")
+    static let mqSensitivityNotSet = NSLocalizedString("mq.sensitivityNotSet", tableName: filename, bundle: .main, value: "Not set", comment: "MQ device screen row detail")
+    static let mqSensitivityMessage = NSLocalizedString("mq.sensitivityMessage", tableName: filename, bundle: .main, value: "The factory sensitivity of the sensor, for example 2.93: a value from 0.1 to 99.9. Leave empty to use a fingerstick instead. Choose the scale below too: a wrong scale gives values far off.", comment: "Explains the MQ sensitivity entry")
+    static let mqSensitivityScale = NSLocalizedString("mq.sensitivityScale", tableName: filename, bundle: .main, value: "Sensitivity scale", comment: "MQ device screen row")
+    static let mqSensitivityScaleMessage = NSLocalizedString("mq.sensitivityScaleMessage", tableName: filename, bundle: .main, value: "The manufacturer's service tells the official app whether the sensitivity is used as it is or multiplied by ten. Not knowing it means the sensitivity is not used.", comment: "Explains the MQ sensitivity scale choice")
+    static let mqScaleUnknown = NSLocalizedString("mq.scaleUnknown", tableName: filename, bundle: .main, value: "Not known", comment: "MQ sensitivity scale choice")
+    static let mqScaleAsEntered = NSLocalizedString("mq.scaleAsEntered", tableName: filename, bundle: .main, value: "Use as entered", comment: "MQ sensitivity scale choice")
+    static let mqScaleTimesTen = NSLocalizedString("mq.scaleTimesTen", tableName: filename, bundle: .main, value: "Multiply by ten", comment: "MQ sensitivity scale choice")
+    static let mqAlgorithmVersion = NSLocalizedString("mq.algorithmVersion", tableName: filename, bundle: .main, value: "Algorithm version", comment: "MQ device screen row")
+    static let mqAlgorithmVersionFormat = NSLocalizedString("mq.algorithmVersionFormat", tableName: filename, bundle: .main, value: "Version %d", comment: "MQ algorithm version choice. %d is the version number")
+    static let mqPackages = NSLocalizedString("mq.packages", tableName: filename, bundle: .main, value: "Packages per session", comment: "MQ device screen row")
+    static let mqPackagesMessage = NSLocalizedString("mq.packagesMessage", tableName: filename, bundle: .main, value: "A whole number from 1 to 2000, the number of data packages the manufacturer expects in a session.", comment: "Explains the MQ packages entry")
+    static let mqMultiplier = NSLocalizedString("mq.multiplier", tableName: filename, bundle: .main, value: "Multiplier", comment: "MQ device screen row")
+    static let mqMultiplierMessage = NSLocalizedString("mq.multiplierMessage", tableName: filename, bundle: .main, value: "A number from 0.5 to 3, the factor the manufacturer applies to the sensor current at the start of a session.", comment: "Explains the MQ multiplier entry")
+    static let mqReset = NSLocalizedString("mq.reset", tableName: filename, bundle: .main, value: "Reset transmitter", comment: "MQ device screen row")
+    static let mqResetConfirmTitle = NSLocalizedString("mq.resetConfirmTitle", tableName: filename, bundle: .main, value: "Reset the transmitter?", comment: "Confirmation title before resetting an MQ transmitter")
+    static let mqResetConfirmMessage = NSLocalizedString("mq.resetConfirmMessage", tableName: filename, bundle: .main, value: "This sends a reset command to the transmitter and forgets the current session here. Continue only if you intend to start a new session.", comment: "Confirmation message before resetting an MQ transmitter")
+    static let mqResetSent = NSLocalizedString("mq.resetSent", tableName: filename, bundle: .main, value: "The reset command was sent. The transmitter starts a new session.", comment: "Result of the MQ reset")
+    static let mqResetNotSent = NSLocalizedString("mq.resetNotSent", tableName: filename, bundle: .main, value: "The reset command could not be sent. The transmitter must be connected.", comment: "Result of the MQ reset")
+
+    static func mqProblem(_ problem: MQLinkProblem) -> String {
+        switch problem {
+        case .linkLost: return mqProblemLinkLost
+        case .notAnMQ: return mqProblemNotAnMQ
+        case .notificationsFailed: return mqProblemNotificationsFailed
+        case .noFramesAfterConnect: return mqProblemNoFramesAfterConnect
+        case .linkSilent: return mqProblemLinkSilent
+        case .noGlucose: return mqProblemNoGlucose
+        case .beginWorkLoop: return mqProblemBeginWorkLoop
+        case .writeFailed: return mqProblemWriteFailed
+        }
+    }
+
+    static func mqSensitivityScaleTitle(_ scale: MQSensitivityScale) -> String {
+        switch scale {
+        case .unknown: return mqScaleUnknown
+        case .asEntered: return mqScaleAsEntered
+        case .timesTen: return mqScaleTimesTen
+        }
+    }
+}
+
+// MARK: - Ottai
+
+extension Texts_BluetoothPeripheralView {
+
+    static let ottaiScanNoticeTitle = NSLocalizedString("ottai.scanNoticeTitle", tableName: filename, bundle: .main, value: "Ottai Sensor Connection", comment: "Title of the notice shown before scanning for an Ottai sensor")
+    static let ottaiScanNoticeMessage = NSLocalizedString("ottai.scanNoticeMessage", tableName: filename, bundle: .main, value: "This app connects directly to an Ottai sensor over Bluetooth and never contacts the manufacturer's online service. That service is what issues the keys and the glucose coefficients of a sensor, so they must be imported first (see the sensor material section on this screen). The first connection takes the first Ottai sensor it finds whose signature matches the imported material; any other sensor is ignored.\n\nBefore scanning, close the manufacturer's app: a sensor talks to one phone at a time. A sensor that is not activated yet is not activated here; use the manufacturer's app for that.\n\nScanning works only while this app is open. This driver has not been tried on a real sensor.", comment: "Notice shown before scanning for an Ottai sensor")
+    static let ottaiMaterialSectionTitle = NSLocalizedString("ottai.materialSectionTitle", tableName: filename, bundle: .main, value: "Sensor material", comment: "Title of the section with the imported Ottai sensor keys and coefficients")
+    static let ottaiMaterialAddFooter = NSLocalizedString("ottai.materialAddFooter", tableName: filename, bundle: .main, value: "The keys and glucose coefficients of an Ottai sensor come from the manufacturer's online service, which this app does not use. Import them as the portable JSON that JugglucoNG exports: copy it, then tap Import. The material stays in the Keychain of this device only, is not part of app backups and is never written to the Activity Log. Scanning needs it.", comment: "Footer of the sensor material section while adding an Ottai sensor")
+    static let ottaiMaterialDeviceFooter = NSLocalizedString("ottai.materialDeviceFooter", tableName: filename, bundle: .main, value: "Importing the material of a different sensor starts the status above over. Removing the material stops the connection until it is imported again. The material is kept in the Keychain of this device only and is never written to the Activity Log.", comment: "Footer of the sensor material section on the Ottai device screen")
+    static let ottaiMaterialRow = NSLocalizedString("ottai.materialRow", tableName: filename, bundle: .main, value: "Sensor material", comment: "Ottai device screen row")
+    static let ottaiMaterialMissing = NSLocalizedString("ottai.materialMissing", tableName: filename, bundle: .main, value: "Not imported", comment: "Ottai device screen row detail")
+    static let ottaiMaterialImportedFormat = NSLocalizedString("ottai.materialImportedFormat", tableName: filename, bundle: .main, value: "Imported for sensor %@", comment: "Ottai device screen row detail. %@ is the sensor id")
+    static let ottaiMaterialImport = NSLocalizedString("ottai.materialImport", tableName: filename, bundle: .main, value: "Import from clipboard", comment: "Ottai device screen row")
+    static let ottaiMaterialRemove = NSLocalizedString("ottai.materialRemove", tableName: filename, bundle: .main, value: "Remove sensor material", comment: "Ottai device screen row")
+    static let ottaiRemoveConfirmTitle = NSLocalizedString("ottai.removeConfirmTitle", tableName: filename, bundle: .main, value: "Remove the sensor material?", comment: "Confirmation title before removing the Ottai sensor material")
+    static let ottaiRemoveConfirmMessage = NSLocalizedString("ottai.removeConfirmMessage", tableName: filename, bundle: .main, value: "The keys and coefficients are deleted from this device. The sensor is not followed until the material is imported again.", comment: "Confirmation message before removing the Ottai sensor material")
+    static let ottaiImportTitle = NSLocalizedString("ottai.importTitle", tableName: filename, bundle: .main, value: "Import sensor material", comment: "Title of the result of importing Ottai sensor material")
+    static let ottaiImportClipboardEmpty = NSLocalizedString("ottai.importClipboardEmpty", tableName: filename, bundle: .main, value: "The clipboard holds no text. Copy the sensor material JSON first.", comment: "Ottai material import result")
+    static let ottaiImportNotJson = NSLocalizedString("ottai.importNotJson", tableName: filename, bundle: .main, value: "The clipboard does not hold sensor material in JSON form.", comment: "Ottai material import result")
+    static let ottaiImportMissingSensorId = NSLocalizedString("ottai.importMissingSensorId", tableName: filename, bundle: .main, value: "The material has no sensor id.", comment: "Ottai material import result")
+    static let ottaiImportSensorIdNotTwelveHex = NSLocalizedString("ottai.importSensorIdNotTwelveHex", tableName: filename, bundle: .main, value: "The sensor id is not 12 hexadecimal digits, so the sensor could not be recognised by it.", comment: "Ottai material import result")
+    static let ottaiImportInvalidKeys = NSLocalizedString("ottai.importInvalidKeys", tableName: filename, bundle: .main, value: "The material has no valid authentication keys.", comment: "Ottai material import result")
+    static let ottaiImportSaveFailed = NSLocalizedString("ottai.importSaveFailed", tableName: filename, bundle: .main, value: "The material could not be saved to the Keychain of this device.", comment: "Ottai material import result")
+    static let ottaiImportDoneAdding = NSLocalizedString("ottai.importDoneAdding", tableName: filename, bundle: .main, value: "The sensor material was imported. Now scan for the sensor.", comment: "Ottai material import result while adding a sensor")
+    static let ottaiImportDoneDevice = NSLocalizedString("ottai.importDoneDevice", tableName: filename, bundle: .main, value: "The sensor material was imported. The connection restarts.", comment: "Ottai material import result on the device screen")
+    static let ottaiImportNoExpression = NSLocalizedString("ottai.importNoExpression", tableName: filename, bundle: .main, value: " It has no glucose expression or recognised coefficients, so no reading can be calculated from it.", comment: "Added to the Ottai material import result when the material cannot give a glucose value")
+    static let ottaiScanNeedsMaterial = NSLocalizedString("ottai.scanNeedsMaterial", tableName: filename, bundle: .main, value: "Import the sensor material first. Without the keys of the sensor the connection cannot be made.", comment: "Shown when scanning for an Ottai sensor is tried without imported material")
+    static let ottaiSectionTitle = NSLocalizedString("ottai.sectionTitle", tableName: filename, bundle: .main, value: "Ottai CGM", comment: "Device screen section title")
+    static let ottaiSectionFooter = NSLocalizedString("ottai.sectionFooter", tableName: filename, bundle: .main, value: "Glucose is calculated in this app from the sensor current with the expression and coefficients of the imported material; nothing is sent to the manufacturer. A sensor that is not activated is not activated here, and an ended sensor is not read. Never tried on a real sensor.", comment: "Footer of the Ottai section on the device screen")
+    static let ottaiBluetoothName = NSLocalizedString("ottai.bluetoothName", tableName: filename, bundle: .main, value: "Bluetooth name", comment: "Ottai device screen row")
+    static let ottaiSessionStart = NSLocalizedString("ottai.sessionStart", tableName: filename, bundle: .main, value: "Session start", comment: "Ottai device screen row")
+    static let ottaiExpectedEnd = NSLocalizedString("ottai.expectedEnd", tableName: filename, bundle: .main, value: "Expected end", comment: "Ottai device screen row")
+    static let ottaiLifetimeFromSensor = NSLocalizedString("ottai.lifetimeFromSensor", tableName: filename, bundle: .main, value: "Lifetime reported by the sensor", comment: "Ottai device screen row")
+    static let ottaiDaysFormat = NSLocalizedString("ottai.daysFormat", tableName: filename, bundle: .main, value: "%.1f days", comment: "Ottai device screen row detail. %.1f is a number of days")
+    static let ottaiSensorState = NSLocalizedString("ottai.sensorState", tableName: filename, bundle: .main, value: "Sensor state", comment: "Ottai device screen row")
+    static let ottaiStateUnknown = NSLocalizedString("ottai.stateUnknown", tableName: filename, bundle: .main, value: "Not read yet", comment: "Ottai sensor state")
+    static let ottaiStateNotActivated = NSLocalizedString("ottai.stateNotActivated", tableName: filename, bundle: .main, value: "Not activated", comment: "Ottai sensor state")
+    static let ottaiStateRunning = NSLocalizedString("ottai.stateRunning", tableName: filename, bundle: .main, value: "Running", comment: "Ottai sensor state")
+    static let ottaiStateEnded = NSLocalizedString("ottai.stateEnded", tableName: filename, bundle: .main, value: "Ended", comment: "Ottai sensor state")
+    static let ottaiLastReading = NSLocalizedString("ottai.lastReading", tableName: filename, bundle: .main, value: "Last reading", comment: "Ottai device screen row")
+    static let ottaiWaitingForReading = NSLocalizedString("ottai.waitingForReading", tableName: filename, bundle: .main, value: "Waiting for a reading", comment: "Ottai device screen row detail")
+    static let ottaiTemperature = NSLocalizedString("ottai.temperature", tableName: filename, bundle: .main, value: "Sensor temperature", comment: "Ottai device screen row")
+    static let ottaiTemperatureFormat = NSLocalizedString("ottai.temperatureFormat", tableName: filename, bundle: .main, value: "%.1f °C", comment: "Ottai device screen row detail. %.1f is a temperature in degrees Celsius")
+    static let ottaiLastLinkProblem = NSLocalizedString("ottai.lastLinkProblem", tableName: filename, bundle: .main, value: "Last link problem", comment: "Ottai device screen row")
+    static let ottaiNoLinkProblem = NSLocalizedString("ottai.noLinkProblem", tableName: filename, bundle: .main, value: "None since the last reading", comment: "Ottai device screen row detail")
+    static let ottaiProblemLinkLost = NSLocalizedString("ottai.problemLinkLost", tableName: filename, bundle: .main, value: "Link lost", comment: "Ottai link problem")
+    static let ottaiProblemNotAnOttai = NSLocalizedString("ottai.problemNotAnOttai", tableName: filename, bundle: .main, value: "Device is not an Ottai sensor", comment: "Ottai link problem")
+    static let ottaiProblemNoMaterial = NSLocalizedString("ottai.problemNoMaterial", tableName: filename, bundle: .main, value: "No sensor material imported", comment: "Ottai link problem")
+    static let ottaiProblemSensorNotMatching = NSLocalizedString("ottai.problemSensorNotMatching", tableName: filename, bundle: .main, value: "The sensor does not match the imported material", comment: "Ottai link problem")
+    static let ottaiProblemSignatureMismatch = NSLocalizedString("ottai.problemSignatureMismatch", tableName: filename, bundle: .main, value: "The sensor's signature did not match this time", comment: "Ottai link problem")
+    static let ottaiProblemNotificationsFailed = NSLocalizedString("ottai.problemNotificationsFailed", tableName: filename, bundle: .main, value: "Notifications could not be switched on", comment: "Ottai link problem")
+    static let ottaiProblemSetupTimeout = NSLocalizedString("ottai.problemSetupTimeout", tableName: filename, bundle: .main, value: "The sensor did not finish the connection setup", comment: "Ottai link problem")
+    static let ottaiProblemReadFailed = NSLocalizedString("ottai.problemReadFailed", tableName: filename, bundle: .main, value: "A value could not be read from the sensor", comment: "Ottai link problem")
+    static let ottaiProblemAuthRejected = NSLocalizedString("ottai.problemAuthRejected", tableName: filename, bundle: .main, value: "The sensor rejected the handshake", comment: "Ottai link problem")
+    static let ottaiProblemSessionKeyFailed = NSLocalizedString("ottai.problemSessionKeyFailed", tableName: filename, bundle: .main, value: "The session key could not be derived", comment: "Ottai link problem")
+    static let ottaiProblemSensorNotActivated = NSLocalizedString("ottai.problemSensorNotActivated", tableName: filename, bundle: .main, value: "The sensor is not activated; use the manufacturer's app", comment: "Ottai link problem")
+    static let ottaiProblemSensorEnded = NSLocalizedString("ottai.problemSensorEnded", tableName: filename, bundle: .main, value: "The sensor session has ended", comment: "Ottai link problem")
+    static let ottaiProblemCommandStatusUnreadable = NSLocalizedString("ottai.problemCommandStatusUnreadable", tableName: filename, bundle: .main, value: "The sensor state could not be read", comment: "Ottai link problem")
+    static let ottaiProblemLinkSilent = NSLocalizedString("ottai.problemLinkSilent", tableName: filename, bundle: .main, value: "The sensor went silent", comment: "Ottai link problem")
+    static let ottaiProblemNoReadings = NSLocalizedString("ottai.problemNoReadings", tableName: filename, bundle: .main, value: "Connected, but no reading for a long time", comment: "Ottai link problem")
+    static let ottaiProblemFrameNotDecryptable = NSLocalizedString("ottai.problemFrameNotDecryptable", tableName: filename, bundle: .main, value: "Data frames could not be decrypted", comment: "Ottai link problem")
+    static let ottaiProblemNoExpression = NSLocalizedString("ottai.problemNoExpression", tableName: filename, bundle: .main, value: "The material has no usable glucose expression", comment: "Ottai link problem")
+
+    static func ottaiProblem(_ problem: OttaiLinkProblem) -> String {
+        switch problem {
+        case .linkLost: return ottaiProblemLinkLost
+        case .notAnOttai: return ottaiProblemNotAnOttai
+        case .noMaterial: return ottaiProblemNoMaterial
+        case .sensorNotMatching: return ottaiProblemSensorNotMatching
+        case .signatureMismatch: return ottaiProblemSignatureMismatch
+        case .notificationsFailed: return ottaiProblemNotificationsFailed
+        case .setupTimeout: return ottaiProblemSetupTimeout
+        case .readFailed: return ottaiProblemReadFailed
+        case .authRejected: return ottaiProblemAuthRejected
+        case .sessionKeyFailed: return ottaiProblemSessionKeyFailed
+        case .sensorNotActivated: return ottaiProblemSensorNotActivated
+        case .sensorEnded: return ottaiProblemSensorEnded
+        case .commandStatusUnreadable: return ottaiProblemCommandStatusUnreadable
+        case .linkSilent: return ottaiProblemLinkSilent
+        case .noReadings: return ottaiProblemNoReadings
+        case .frameNotDecryptable: return ottaiProblemFrameNotDecryptable
+        case .noExpression: return ottaiProblemNoExpression
+        }
+    }
+
+    /// The sensor's command status: 0 to 2 not activated, 3 running, 4 and more ended, -1 not read yet.
+    static func ottaiSensorStateText(commandStatus: Int) -> String {
+        if commandStatus < 0 { return ottaiStateUnknown }
+        if OttaiConstants.commandNeedsActivation(commandStatus) { return ottaiStateNotActivated }
+        if commandStatus >= 4 { return ottaiStateEnded }
+        return ottaiStateRunning
+    }
+
+    static func ottaiImportFailure(_ failure: OttaiMaterials.ImportFailure) -> String {
+        switch failure {
+        case .notJson: return ottaiImportNotJson
+        case .missingSensorId: return ottaiImportMissingSensorId
+        case .sensorIdNotTwelveHex: return ottaiImportSensorIdNotTwelveHex
+        case .invalidKeys: return ottaiImportInvalidKeys
+        }
     }
 }

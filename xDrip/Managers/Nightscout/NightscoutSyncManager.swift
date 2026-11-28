@@ -122,6 +122,12 @@ public class NightscoutSyncManager: NSObject, ObservableObject {
     private var lastBackgroundFollowerRefreshAt: Date = .distantPast
     private let backgroundFollowerRefreshCooldown: TimeInterval = 60
 
+    /// The IOB devicestatus sent last (when, and which values), for the upload cadence. Main thread only.
+    private var lastExperimentalIobUpload: (date: Date, values: ExperimentalNightscoutIob.Values)?
+    /// When the main phone's IOB devicestatus was last asked for, so a sync burst asks once.
+    private var lastRemoteIobPoll: Date = .distantPast
+    private let remoteIobPollCooldown: TimeInterval = 60
+
     /// Keep replacement requests in scheduling order so a later cadence change
     /// cannot overtake an earlier exact deletion or value update.
     private var bgReadingsReplacementTask: Task<Void, Never>?
@@ -361,6 +367,9 @@ public class NightscoutSyncManager: NSObject, ObservableObject {
         
         // Experimental: the forecast as an OpenAPS-style devicestatus, at most every five minutes.
         uploadExperimentalPredictionIfDue()
+
+        // Experimental: IOB, eIOB and COB as a devicestatus in JugglucoNG's layout.
+        uploadExperimentalIobIfDue()
 
         // upload calibrations
         uploadCalibrationsToNightscout()
@@ -620,6 +629,8 @@ public class NightscoutSyncManager: NSObject, ObservableObject {
         updateProfile()
         
         updateDeviceStatus()
+
+        updateRemoteIob()
         
         // if sync already running, then set nightscoutSyncRequired to true
         // sync is running already, once stopped it will rerun
@@ -1417,6 +1428,54 @@ public class NightscoutSyncManager: NSObject, ObservableObject {
         uploadData(dataToUpload: payload, httpMethod: nil, path: nightscoutDeviceStatusPath, completionHandler: {
             trace("in uploadExperimentalPredictionIfDue, forecast uploaded to NS", log: self.oslog, category: ConstantsLog.categoryNightscoutSyncManager, type: .info)
         })
+    }
+
+    /// Uploads this phone's IOB, eIOB and COB as a devicestatus in JugglucoNG's layout (`ExperimentalNightscoutIob`),
+    /// when the user turned it on and one is due. It is built from the treatments logged on this phone only and
+    /// only while the model has a rapid insulin dose to report. Skipped while an AID's devicestatus is followed:
+    /// the AID's IOB and COB must stay the only ones, and xDrip would read its own numbers back as pump status.
+    /// A Nightscout follower never reaches this: it uploads no glucose.
+    private func uploadExperimentalIobIfDue(now: Date = Date()) {
+        let defaults = UserDefaults.standard
+        guard defaults.experimentalNightscoutIobUpload, !defaults.dataFlowPolicy.importsStatusFromNightscout else { return }
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.uploadExperimentalIobIfDue(now: now) }
+            return
+        }
+        guard ExperimentalNightscoutIob.fastIntervalElapsed(now: now, lastUpload: lastExperimentalIobUpload?.date) else { return }
+        let model = ExperimentalPredictionModel(defaults: defaults)
+        let treatments = ExperimentalNightscoutIob.localTreatments(in: coreDataManager.mainManagedObjectContext, now: now)
+        guard let values = ExperimentalNightscoutIob.snapshot(treatments: treatments, model: model, now: now),
+              ExperimentalNightscoutIob.shouldUpload(now: now, lastUpload: lastExperimentalIobUpload?.date, values: values, lastValues: lastExperimentalIobUpload?.values),
+              let payload = ExperimentalNightscoutIob.deviceStatus(now: now, values: values) else { return }
+        // Best effort, and recorded before the request so that two calls close together send one document.
+        lastExperimentalIobUpload = (now, values)
+        uploadData(dataToUpload: payload, httpMethod: nil, path: nightscoutDeviceStatusPath, completionHandler: {
+            trace("in uploadExperimentalIobIfDue, IOB and COB uploaded to NS", log: self.oslog, category: ConstantsLog.categoryNightscoutSyncManager, type: .info)
+        })
+    }
+
+    /// Asks Nightscout for the main phone's IOB and COB (`ExperimentalRemoteIob`) when this phone follows Nightscout
+    /// with the switch on and is not following an AID's status. Best effort: a failed or empty answer keeps what was
+    /// found before, and the 15-minute window retires it.
+    private func updateRemoteIob() {
+        let defaults = UserDefaults.standard
+        guard defaults.dataFlowPolicy.showsRemoteIob(enabled: defaults.experimentalNightscoutIobFollow), defaults.nightscoutUrl != nil else {
+            ExperimentalRemoteIobStore.shared.clear()
+            return
+        }
+        guard Date().timeIntervalSince(lastRemoteIobPoll) >= remoteIobPollCooldown else { return }
+        lastRemoteIobPoll = Date()
+        Task {
+            do {
+                let body: Data? = try await nightscoutRequest(path: nightscoutDeviceStatusPath, queryItems: [URLQueryItem(name: "count", value: "10")], responseType: Data.self)
+                let stillFollowing = UserDefaults.standard.dataFlowPolicy.showsRemoteIob(enabled: UserDefaults.standard.experimentalNightscoutIobFollow)
+                guard stillFollowing, let body else { return }
+                ExperimentalRemoteIobStore.shared.update(ExperimentalRemoteIob.parseNewest(body))
+            } catch {
+                trace("in updateRemoteIob, error = %{public}@", log: self.oslog, category: ConstantsLog.categoryNightscoutSyncManager, type: .error, error.localizedDescription)
+            }
+        }
     }
 
     /// upload battery level to nightscout

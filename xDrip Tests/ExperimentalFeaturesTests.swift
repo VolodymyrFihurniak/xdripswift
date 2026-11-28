@@ -8,6 +8,7 @@
 
 import XCTest
 import SwiftUI
+import UserNotifications
 @testable import xdrip
 
 final class ExperimentalFeaturesTests: XCTestCase {
@@ -406,6 +407,296 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertNil(plain["iob"])
     }
 
+    // MARK: IOB and COB through Nightscout (JugglucoNG NightscoutIobDeviceStatusTests and
+    // NightscoutFollowerDeviceStatusTests). Expected values come from a Python port of the same
+    // arithmetic: two-decimal rounding, the cadence, ISO times and the aspart curve of
+    // InsulinCurveCatalogue (IOB and eIOB of a 6 U dose 30 minutes ago: 5.491386 and 4.802839).
+
+    private func values(_ iob: Double, _ eiob: Double? = nil, _ cob: Double? = nil) -> ExperimentalNightscoutIob.Values {
+        ExperimentalNightscoutIob.Values(iob: iob, eiob: eiob, cob: cob)
+    }
+
+    func testIobDeviceStatusKeepsClassicIobInTheOpenapsContainerAndTheRestInItsOwnObject() throws {
+        let status = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(1.8, 1.5, 24)))
+        XCTAssertEqual(status["device"] as? String, "xDrip4iOS")
+        XCTAssertEqual(status["created_at"] as? String, "2027-01-15T08:00:00.000Z")
+        let openaps = try XCTUnwrap(status["openaps"] as? [String: Any])
+        let iob = try XCTUnwrap(openaps["iob"] as? [String: Any])
+        XCTAssertEqual(iob["iob"] as? Double, 1.8)
+        XCTAssertEqual(iob["timestamp"] as? String, "2027-01-15T08:00:00.000Z")
+        // The standard container stays the classic-IOB contract: no eIOB, COB, activity or basal IOB.
+        for absent in ["eiob", "cob", "activity", "basaliob"] { XCTAssertNil(iob[absent], absent) }
+        XCTAssertNil(openaps["suggested"])
+        let own = try XCTUnwrap(status["jugglucong"] as? [String: Any])
+        XCTAssertEqual(own["iob"] as? Double, 1.8)
+        XCTAssertEqual(own["eiob"] as? Double, 1.5)
+        XCTAssertEqual(own["cob"] as? Double, 24)
+    }
+
+    func testIobDeviceStatusRoundsToTwoDecimalsAndLeavesOutWhatIsMissing() throws {
+        let rounded = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(1.2345, 0.9876, 17.549)))
+        let own = try XCTUnwrap(rounded["jugglucong"] as? [String: Any])
+        XCTAssertEqual(own["iob"] as? Double, 1.23)
+        XCTAssertEqual(own["eiob"] as? Double, 0.99)
+        XCTAssertEqual(own["cob"] as? Double, 17.55)
+        let sparse = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(1.8)))
+        XCTAssertNil((sparse["jugglucong"] as? [String: Any])?["eiob"])
+        XCTAssertNil((sparse["jugglucong"] as? [String: Any])?["cob"])
+        // Not finite means not reported, never invalid JSON.
+        let infinite = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(1.8, .infinity, -.infinity)))
+        XCTAssertNil((infinite["jugglucong"] as? [String: Any])?["eiob"])
+        XCTAssertNil((infinite["jugglucong"] as? [String: Any])?["cob"])
+        // Without classic IOB the document would carry nothing Nightscout can use.
+        XCTAssertNil(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(.nan, 1, 24)))
+        XCTAssertNil(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(.infinity)))
+    }
+
+    func testIobDeviceStatusPassesInsulinUnitsThroughWithoutGlucoseUnitConversion() throws {
+        let status = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(18)))
+        XCTAssertEqual(((status["openaps"] as? [String: Any])?["iob"] as? [String: Any])?["iob"] as? Double, 18)
+    }
+
+    private func upload(after elapsed: TimeInterval, _ now: ExperimentalNightscoutIob.Values, last: ExperimentalNightscoutIob.Values) -> Bool {
+        ExperimentalNightscoutIob.shouldUpload(now: start.addingTimeInterval(elapsed), lastUpload: start, values: now, lastValues: last)
+    }
+
+    func testIobUploadCadence() {
+        XCTAssertTrue(ExperimentalNightscoutIob.shouldUpload(now: start, lastUpload: nil, values: values(1.8, 1.5, 0), lastValues: nil))
+        // Moving values: at most every five minutes.
+        XCTAssertFalse(upload(after: 299, values(1.6, 1.28, 0), last: values(1.8, 1.5, 0)))
+        XCTAssertTrue(upload(after: 300, values(1.6, 1.28, 0), last: values(1.8, 1.5, 0)))
+        // Insulin on board keeps the fast cadence even when the rounded values did not move.
+        XCTAssertTrue(upload(after: 300, values(1.8, 1.44, 0), last: values(1.8, 1.44, 0)))
+        // Idle at zero: every ten minutes.
+        XCTAssertFalse(upload(after: 300, values(0, 0, 0), last: values(0, 0, 0)))
+        XCTAssertFalse(upload(after: 599, values(0, 0, 0), last: values(0, 0, 0)))
+        XCTAssertTrue(upload(after: 600, values(0, 0, 0), last: values(0, 0, 0)))
+        // Carbs moving at zero insulin still count, jitter under the 0.01 quantum does not.
+        XCTAssertTrue(upload(after: 300, values(0, 0, 12), last: values(0, 0, 24)))
+        XCTAssertFalse(upload(after: 300, values(0, 0, 24.001), last: values(0, 0, 24.004)))
+        // A value appearing or disappearing is a change.
+        XCTAssertTrue(upload(after: 300, values(0, 0, 0), last: values(0, 0, nil)))
+        // A clock that moved backwards makes the next upload due instead of blocking it.
+        XCTAssertTrue(upload(after: -5, values(0, 0, 0), last: values(0, 0, 0)))
+    }
+
+    func testIobFastIntervalGateMatchesTheCadence() {
+        XCTAssertTrue(ExperimentalNightscoutIob.fastIntervalElapsed(now: start, lastUpload: nil))
+        XCTAssertFalse(ExperimentalNightscoutIob.fastIntervalElapsed(now: start.addingTimeInterval(299), lastUpload: start))
+        XCTAssertTrue(ExperimentalNightscoutIob.fastIntervalElapsed(now: start.addingTimeInterval(300), lastUpload: start))
+        XCTAssertTrue(ExperimentalNightscoutIob.fastIntervalElapsed(now: start.addingTimeInterval(-1), lastUpload: start))
+    }
+
+    private func bolus(_ units: Double, minutesAgo: Double, notes: String? = nil) -> ExperimentalTreatment {
+        ExperimentalTreatment(date: start.addingTimeInterval(-minutesAgo * 60), amount: units, kind: .bolus, notes: notes)
+    }
+
+    func testIobSnapshotIsUnavailableWithoutARapidInsulinDose() {
+        let model = ExperimentalPredictionModel()
+        let carbs = ExperimentalTreatment(date: start, amount: 35, kind: .carbs, notes: nil)
+        let basal = ExperimentalTreatment(date: start, amount: 20, kind: .basalInjection, notes: nil)
+        XCTAssertNil(ExperimentalNightscoutIob.snapshot(treatments: [], model: model, now: start))
+        XCTAssertNil(ExperimentalNightscoutIob.snapshot(treatments: [carbs], model: model, now: start))
+        XCTAssertNil(ExperimentalNightscoutIob.snapshot(treatments: [basal, carbs], model: model, now: start))
+        // A dose of the next minutes does not exist yet; one older than the 24-hour window no longer counts.
+        XCTAssertNil(ExperimentalNightscoutIob.snapshot(treatments: [bolus(6, minutesAgo: -10)], model: model, now: start))
+        XCTAssertNil(ExperimentalNightscoutIob.snapshot(treatments: [bolus(6, minutesAgo: 25 * 60)], model: model, now: start))
+    }
+
+    func testIobSnapshotReportsClassicAndEffectiveInsulinAndCarbs() throws {
+        let model = ExperimentalPredictionModel()
+        // At the dose all of it is still to act and none of it acts yet.
+        let atDose = try XCTUnwrap(ExperimentalNightscoutIob.snapshot(treatments: [bolus(6, minutesAgo: 0)], model: model, now: start))
+        XCTAssertEqual(atDose.iob, 6, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(atDose.eiob), 0, accuracy: 1e-9)
+        XCTAssertNil(atDose.cob)
+        // Aspart, 6 U 30 minutes ago (Python port).
+        let later = try XCTUnwrap(ExperimentalNightscoutIob.snapshot(treatments: [bolus(6, minutesAgo: 30)], model: model, now: start))
+        XCTAssertEqual(later.iob, 5.491386, accuracy: 1e-4)
+        XCTAssertEqual(try XCTUnwrap(later.eiob), 4.802839, accuracy: 1e-4)
+        // Two doses and a meal: 6 U an hour ago and 3 U with 35 g half an hour ago. 35 g at 35 g/h is
+        // half absorbed after 30 minutes. A basal injection is not part of the rapid insulin total.
+        let treatments = [bolus(6, minutesAgo: 60), bolus(3, minutesAgo: 30),
+                          ExperimentalTreatment(date: start.addingTimeInterval(-1800), amount: 35, kind: .carbs, notes: nil),
+                          ExperimentalTreatment(date: start.addingTimeInterval(-1800), amount: 20, kind: .basalInjection, notes: nil)]
+        let both = try XCTUnwrap(ExperimentalNightscoutIob.snapshot(treatments: treatments, model: model, now: start))
+        XCTAssertEqual(both.iob, 7.255006, accuracy: 1e-4)
+        XCTAssertEqual(try XCTUnwrap(both.eiob), 6.802927, accuracy: 1e-4)
+        XCTAssertEqual(try XCTUnwrap(both.cob), 17.5, accuracy: 1e-9)
+        XCTAssertLessThanOrEqual(try XCTUnwrap(both.eiob), both.iob)
+    }
+
+    func testIobSnapshotOfAFinishedDoseStillReportsZero() throws {
+        // The curve ends after six hours; the dose is inside the 24-hour window, so the model is available.
+        let finished = try XCTUnwrap(ExperimentalNightscoutIob.snapshot(treatments: [bolus(6, minutesAgo: 7 * 60)], model: ExperimentalPredictionModel(), now: start))
+        XCTAssertEqual(finished.iob, 0, accuracy: 1e-12)
+        XCTAssertEqual(try XCTUnwrap(finished.eiob), 0, accuracy: 1e-12)
+    }
+
+    func testIobUploadReadsOnlyTreatmentsLoggedOnThisPhone() throws {
+        let coreDataManager = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
+        let context = coreDataManager.mainManagedObjectContext
+        let hourAgo = start.addingTimeInterval(-3600)
+        // Logged here: a nil remote event type. Imported: an id and the event type Nightscout reported.
+        _ = TreatmentEntry(date: hourAgo, value: 4, treatmentType: .Insulin, nightscoutEventType: nil, enteredBy: "xDrip4iOS", nsManagedObjectContext: context)
+        _ = TreatmentEntry(id: "imported", date: hourAgo, value: 7, treatmentType: .Insulin,
+                           nightscoutEventType: "Correction Bolus", enteredBy: "Nightscout", nsManagedObjectContext: context)
+        let policy = DataFlowPolicy(isMaster: true, followerDataSource: .nightscout, therapyDataSourceSelection: .nightscout,
+                                    nightscoutEnabled: true, masterUploadsGlucoseToNightscout: true,
+                                    followerUploadsGlucoseToNightscout: false, nightscoutFollowType: .none)
+        var everything: [ExperimentalTreatment] = []
+        context.performAndWait {
+            everything = ExperimentalTreatment.fetch(from: start.addingTimeInterval(-7200), to: start, in: context, policy: policy) ?? []
+        }
+        XCTAssertEqual(everything.map(\.amount).sorted(), [4, 7])
+        let local = ExperimentalNightscoutIob.localTreatments(in: context, now: start, policy: policy)
+        XCTAssertEqual(local.map(\.amount), [4])
+    }
+
+    // The follower's side
+
+    private let remoteStamp = "2026-08-03T12:00:00.000Z"
+    /// Python: datetime(2026, 8, 3, 12, 0, tzinfo=utc).timestamp()
+    private let remoteDate = Date(timeIntervalSince1970: 1_785_758_400)
+
+    private func uploaderDocument(createdAt: String? = nil, openapsStamp: String? = "2026-08-03T12:00:00.000Z",
+                                  eiob: String = ",\"eiob\":1.25", cob: String = ",\"cob\":18.00") -> String {
+        let openaps = openapsStamp.map { "\"openaps\":{\"iob\":{\"iob\":2.50,\"timestamp\":\"\($0)\"}}," } ?? ""
+        return "{\"device\":\"xDrip4iOS\",\"created_at\":\"\(createdAt ?? remoteStamp)\",\(openaps)\"jugglucong\":{\"iob\":2.50\(eiob)\(cob)}}"
+    }
+
+    private func parseRemote(_ body: String) -> ExperimentalRemoteIob? {
+        ExperimentalRemoteIob.parseNewest(Data(body.utf8))
+    }
+
+    func testRemoteIobParsesTheUploaderDocument() throws {
+        let remote = try XCTUnwrap(parseRemote("[\(uploaderDocument())]"))
+        XCTAssertEqual(remote.iob, 2.5, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(remote.eiob), 1.25, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(remote.cob), 18, accuracy: 1e-9)
+        XCTAssertEqual(remote.date, remoteDate)
+    }
+
+    func testRemoteIobIgnoresDocumentsOfOtherUploaders() {
+        // A loop publishes openaps.iob but no jugglucong object; a battery document has neither.
+        let loop = "[{\"device\":\"loop://iPhone\",\"created_at\":\"\(remoteStamp)\",\"openaps\":{\"iob\":{\"iob\":3.1,\"timestamp\":\"\(remoteStamp)\"}}}]"
+        XCTAssertNil(parseRemote(loop))
+        XCTAssertNil(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"uploader\":{\"battery\":80}}]"))
+    }
+
+    func testRemoteIobPicksTheNewestDocumentWhateverTheOrder() throws {
+        // Python: 11:40 is 1785757200.
+        let older = uploaderDocument(createdAt: "2026-08-03T11:40:00.000Z", openapsStamp: "2026-08-03T11:40:00.000Z")
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[\(older),\(uploaderDocument())]")).date, remoteDate)
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[\(uploaderDocument()),\(older)]")).date, remoteDate)
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[\(older)]")).date, Date(timeIntervalSince1970: 1_785_757_200))
+    }
+
+    func testRemoteIobTimestampComesFromOpenapsThenCreatedAtThenMills() throws {
+        // created_at 12:05 (Python: 1785758700) loses to the openaps timestamp 12:00.
+        let both = uploaderDocument(createdAt: "2026-08-03T12:05:00.000Z", openapsStamp: remoteStamp)
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[\(both)]")).date, remoteDate)
+        let createdOnly = uploaderDocument(openapsStamp: nil)
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[\(createdOnly)]")).date, remoteDate)
+        let millsOnly = "[{\"mills\":1785758400000,\"jugglucong\":{\"iob\":1.0}}]"
+        XCTAssertEqual(try XCTUnwrap(parseRemote(millsOnly)).date, remoteDate)
+        // Without fractional seconds.
+        let plain = "[{\"created_at\":\"2026-08-03T12:00:00Z\",\"jugglucong\":{\"iob\":1.0}}]"
+        XCTAssertEqual(try XCTUnwrap(parseRemote(plain)).date, remoteDate)
+    }
+
+    func testRemoteIobMissingOptionalValuesAreNil() throws {
+        let remote = try XCTUnwrap(parseRemote("[\(uploaderDocument(eiob: "", cob: ""))]"))
+        XCTAssertNil(remote.eiob)
+        XCTAssertNil(remote.cob)
+        XCTAssertEqual(remote.iob, 2.5, accuracy: 1e-9)
+    }
+
+    func testRemoteIobRejectsDocumentsWithoutAPlausibleIob() throws {
+        XCTAssertNil(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"eiob\":1.0,\"cob\":10.0}}]"))
+        XCTAssertNil(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"iob\":1e100}}]"))
+        XCTAssertNil(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"iob\":-2}}]"))
+        XCTAssertNil(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"iob\":true}}]"))
+        // An implausible optional value is left out, the document stays.
+        let remote = try XCTUnwrap(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"iob\":2.5,\"eiob\":1e100,\"cob\":-5}}]"))
+        XCTAssertNil(remote.eiob)
+        XCTAssertNil(remote.cob)
+        // A number sent as text still reads.
+        XCTAssertEqual(try XCTUnwrap(parseRemote("[{\"created_at\":\"\(remoteStamp)\",\"jugglucong\":{\"iob\":\"1.5\"}}]")).iob, 1.5, accuracy: 1e-9)
+    }
+
+    func testRemoteIobMalformedBodiesParseToNothing() {
+        for body in ["not json", "{}", "[]", "[1, 2]", "[{\"created_at\":\"nonsense\",\"jugglucong\":{\"iob\":1.0}}]"] {
+            XCTAssertNil(parseRemote(body), body)
+        }
+    }
+
+    func testRemoteIobReadsBackWhatThisAppUploads() throws {
+        let status = try XCTUnwrap(ExperimentalNightscoutIob.deviceStatus(now: start, values: values(1.8, 1.5, 24)))
+        let body = try JSONSerialization.data(withJSONObject: [status])
+        let remote = try XCTUnwrap(ExperimentalRemoteIob.parseNewest(body))
+        XCTAssertEqual(remote.iob, 1.8, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(remote.eiob), 1.5, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(remote.cob), 24, accuracy: 1e-9)
+        XCTAssertEqual(remote.date, start)
+    }
+
+    func testRemoteIobIsFreshForFifteenMinutes() {
+        let remote = ExperimentalRemoteIob(iob: 2, eiob: nil, cob: nil, date: remoteDate)
+        XCTAssertTrue(remote.isFresh(at: remoteDate))
+        XCTAssertTrue(remote.isFresh(at: remoteDate.addingTimeInterval(899.999)))
+        XCTAssertFalse(remote.isFresh(at: remoteDate.addingTimeInterval(900)))
+        // A clock slightly behind the uploader's is tolerated, one far behind is not trusted.
+        XCTAssertTrue(remote.isFresh(at: remoteDate.addingTimeInterval(-60)))
+        XCTAssertFalse(remote.isFresh(at: remoteDate.addingTimeInterval(-61)))
+    }
+
+    func testRemoteIobStoreKeepsTheLastDocumentUntilItExpires() {
+        let store = ExperimentalRemoteIobStore()
+        XCTAssertNil(store.fresh(at: remoteDate))
+        store.update(ExperimentalRemoteIob(iob: 2, eiob: 1, cob: 5, date: remoteDate))
+        XCTAssertEqual(store.fresh(at: remoteDate.addingTimeInterval(60))?.iob, 2)
+        // A poll that found nothing keeps the previous document; its window retires it.
+        store.update(nil)
+        XCTAssertNotNil(store.fresh(at: remoteDate.addingTimeInterval(600)))
+        XCTAssertNil(store.fresh(at: remoteDate.addingTimeInterval(900)))
+        // A newer upload replaces it with its own values.
+        store.update(ExperimentalRemoteIob(iob: 0.5, eiob: nil, cob: nil, date: remoteDate.addingTimeInterval(3600)))
+        XCTAssertEqual(store.fresh(at: remoteDate.addingTimeInterval(3600))?.iob, 0.5)
+        XCTAssertNil(store.fresh(at: remoteDate.addingTimeInterval(3600))?.eiob)
+        store.clear()
+        XCTAssertNil(store.fresh(at: remoteDate.addingTimeInterval(3600)))
+    }
+
+    func testRemoteIobFollowsOnlyAPhoneThatReadsGlucoseFromNightscoutWithoutAnAID() {
+        func policy(master: Bool = false, source: FollowerDataSourceType = .nightscout, therapy: TherapyDataSourceType = .none,
+                    nightscout: Bool = true, follow: NightscoutFollowType = .none) -> DataFlowPolicy {
+            DataFlowPolicy(isMaster: master, followerDataSource: source, therapyDataSourceSelection: therapy, nightscoutEnabled: nightscout,
+                           masterUploadsGlucoseToNightscout: false, followerUploadsGlucoseToNightscout: false, nightscoutFollowType: follow)
+        }
+        XCTAssertTrue(policy().showsRemoteIob(enabled: true))
+        XCTAssertTrue(policy(therapy: .nightscout).showsRemoteIob(enabled: true))
+        XCTAssertFalse(policy().showsRemoteIob(enabled: false))
+        XCTAssertFalse(policy(master: true).showsRemoteIob(enabled: true))
+        XCTAssertFalse(policy(source: .dexcomShare).showsRemoteIob(enabled: true))
+        XCTAssertFalse(policy(nightscout: false).showsRemoteIob(enabled: true))
+        // An AID's status owns IOB and COB.
+        XCTAssertFalse(policy(therapy: .nightscout, follow: .loop).showsRemoteIob(enabled: true))
+        XCTAssertFalse(policy(therapy: .automatic, follow: .openAPS).showsRemoteIob(enabled: true))
+    }
+
+    func testRemoteIobSwitchesAreOffByDefault() throws {
+        let suite = "RemoteIobDefaults.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertFalse(defaults.experimentalNightscoutIobUpload)
+        XCTAssertFalse(defaults.experimentalNightscoutIobFollow)
+        defaults.experimentalNightscoutIobUpload = true
+        XCTAssertTrue(defaults.bool(forKey: "experimentalNightscoutIobUpload"))
+        defaults.experimentalNightscoutIobFollow = true
+        XCTAssertTrue(defaults.bool(forKey: "experimentalNightscoutIobFollow"))
+    }
+
     func testOverlappingMarkersBecomeOneWithTotalAndCount() {
         func point(_ seconds: TimeInterval, _ value: Double) -> GlucoseChartTreatmentPoint {
             GlucoseChartTreatmentPoint(date: start.addingTimeInterval(seconds), yValue: 100, treatmentValue: value, label: "\(Int(value))", notes: nil, idPrefix: "bolus")
@@ -773,7 +1064,7 @@ final class ExperimentalFeaturesTests: XCTestCase {
         XCTAssertEqual(sections[index].section().rows.map(\.id),
                        ["experimental.recommended", "experimental.chartStyle", "experimental.chartCursor", "experimental.uncertaintyRibbon",
                         "experimental.sensorDayCounter", "experimental.prediction",
-                        "experimental.insulins", "experimental.pens", "experimental.meters", "experimental.alerts",
+                        "experimental.insulins", "experimental.pens", "experimental.meters", "experimental.nightscoutIob", "experimental.alerts",
                         "experimental.restricted", "experimental.powerSaving"])
     }
 }
@@ -1675,6 +1966,241 @@ final class AlertDeltaRunAndQuietWindowTests: XCTestCase {
     }
 }
 
+// MARK: - Persistent High
+
+/// Records the notifications an alarm raises, without notification permission.
+private final class RecordingAlertCenter: AlertNotificationScheduling {
+    private(set) var requests = [UNNotificationRequest]()
+
+    func add(_ request: UNNotificationRequest, withCompletionHandler completionHandler: (@Sendable (Error?) -> Void)?) {
+        requests.append(request)
+        completionHandler?(nil)
+    }
+
+    func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {}
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String]) {}
+}
+
+/// JugglucoNG PERSISTENT_HIGH, replayed from readings instead of a timer. Every expected value was
+/// produced by a Python port of `PersistentHighAlert` run on the same readings.
+final class PersistentHighAlertTests: XCTestCase {
+
+    private let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func point(_ minute: Double, _ mgDl: Double) -> (date: Date, mgDl: Double) {
+        (date: start.addingTimeInterval(minute * 60), mgDl: mgDl)
+    }
+
+    /// Readings `step` minutes apart, the first at minute `first`.
+    private func readings(every step: Double, _ values: [Double], from first: Double = 0) -> [(date: Date, mgDl: Double)] {
+        values.enumerated().map { point(first + Double($0.offset) * step, $0.element) }
+    }
+
+    private func repeated(_ value: Double, _ count: Int) -> [Double] {
+        Array(repeating: value, count: count)
+    }
+
+    func testPersistentHighIsANewDisabledByDefaultGlucoseAlert() {
+        XCTAssertEqual(AlertKind.persistentHigh.rawValue, 18)
+        XCTAssertTrue(AlertKind.persistentHigh.defaultIsDisabled())
+        XCTAssertTrue(AlertKind.persistentHigh.valueIsABgValue())
+        XCTAssertTrue(AlertKind.persistentHigh.createsImmediateNotificationWithBGReading())
+        XCTAssertEqual(AlertKind.persistentHigh.defaultAlertValue(), ConstantsDefaultAlertLevels.high)
+        XCTAssertEqual(AlertKind.persistentHigh.alertUrgencyType(), .warning)
+        XCTAssertEqual(AlertKind.persistentHigh.alertTitle(), Texts_Alerts.persistentHighAlertTitle)
+        XCTAssertNotEqual(AlertKind.persistentHigh.notificationIdentifier(), AlertKind.high.notificationIdentifier())
+        let kinds = AlertKind.visibleAlertKinds(for: .Libre2)
+        XCTAssertEqual(kinds.firstIndex(of: .persistentHigh), (kinds.firstIndex(of: .predictedHigh) ?? -2) + 1)
+    }
+
+    func testDurationSettingDefaultsToAnHourAndRejectsOtherValues() throws {
+        let suite = "PersistentHighAlertTests"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        XCTAssertEqual(PersistentHighAlert.durationChoices, [30, 45, 60, 90, 120, 180])
+        XCTAssertEqual(defaults.experimentalPersistentHighMinutes, 60)
+        defaults.experimentalPersistentHighMinutes = 90
+        XCTAssertEqual(defaults.experimentalPersistentHighMinutes, 90)
+        defaults.experimentalPersistentHighMinutes = 75
+        XCTAssertEqual(defaults.experimentalPersistentHighMinutes, 60)
+    }
+
+    func testTheRunStartsAtTheOldestReadingOfTheTrailingRunAboveTheValue() {
+        // Ten minutes at 150, then 61 minutes at 200: the run starts at minute 10 and lasts 60 minutes.
+        let oneMinute = readings(every: 1, repeated(150, 10) + repeated(200, 61))
+        XCTAssertEqual(PersistentHighAlert.runStart(oneMinute, thresholdMgDl: 180), start.addingTimeInterval(10 * 60))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(oneMinute, thresholdMgDl: 180, durationMinutes: 60), 60)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(oneMinute, thresholdMgDl: 180, durationMinutes: 30), 60)
+        // One minute short of the duration, or a longer duration: quiet.
+        XCTAssertNil(PersistentHighAlert.minutesAbove(Array(oneMinute.dropLast()), thresholdMgDl: 180, durationMinutes: 60))
+        XCTAssertNil(PersistentHighAlert.minutesAbove(oneMinute, thresholdMgDl: 180, durationMinutes: 90))
+        XCTAssertNil(PersistentHighAlert.minutesAbove(oneMinute, thresholdMgDl: 180, durationMinutes: 0))
+        // A five-minute sensor: 55 minutes is not an hour, 60 is.
+        XCTAssertNil(PersistentHighAlert.minutesAbove(readings(every: 5, repeated(200, 12)), thresholdMgDl: 180, durationMinutes: 60))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(readings(every: 5, repeated(200, 13)), thresholdMgDl: 180, durationMinutes: 60), 60)
+    }
+
+    func testAValueAtOrBelowTheThresholdEndsTheRun() {
+        // 200 for 25 minutes, exactly 180 at minute 30, then 200 again: only minute 35 onward counts.
+        let touched = readings(every: 5, repeated(200, 6) + repeated(180, 1) + repeated(200, 7))
+        XCTAssertEqual(PersistentHighAlert.runStart(touched, thresholdMgDl: 180), start.addingTimeInterval(35 * 60))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(touched, thresholdMgDl: 180, durationMinutes: 30), 30)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(touched, thresholdMgDl: 180, durationMinutes: 45))
+        // A newest reading at the value is no run at all.
+        let atTheValue = readings(every: 5, repeated(200, 14) + repeated(180, 1))
+        XCTAssertNil(PersistentHighAlert.runStart(atTheValue, thresholdMgDl: 180))
+        XCTAssertNil(PersistentHighAlert.minutesAbove(atTheValue, thresholdMgDl: 180, durationMinutes: 30))
+    }
+
+    func testAGapOverThirtyMinutesBreaksTheRun() {
+        // Thirty minutes between two readings is still one run; thirty-five is not.
+        let thirty = readings(every: 5, repeated(200, 5)) + readings(every: 5, repeated(200, 5), from: 50)
+        XCTAssertEqual(PersistentHighAlert.runStart(thirty, thresholdMgDl: 180), start)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(thirty, thresholdMgDl: 180, durationMinutes: 60), 70)
+        let thirtyFive = readings(every: 5, repeated(200, 5)) + readings(every: 5, repeated(200, 5), from: 55)
+        XCTAssertEqual(PersistentHighAlert.runStart(thirtyFive, thresholdMgDl: 180), start.addingTimeInterval(55 * 60))
+        XCTAssertNil(PersistentHighAlert.minutesAbove(thirtyFive, thresholdMgDl: 180, durationMinutes: 30))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(thirtyFive, thresholdMgDl: 180, durationMinutes: 20), 20)
+    }
+
+    func testAFastFallKeepsTheAlertQuietButDoesNotRestartTheTimer() {
+        // An hour at 220, then the value falls but stays above 180.
+        let plateau = readings(every: 5, repeated(220, 13))
+        let firstStep = plateau + [point(65, 214)]
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(firstStep) ?? 0, -1.2, accuracy: 1e-9)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(firstStep, thresholdMgDl: 180, durationMinutes: 60))
+        let secondStep = firstStep + [point(70, 208)]
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(secondStep) ?? 0, -1.2, accuracy: 1e-9)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(secondStep, thresholdMgDl: 180, durationMinutes: 60))
+        // The value stagnates above 180: the high phase was continuous, so it fires at once with the
+        // whole 75 minutes, not after another full hour.
+        let stagnant = secondStep + [point(75, 208)]
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(stagnant) ?? 1, 0, accuracy: 1e-9)
+        XCTAssertEqual(PersistentHighAlert.runStart(stagnant, thresholdMgDl: 180), start)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(stagnant, thresholdMgDl: 180, durationMinutes: 60), 75)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(stagnant + [point(80, 208)], thresholdMgDl: 180, durationMinutes: 60), 80)
+    }
+
+    func testTheFallLimitIsOneMilligramPerMinuteAndInclusive() {
+        let plateau = readings(every: 5, repeated(220, 13))
+        // 0.8 mg/dL a minute is not a fall: it fires with 70 minutes above.
+        let slow = plateau + [point(65, 216), point(70, 212)]
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(slow) ?? 0, -0.8, accuracy: 1e-9)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(slow, thresholdMgDl: 180, durationMinutes: 60), 70)
+        // Exactly 1.0 mg/dL a minute is.
+        let exact = plateau + [point(65, 215)]
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(exact) ?? 0, -1.0, accuracy: 1e-9)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(exact, thresholdMgDl: 180, durationMinutes: 60))
+
+        XCTAssertFalse(PersistentHighAlert.fallingSuppresses(ratePerMinute: nil))
+        XCTAssertTrue(PersistentHighAlert.fallingSuppresses(ratePerMinute: -1.0))
+        XCTAssertFalse(PersistentHighAlert.fallingSuppresses(ratePerMinute: -0.99))
+        XCTAssertFalse(PersistentHighAlert.fallingSuppresses(ratePerMinute: 2))
+        XCTAssertFalse(PersistentHighAlert.fallingSuppresses(ratePerMinute: .nan))
+        XCTAssertFalse(PersistentHighAlert.fallingSuppresses(ratePerMinute: -5, limit: 0))
+    }
+
+    func testAFallThatEndsAtOrBelowTheValueDoesRestartTheTimer() {
+        // The value falls to 170 at minute 70 and comes back to 190: a new run from minute 75.
+        let afterPlateau: [(date: Date, mgDl: Double)] = [point(65, 214), point(70, 170), point(75, 190), point(80, 190), point(85, 190)]
+        let dipped = readings(every: 5, repeated(220, 13)) + afterPlateau
+        XCTAssertEqual(PersistentHighAlert.runStart(dipped, thresholdMgDl: 180), start.addingTimeInterval(75 * 60))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(dipped, thresholdMgDl: 180, durationMinutes: 10), 10)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(dipped, thresholdMgDl: 180, durationMinutes: 15))
+    }
+
+    func testTheRateUsesTheNearestReadingAtLeastFourMinutesOlderWithinFifteen() {
+        // The newest reading is at minute 8; the reading at minute 4 (200) is the reference, not minute 3 (203).
+        let oneMinute = readings(every: 1, [200, 200, 200, 203, 200, 199, 198, 197, 195])
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(oneMinute) ?? 0, -1.25, accuracy: 1e-9)
+        // Exactly four minutes back counts, three do not, and more than fifteen is no rate.
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute([point(0, 230), point(2, 228), point(4, 226)]) ?? 0, -1.0, accuracy: 1e-9)
+        XCTAssertNil(PersistentHighAlert.ratePerMinute([point(0, 230), point(2, 228), point(3, 226)]))
+        XCTAssertNil(PersistentHighAlert.ratePerMinute([point(0, 230), point(16, 190)]))
+        // 230 falling by 1.5 a minute for half an hour is still above 180 and falling: quiet.
+        let falling = readings(every: 1, (0...30).map { 230 - 1.5 * Double($0) })
+        XCTAssertEqual(PersistentHighAlert.ratePerMinute(falling) ?? 0, -1.5, accuracy: 1e-9)
+        XCTAssertNil(PersistentHighAlert.minutesAbove(falling, thresholdMgDl: 180, durationMinutes: 30))
+        // With no reading to measure against, a rate is unknown and does not suppress.
+        let unknown = [point(0, 230), point(10, 228), point(40, 190)]
+        XCTAssertNil(PersistentHighAlert.ratePerMinute(unknown))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(unknown, thresholdMgDl: 180, durationMinutes: 30), 40)
+    }
+
+    func testZeroValuesAreIgnoredAndTheOrderOfTheInputDoesNotMatter() {
+        let withZero = readings(every: 5, repeated(200, 7) + repeated(0, 1) + repeated(200, 6))
+        XCTAssertEqual(PersistentHighAlert.runStart(withZero, thresholdMgDl: 180), start)
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(withZero, thresholdMgDl: 180, durationMinutes: 60), 65)
+        let oneMinute = readings(every: 1, repeated(150, 10) + repeated(200, 61))
+        XCTAssertEqual(PersistentHighAlert.minutesAbove(Array(oneMinute.reversed()), thresholdMgDl: 180, durationMinutes: 60), 60)
+    }
+
+    // MARK: Through the alert manager
+
+    /// Raises the alarms for one-minute readings at 200 mg/dL that end now and began `minutes` minutes ago.
+    /// Only High and Persistent High (value 180, duration an hour) are on; High may be snoozed.
+    @MainActor
+    private func checkAlerts(highSnoozed: Bool, readingsSpanMinutes minutes: Int) throws -> (center: RecordingAlertCenter, manager: AlertManager, core: CoreDataManager) {
+        // Keep the test independent of the simulator app's saved settings.
+        let keys = [UserDefaults.Key.isMaster.rawValue, UserDefaults.Key.snoozeAllAlertsUntilDate.rawValue, "experimentalPersistentHighMinutes"]
+        let saved = keys.map { UserDefaults.standard.object(forKey: $0) }
+        addTeardownBlock {
+            for (key, value) in zip(keys, saved) {
+                UserDefaults.standard.set(value, forKey: key)
+            }
+        }
+        UserDefaults.standard.isMaster = true
+        UserDefaults.standard.snoozeAllAlertsUntilDate = nil
+        UserDefaults.standard.experimentalPersistentHighMinutes = 60
+
+        let core = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
+        let types = AlertTypesAccessor(coreDataManager: core)
+        let entries = AlertEntriesAccessor(coreDataManager: core).getAllEntries(forAlertKind: nil, alertTypesAccessor: types)
+        for entry in entries {
+            entry.isDisabled = entry.alertkind != AlertKind.high.rawValue && entry.alertkind != AlertKind.persistentHigh.rawValue
+        }
+        for kind in [AlertKind.high, AlertKind.persistentHigh] {
+            let entry = try XCTUnwrap(entries.first { $0.alertkind == kind.rawValue })
+            entry.value = 180
+            entry.alertType.enabled = true
+            entry.alertType.soundname = ""
+        }
+        let now = Date()
+        for minute in 0...minutes {
+            let reading = BgReading(timeStamp: now.addingTimeInterval(-Double(minutes - minute) * 60), sensor: nil, calibration: nil,
+                                    rawData: 120, deviceName: nil, nsManagedObjectContext: core.mainManagedObjectContext)
+            reading.calculatedValue = 200
+        }
+        let center = RecordingAlertCenter()
+        let manager = AlertManager(coreDataManager: core, soundPlayer: nil, notificationCenter: center)
+        if highSnoozed {
+            manager.snooze(alertKind: .high, snoozePeriodInMinutes: 60, response: nil)
+        }
+        _ = manager.checkAlerts(maxAgeOfLastBgReadingInSeconds: 60)
+        return (center, manager, core)
+    }
+
+    @MainActor
+    func testPersistentHighStillFiresWhileTheHighAlarmIsSnoozed() throws {
+        let (center, manager, core) = try checkAlerts(highSnoozed: true, readingsSpanMinutes: 65)
+        let raised = center.requests.map(\.identifier)
+        XCTAssertTrue(raised.contains(AlertKind.persistentHigh.notificationIdentifier()))
+        XCTAssertFalse(raised.contains(AlertKind.high.notificationIdentifier()))
+        // Like every alarm it is then snoozed for a few minutes, on its own snooze.
+        XCTAssertTrue(manager.getSnoozeParameters(alertKind: .persistentHigh).getSnoozeValue().isSnoozed)
+        withExtendedLifetime(core) {}
+    }
+
+    @MainActor
+    func testPersistentHighWaitsForItsDurationEvenWhileTheHighAlarmIsSnoozed() throws {
+        let (center, manager, core) = try checkAlerts(highSnoozed: true, readingsSpanMinutes: 30)
+        XCTAssertTrue(center.requests.isEmpty)
+        XCTAssertFalse(manager.getSnoozeParameters(alertKind: .persistentHigh).getSnoozeValue().isSnoozed)
+        withExtendedLifetime(core) {}
+    }
+}
+
 // MARK: - Uncertainty ribbon
 
 final class GlucoseUncertaintyRibbonTests: XCTestCase {
@@ -2362,5 +2888,395 @@ final class PenManualMergeTests: XCTestCase {
         XCTAssertTrue(plan([dose(100, 4, atMinute: 0)], [entry(1, 4, atMinute: 20)]).merges.isEmpty)
         XCTAssertTrue(plan([dose(100, 4, atMinute: 0)], [entry(1, 4, atMinute: 1, insulin: .glargineU100)]).merges.isEmpty)
         XCTAssertTrue(plan([dose(100, 4, atMinute: 0)], [entry(1, 4, atMinute: 1)], penInsulin: nil).merges.isEmpty)
+    }
+}
+
+
+// MARK: - Trend engine (JugglucoNG TrendEngine, CausalGlucoseFilter, TrendWindows)
+
+/// Every expected number in this class was printed by JugglucoNG's own Kotlin (`TrendEngine.kt`,
+/// `CausalGlucoseFilter.kt`, `TrendWindows.kt`, copied unchanged and run on the JVM) over the series
+/// built below. The series use values that are exact in `Float`, so the Kotlin and Swift inputs are the
+/// same numbers; velocities are compared to 1e-5, filter estimates to 1e-9.
+final class TrendEngineTests: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func point(_ minute: Double, _ value: Double) -> TrendEngine.Point {
+        TrendEngine.Point(date: t0.addingTimeInterval(minute * 60), mgDl: value)
+    }
+
+    private func series(_ minutes: [Double], _ values: [Double]) -> [TrendEngine.Point] {
+        zip(minutes, values).map { TrendEngine.Point(date: t0.addingTimeInterval($0 * 60), mgDl: $1) }
+    }
+
+    private func everyMinute(_ count: Int, _ value: (Int) -> Double) -> [TrendEngine.Point] {
+        (0..<count).map { point(Double($0), value($0)) }
+    }
+
+    private func jitter(_ i: Int) -> Double { 120.0 - 0.5 * Double(i) + Double((i * 7) % 5 - 2) * 1.5 }
+
+    /// 100 + (i % 11) * 3 - (i % 7) * 2 + i / 3, integer arithmetic as in the Kotlin that produced the vectors.
+    private func pattern(_ i: Int) -> Double {
+        let value: Int = (i % 11) * 3 - (i % 7) * 2 + i / 3
+        return 100.0 + Double(value)
+    }
+
+    private func assertTrend(_ points: [TrendEngine.Point], _ state: TrendEngine.TrendState, _ velocity: Float,
+                             file: StaticString = #filePath, line: UInt = #line) {
+        let result = TrendEngine.calculateTrend(history: points)
+        XCTAssertEqual(result.state, state, file: file, line: line)
+        XCTAssertEqual(result.velocity, velocity, accuracy: 1e-5, file: file, line: line)
+        XCTAssertEqual(result.confidence, 1, file: file, line: line)
+        XCTAssertEqual(result.acceleration, 0, file: file, line: line)
+    }
+
+    // MARK: Velocity
+
+    func testSteadyFallReadsItsRate() {
+        assertTrend(everyMinute(20) { 150.0 - 0.75 * Double($0) }, .fortyFiveDown, -0.75)
+    }
+
+    func testTurnOffAPlateauIsFollowed() {
+        // 20 flat minutes, then +3 mg/dL per minute for ten: the weighting keeps most of the turn.
+        assertTrend(everyMinute(30) { $0 < 20 ? 100.0 : 100.0 + 3.0 * Double($0 - 19) }, .doubleUp, 2.9441721)
+    }
+
+    func testJitterReadsAsFlatAndOrderDoesNotMatter() {
+        let ascending = everyMinute(30) { jitter($0) }
+        assertTrend(ascending, .flat, -0.36880907)
+        assertTrend(Array(ascending.reversed()), .flat, -0.36880907)
+    }
+
+    func testFiveMinuteSensorUsesTwentyMinutes() {
+        let values = [100.0, 102, 106, 112, 120, 130, 142, 156, 172, 190, 210]
+        assertTrend(series((0...10).map { Double($0) * 5 }, values), .doubleUp, 3.4560812)
+    }
+
+    func testAJumpFasterThanTwentyPerMinuteEndsTheWindow() {
+        // 100 for twelve minutes, +80 in one, then +1 per minute: only the segment after the jump counts.
+        assertTrend(everyMinute(25) { $0 < 12 ? 100.0 : 180.0 + Double($0 - 12) }, .fortyFiveUp, 1.0)
+    }
+
+    func testValuesThatAreNotReadingsAreDroppedBeforeMeasuring() {
+        let values = (0..<20).map { i -> Double in
+            switch i {
+            case 4: return 700
+            case 8, 9: return 0
+            default: return 110.0 + Double(i)
+            }
+        }
+        assertTrend(series((0..<20).map { Double($0) }, values), .fortyFiveUp, 1.0)
+    }
+
+    func testTooFewReadingsGiveNoTrend() {
+        let single = TrendEngine.calculateTrend(history: [point(0, 100)])
+        XCTAssertEqual(single, TrendEngine.TrendResult.noTrend)
+        XCTAssertEqual(single.state, .flat)
+        XCTAssertEqual(single.confidence, 0)
+        XCTAssertEqual(TrendEngine.calculateTrend(history: []), TrendEngine.TrendResult.noTrend)
+        // All but one dropped as not a value.
+        XCTAssertEqual(TrendEngine.calculateTrend(history: [point(0, 100), point(1, 0), point(2, 800)]), TrendEngine.TrendResult.noTrend)
+        assertTrend([point(0, 100), point(1, 101)], .fortyFiveUp, 1.0)
+    }
+
+    func testSlowAndMixedCadences() {
+        // 15-minute readings: the window is capped at 25 minutes, so two readings carry it.
+        assertTrend(series([0, 15, 30, 45, 60], [100, 110, 125, 145, 170]), .singleUp, 1.6666666)
+        // 15-minute history followed by one reading a minute: the median interval is one minute.
+        let minutes = [0.0, 15, 30, 45] + (46...60).map { Double($0) }
+        assertTrend(series(minutes, minutes.map { 100.0 + 0.75 * $0 }), .fortyFiveUp, 0.75)
+    }
+
+    // MARK: Arrow thresholds
+
+    func testArrowThresholds() {
+        let expected: [(Float, TrendEngine.TrendState)] = [
+            (-2.5, .doubleDown), (-2.0, .doubleDown), (-1.9, .singleDown), (-1.0, .singleDown),
+            (-0.75, .fortyFiveDown), (-0.5, .fortyFiveDown), (-0.25, .flat), (0, .flat), (0.25, .flat),
+            (0.5, .flat), (0.75, .fortyFiveUp), (1.0, .fortyFiveUp), (1.5, .singleUp), (2.0, .singleUp),
+            (2.5, .doubleUp)
+        ]
+        for (velocity, state) in expected {
+            XCTAssertEqual(TrendEngine.state(forVelocity: velocity), state, "velocity \(velocity)")
+        }
+    }
+
+    // MARK: Cadence and window
+
+    func testWindowScalesWithTheCadenceAndIsClamped() {
+        // cadence in minutes, then the window in milliseconds (Kotlin: 20 min * cbrt(cadence / 5), 8...25 min).
+        let expected: [(Double, Int64)] = [
+            (0.5, 556_990), (1, 701_764), (2, 884_167), (5, 1_200_000), (10, 1_500_000), (15, 1_500_000), (30, 1_500_000)
+        ]
+        for (cadence, windowMs) in expected {
+            let newestFirst = (0..<20).map { point(-Double($0) * cadence, 100) }
+            XCTAssertEqual(TrendEngine.cadenceMinutes(newestFirst: newestFirst), cadence, accuracy: 1e-9)
+            XCTAssertEqual(Double(TrendEngine.trendWindowMillis(newestFirst: newestFirst)), Double(windowMs), accuracy: 1, "cadence \(cadence)")
+        }
+    }
+
+    func testOneDisconnectDoesNotStretchTheWindow() {
+        // Five readings a minute apart, a 21 minute hole, then more readings a minute apart.
+        let newestFirst = (0..<30).map { point(-Double($0 < 5 ? $0 : $0 + 20), 100) }
+        XCTAssertEqual(TrendEngine.cadenceMinutes(newestFirst: newestFirst), 1, accuracy: 1e-9)
+        XCTAssertEqual(Double(TrendEngine.trendWindowMillis(newestFirst: newestFirst)), 701_764, accuracy: 1)
+        XCTAssertEqual(TrendEngine.cadenceMinutes(newestFirst: []), 5, accuracy: 1e-9)
+    }
+
+    func testRecencyWeightedSlopeOverTheUsableReadings() throws {
+        let values = [30.0, 27, 24, 27, 24, 21, 24, 21, 18, 21, 18, 15]
+        let newestFirst = values.enumerated().map { point(-Double($0.offset), $0.element) }
+        XCTAssertEqual(try XCTUnwrap(TrendEngine.recencyWeightedSlope(newestFirst: newestFirst)), 1.1433672, accuracy: 1e-5)
+        XCTAssertEqual(try XCTUnwrap(TrendEngine.recencyWeightedSlope(newestFirst: newestFirst, usableCount: 5)), 1.3337764, accuracy: 1e-5)
+        XCTAssertNil(TrendEngine.recencyWeightedSlope(newestFirst: newestFirst, usableCount: 1))
+        XCTAssertNil(TrendEngine.recencyWeightedSlope(newestFirst: newestFirst, usableCount: 0))
+        XCTAssertNil(TrendEngine.recencyWeightedSlope(newestFirst: []))
+        XCTAssertNil(TrendEngine.recencyWeightedSlope(newestFirst: [point(0, .nan), point(-1, 100)]))
+    }
+
+    // MARK: Rows of a list (TrendWindows)
+
+    private let jitterVelocities: [Float] = [
+        0.0, 2.5, 2.5, -0.05919641, 0.11884706, -0.78232205, -0.5747263, -0.12466263, -0.45307648, -0.32747543,
+        -0.64570034, -0.57295555, -0.3650081, -0.5334994, -0.36880907, -0.65972793, -0.57295555, -0.3650081,
+        -0.5334994, -0.36880907, -0.65972793, -0.57295555, -0.3650081, -0.5334994, -0.36880907, -0.65972793,
+        -0.57295555, -0.3650081, -0.5334994, -0.36880907
+    ]
+
+    func testSweepMatchesJugglucoVelocitiesAndTheObviousPerRowWindow() throws {
+        let history = everyMinute(30) { jitter($0) }
+        for windowMs in [TrendEngine.defaultWindowMs, TrendEngine.supplyWindowMs] {
+            let trends = TrendEngine.trends(historyAscending: history, rows: history, windowMs: windowMs)
+            XCTAssertEqual(trends.count, history.count)
+            for (index, row) in history.enumerated() {
+                let trend = trends[row.millis]
+                XCTAssertEqual(try XCTUnwrap(trend).velocity, jitterVelocities[index], accuracy: 1e-5, "row \(index)")
+                // The straightforward implementation: filter the history to the window ending at the row.
+                let window = history.filter { $0.millis >= row.millis - windowMs && $0.millis <= row.millis }
+                let naive = window.count >= 2 ? TrendEngine.calculateTrend(history: window) : TrendEngine.TrendResult.noTrend
+                XCTAssertEqual(trend, naive, "row \(index)")
+            }
+        }
+        XCTAssertTrue(TrendEngine.trends(historyAscending: [], rows: history).isEmpty)
+        XCTAssertTrue(TrendEngine.trends(historyAscending: history, rows: []).isEmpty)
+    }
+
+    // MARK: Causal filter
+
+    private func minutes(_ count: Int, step: Int64 = 1) -> [Int64] { (0..<count).map { Int64($0) * step * 60_000 } }
+
+    private func estimate(_ times: [Int64], _ values: [Double], at: Int? = nil) -> CausalGlucoseFilter.Estimate? {
+        CausalGlucoseFilter.estimateAt(timesMs: times, mgDl: values, at: at ?? times.count - 1)
+    }
+
+    private func assertEstimate(_ times: [Int64], _ values: [Double], at: Int? = nil, _ mgDl: Double, _ rate: Double,
+                                file: StaticString = #filePath, line: UInt = #line) {
+        guard let result = estimate(times, values, at: at) else { return XCTFail("no estimate", file: file, line: line) }
+        XCTAssertEqual(result.mgDl, mgDl, accuracy: 1e-9, file: file, line: line)
+        XCTAssertEqual(result.rateMgDlPerMin, rate, accuracy: 1e-9, file: file, line: line)
+    }
+
+    func testFilterEstimatesMatchJugglucoKotlin() {
+        assertEstimate(minutes(30), [Double](repeating: 120, count: 30), 120.0, 0.0)
+        assertEstimate(minutes(40), (0..<40).map { 100.0 + Double($0) }, 138.47003982330656, 0.80816291055923)
+        let sawtooth = (0..<40).map { 100.0 + Double($0 % 7) * 3 }
+        assertEstimate(minutes(40), sawtooth, at: 25, 108.48980763684162, -0.03636826762231937)
+        assertEstimate(minutes(40), sawtooth, 108.48722333309638, -0.01352237556166025)
+        var spike = [Double](repeating: 100, count: 31)
+        spike[29] = 160
+        assertEstimate(minutes(31), spike, at: 29, 102.28472711918177, 0.31519718089996746)
+        assertEstimate(minutes(31), spike, at: 30, 101.76942044284391, 0.19421163047772638)
+        let fall = (0..<50).map { $0 < 20 ? 120.0 : 120.0 - Double($0 - 20 + 1) * 2 }
+        assertEstimate(minutes(50), fall, 61.00253250075449, -1.62488858134874)
+        let patternValues = (0..<90).map { pattern($0) }
+        assertEstimate(minutes(90), patternValues, 137.99827242308785, -0.1025112963091791)
+        assertEstimate(minutes(90), patternValues, at: 70, 127.14538814051082, -0.3792280233607436)
+        let step = (0..<23).map { $0 < 20 ? 100.0 : 300.0 }
+        assertEstimate(minutes(23), step, at: 20, 104.4373445286226, 0.6108193996261302)
+        assertEstimate(minutes(23), step, at: 21, 110.69667939122355, 1.3410569517153559)
+        assertEstimate(minutes(23), step, at: 22, 118.97232262646263, 2.169828416584016)
+        assertEstimate(minutes(40, step: 2), (0..<40).map { 90.0 + Double($0 % 5) * 4 + Double($0) }, 140.31178404406745, 0.837016430032155)
+        assertEstimate(minutes(24, step: 5), (0..<24).map { 140.0 - Double($0) * 2 + Double($0 % 3) * 3 }, 98.95312838647905, -0.12058387613102628)
+        assertEstimate(minutes(1), [95], 95.0, 0.0)
+        // A repeated timestamp keeps the first sample.
+        assertEstimate([0, 60_000, 60_000, 120_000], [100, 110, 150, 120], 112.40897304625574, 2.2529394754126604)
+    }
+
+    func testAHoleRestartsTheFilterAtTheFirstSampleAfterIt() {
+        // Twenty readings, then one 30 minutes after the last: not bridged by prediction.
+        let times = minutes(20) + [49 * 60_000]
+        assertEstimate(times, [Double](repeating: 100, count: 20) + [200], 200.0, 0.0)
+    }
+
+    func testInvalidSamplesAreSkippedAndAnInvalidTargetHasNoEstimate() {
+        var values = [Double](repeating: 110, count: 10)
+        values[5] = 0
+        values[6] = .nan
+        assertEstimate(minutes(10), values, 110.0, 0.0)
+        XCTAssertNil(estimate(minutes(10), values, at: 5))
+        XCTAssertNil(estimate(minutes(10), values, at: 6))
+        XCTAssertNil(CausalGlucoseFilter.estimateAt(timesMs: minutes(3), mgDl: [100, 100, 100], at: 3))
+        XCTAssertNil(CausalGlucoseFilter.estimateAt(timesMs: minutes(3), mgDl: [100, 100, 100], at: -1))
+    }
+
+    func testFilterOnlyReadsThePastAndOnlyTheLastHour() {
+        let values = (0..<40).map { 100.0 + Double($0 % 7) * 3 }
+        let full = estimate(minutes(40), values, at: 25)
+        let truncated = estimate(Array(minutes(40).prefix(26)), Array(values.prefix(26)), at: 25)
+        XCTAssertEqual(full, truncated)
+
+        // Two hours of one-minute samples; the first 50 minutes are far outside the one hour window.
+        let a = (0..<120).map { 100.0 + Double($0 % 5) * 2 }
+        var b = a
+        for i in 0..<50 { b[i] = 300 }
+        XCTAssertEqual(estimate(minutes(120), a)?.mgDl, estimate(minutes(120), b)?.mgDl)
+    }
+
+    func testALoneSpikeBarelyMovesTheEstimateAndASustainedFallIsFollowed() throws {
+        var spike = [Double](repeating: 100, count: 31)
+        spike[29] = 160
+        XCTAssertLessThan(try XCTUnwrap(estimate(minutes(31), spike, at: 29)).mgDl, 110)
+        XCTAssertEqual(try XCTUnwrap(estimate(minutes(31), spike, at: 30)).mgDl, 100, accuracy: 5)
+        let fall = (0..<50).map { $0 < 20 ? 120.0 : 120.0 - Double($0 - 20 + 1) * 2 }
+        let end = try XCTUnwrap(estimate(minutes(50), fall))
+        XCTAssertEqual(end.mgDl, 60, accuracy: 5)
+        XCTAssertLessThan(end.rateMgDlPerMin, -1.5)
+    }
+
+    func testFilteredLane() {
+        // Kotlin filterLane over 100 + (i % 6) * 4, as Float.
+        let expected: [Double] = [
+            100.0, 102.15498, 104.96359, 108.58898, 112.73241, 117.056, 111.86582, 109.54127, 109.22421, 110.29133,
+            112.32293, 115.04115, 111.27608, 109.3558, 108.90724, 109.64733, 111.351074, 113.83198, 110.51318,
+            108.75807, 108.36437, 109.13311, 110.87297, 113.404945, 110.18119, 108.494225, 108.1566, 108.97392,
+            110.75567, 113.322754, 110.12844, 108.464745, 108.14481, 108.97498, 110.76558, 113.33835, 110.14824,
+            108.48639, 108.16663, 108.99587, 110.784836, 113.35557, 110.16335, 108.49929, 108.17736, 109.004555,
+            110.79168, 113.3608, 110.167206, 108.50198, 108.17911, 109.005554, 110.7921, 113.360794, 110.16689,
+            108.50147, 108.178474, 109.00487, 110.791405, 113.36012
+        ]
+        let values = (0..<60).map { 100.0 + Double($0 % 6) * 4 }
+        let lane = CausalGlucoseFilter.filterLane(timesMs: minutes(60), mgDl: values)
+        XCTAssertEqual(lane.count, expected.count)
+        for index in expected.indices { XCTAssertEqual(lane[index], expected[index], accuracy: 1e-4, "index \(index)") }
+    }
+
+    func testLaneKeepsAnInvalidPointAndRestartsAtASourceChange() {
+        XCTAssertEqual(CausalGlucoseFilter.filterLane(timesMs: minutes(5), mgDl: [100, 100, 0, 100, 100]), [100, 100, 0, 100, 100])
+        let values = (0..<12).map { $0 < 6 ? 100.0 : 200.0 }
+        let split = CausalGlucoseFilter.filterLane(timesMs: minutes(12), mgDl: values, sameSource: { ($0 < 6) == ($1 < 6) })
+        XCTAssertEqual(split, values)
+        // Without the source change the second sensor is pulled toward the first one's level.
+        XCTAssertLessThan(CausalGlucoseFilter.filterLane(timesMs: minutes(12), mgDl: values)[7], 200)
+    }
+
+    // MARK: How the fork applies it
+
+    func testCausalOptionFeedsTheRegressionTheFilteredSeriesOnly() throws {
+        // Kotlin: filterLane, then TrendWindows.velocities over the lane with a 25 minute window.
+        let composedJitter: [Float] = [
+            0.0, 1.3468628, 1.5647378, 0.686523, 0.43108, -0.06794824, -0.26196837, -0.21111794, -0.2955593,
+            -0.30936733, -0.41824177, -0.47203255, -0.489281, -0.5265134, -0.49023247, -0.5403697, -0.55202174,
+            -0.513599, -0.52412254, -0.482455, -0.52830714, -0.5423961, -0.50146705, -0.51102835, -0.4737711,
+            -0.5206305, -0.53692037, -0.49527198, -0.50460374, -0.4685994
+        ]
+        let readings = (0..<30).map { (date: t0.addingTimeInterval(Double($0) * 60), mgDl: jitter($0)) }
+        let causal = ExperimentalTrendEngine.velocities(readings: readings, causalFilter: true)
+        let plain = ExperimentalTrendEngine.velocities(readings: readings, causalFilter: false)
+        XCTAssertEqual(causal.count, 30)
+        XCTAssertNil(causal[0])
+        XCTAssertNil(plain[0])
+        for index in 1..<30 {
+            XCTAssertEqual(try XCTUnwrap(causal[index]), composedJitter[index], accuracy: 1e-4, "causal row \(index)")
+            XCTAssertEqual(try XCTUnwrap(plain[index]), jitterVelocities[index], accuracy: 1e-5, "plain row \(index)")
+        }
+
+        // 90 readings: the causal window (one hour) and the trend window (25 minutes) both clip.
+        let composed90: [Float] = [0.12391342, -0.25407156, -0.49473614, -0.60258377, -0.29723054, 0.22954415, 0.842684, 1.475252, 1.5931967, 1.1373682]
+        let long = (0..<90).map { (date: t0.addingTimeInterval(Double($0) * 60), mgDl: pattern($0)) }
+        let causalLong = ExperimentalTrendEngine.velocities(readings: long, causalFilter: true)
+        for (offset, expected) in composed90.enumerated() {
+            XCTAssertEqual(try XCTUnwrap(causalLong[80 + offset]), expected, accuracy: 1e-4, "causal row \(80 + offset)")
+        }
+        XCTAssertTrue(ExperimentalTrendEngine.velocities(readings: [], causalFilter: true).isEmpty)
+    }
+
+    func testOnlyASibionicsSensorOnThisPhoneIsAffectedAndItIsOffByDefault() throws {
+        XCTAssertTrue(ExperimentalTrendEngine.appliesTo(isMaster: true, cgmTransmitterType: .sibionics2))
+        XCTAssertFalse(ExperimentalTrendEngine.appliesTo(isMaster: false, cgmTransmitterType: .sibionics2))
+        XCTAssertFalse(ExperimentalTrendEngine.appliesTo(isMaster: true, cgmTransmitterType: .Libre2))
+        XCTAssertFalse(ExperimentalTrendEngine.appliesTo(isMaster: true, cgmTransmitterType: .dexcomG7))
+        XCTAssertFalse(ExperimentalTrendEngine.appliesTo(isMaster: true, cgmTransmitterType: nil))
+
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "TrendEngineSettingsTests"))
+        defaults.removePersistentDomain(forName: "TrendEngineSettingsTests")
+        defaults.cgmTransmitterTypeAsString = CGMTransmitterType.sibionics2.rawValue
+        XCTAssertFalse(defaults.experimentalTrendEngine)
+        XCTAssertFalse(defaults.experimentalTrendEngineCausalFilter)
+        XCTAssertFalse(ExperimentalTrendEngine.isActive(defaults: defaults))
+        defaults.experimentalTrendEngine = true
+        XCTAssertTrue(ExperimentalTrendEngine.isActive(defaults: defaults))
+        defaults.cgmTransmitterTypeAsString = CGMTransmitterType.Libre2.rawValue
+        XCTAssertFalse(ExperimentalTrendEngine.isActive(defaults: defaults))
+    }
+}
+
+/// `ExperimentalTrendEngine.apply` on stored readings: only the slope of visible readings changes.
+final class TrendEngineStoredReadingsTests: XCTestCase {
+    private let start = Date(timeIntervalSince1970: 2_000_000_000)
+    private var coreDataManager: CoreDataManager!
+
+    override func setUp() {
+        super.setUp()
+        coreDataManager = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
+    }
+
+    override func tearDown() {
+        coreDataManager = nil
+        super.tearDown()
+    }
+
+    private func reading(minute: Int, value: Double) -> BgReading {
+        let bgReading = BgReading(timeStamp: start.addingTimeInterval(Double(minute) * 60), sensor: nil, calibration: nil, rawData: value,
+                                  deviceName: nil, nsManagedObjectContext: coreDataManager.mainManagedObjectContext)
+        bgReading.calculatedValue = value
+        return bgReading
+    }
+
+    private func jitter(_ i: Int) -> Double { 120.0 - 0.5 * Double(i) + Double((i * 7) % 5 - 2) * 1.5 }
+
+    func testSlopeOfVisibleReadingsIsTheEnginesAndValuesAreUntouched() {
+        // Kotlin TrendWindows.velocities (25 minute window) over the same 15 values.
+        let expected: [Double] = [0.0, 2.5, 2.5, -0.05919641, 0.11884706, -0.78232205, -0.5747263, -0.12466263, -0.45307648,
+                                  -0.32747543, -0.64570034, -0.57295555, -0.3650081, -0.5334994, -0.36880907]
+        let readings = (0..<15).map { reading(minute: $0, value: jitter($0)) }
+        // A slope xDrip had calculated before; the first reading has no engine trend and keeps it.
+        for bgReading in readings { bgReading.calculatedValueSlope = 0.001; bgReading.hideSlope = true }
+        // Minutes the five-minute cadence hides keep their slope but still feed the engine.
+        for index in [3, 4, 6] { readings[index].isSuppressedByFiveMinuteCadence = true }
+
+        ExperimentalTrendEngine.apply(to: readings, causalFilter: false)
+
+        for (index, bgReading) in readings.enumerated() {
+            XCTAssertEqual(bgReading.calculatedValue, jitter(index), "the value never changes")
+            if index == 0 || [3, 4, 6].contains(index) {
+                XCTAssertEqual(bgReading.calculatedValueSlope, 0.001, "reading \(index) keeps its slope")
+                XCTAssertTrue(bgReading.hideSlope, "reading \(index) keeps its slope")
+            } else {
+                XCTAssertEqual(bgReading.calculatedValueSlope * 60_000, expected[index], accuracy: 1e-5, "reading \(index)")
+                XCTAssertFalse(bgReading.hideSlope, "reading \(index)")
+            }
+        }
+    }
+
+    func testTheArrowKeepsXDripsThresholds() {
+        // A turn off a plateau: the engine reads 2.944 mg/dL per minute (JugglucoNG's double arrow), and the
+        // stored slope turns that into xDrip's single arrow up (2 < rate <= 3.5).
+        let readings = (0..<30).map { reading(minute: $0, value: $0 < 20 ? 100.0 : 100.0 + 3.0 * Double($0 - 19)) }
+        ExperimentalTrendEngine.apply(to: readings, causalFilter: false)
+        let last = readings[29]
+        XCTAssertEqual(last.calculatedValueSlope * 60_000, 2.9441721, accuracy: 1e-5)
+        XCTAssertEqual(last.slopeArrow(), "\u{2191}")
+        XCTAssertEqual(last.slopeName, "SingleUp")
+        XCTAssertEqual(last.finalValue, 100 + 3 * 10)
     }
 }

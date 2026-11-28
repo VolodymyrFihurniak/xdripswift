@@ -767,6 +767,36 @@ class Trace {
                             traceInfo.appendStringAndNewLine("        Sensor serial: " + (blePeripheral.sensorSerialNumber ?? "nil"))
                         }
 
+                    case .iCanType:
+                        if blePeripheral.iCan != nil {
+                            traceInfo.appendStringAndNewLine("        Type: " + bluetoothPeripheralType.rawValue)
+                            traceInfo.appendStringAndNewLine("        Sensor serial: " + (blePeripheral.sensorSerialNumber ?? "nil"))
+                        }
+
+                    case .aiDexType:
+                        if blePeripheral.aiDex != nil {
+                            traceInfo.appendStringAndNewLine("        Type: " + bluetoothPeripheralType.rawValue)
+                            traceInfo.appendStringAndNewLine("        Sensor serial: " + (blePeripheral.sensorSerialNumber ?? "nil"))
+                        }
+
+                    case .anytimeType:
+                        if blePeripheral.anytime != nil {
+                            traceInfo.appendStringAndNewLine("        Type: " + bluetoothPeripheralType.rawValue)
+                            traceInfo.appendStringAndNewLine("        Sensor serial: " + (blePeripheral.sensorSerialNumber ?? "nil"))
+                        }
+
+                    case .mqType:
+                        if blePeripheral.mq != nil {
+                            traceInfo.appendStringAndNewLine("        Type: " + bluetoothPeripheralType.rawValue)
+                            traceInfo.appendStringAndNewLine("        Sensor serial: " + (blePeripheral.sensorSerialNumber ?? "nil"))
+                        }
+
+                    case .ottaiType:
+                        if blePeripheral.ottai != nil {
+                            traceInfo.appendStringAndNewLine("        Type: " + bluetoothPeripheralType.rawValue)
+                            traceInfo.appendStringAndNewLine("        Sensor serial: " + (blePeripheral.sensorSerialNumber ?? "nil"))
+                        }
+
                     case .MedtrumTouchCareNanoType:
                         if let medtrumNano = blePeripheral.medtrumTouchCareNano {
 

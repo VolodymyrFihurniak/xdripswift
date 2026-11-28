@@ -44,6 +44,11 @@ enum TroubleshootingLogSource: String, Codable {
     case medtrumNano
     case sibionics1
     case sibionics2
+    case iCan
+    case aiDex
+    case anytime
+    case mq
+    case ottai
     case nightscout
     case libreLinkUp
     case libreLinkUpRussia
@@ -101,6 +106,16 @@ enum TroubleshootingLogSource: String, Codable {
             self = .medtrumNano
         case .sibionics2:
             self = description == SibionicsDeviceVariant.sibionics1.productName ? .sibionics1 : .sibionics2
+        case .iCan:
+            self = .iCan
+        case .aiDex:
+            self = .aiDex
+        case .anytime:
+            self = .anytime
+        case .mq:
+            self = .mq
+        case .ottai:
+            self = .ottai
         }
     }
 
@@ -141,6 +156,16 @@ enum TroubleshootingLogSource: String, Codable {
             self = .sibionics1
         case .Sibionics2Type:
             self = .sibionics2
+        case .iCanType:
+            self = .iCan
+        case .aiDexType:
+            self = .aiDex
+        case .anytimeType:
+            self = .anytime
+        case .mqType:
+            self = .mq
+        case .ottaiType:
+            self = .ottai
         case .M5StackType, .M5StickCType, .Libre3HeartBeatType,
              .DexcomG7HeartBeatType, .OmniPodHeartBeatType:
             return nil
@@ -166,6 +191,11 @@ enum TroubleshootingLogSource: String, Codable {
         case .medtrumNano: return "Medtrum Nano Pump CGM"
         case .sibionics1: return "Sibionics 1"
         case .sibionics2: return "Sibionics 2"
+        case .iCan: return "iCan"
+        case .aiDex: return "AiDex"
+        case .anytime: return "Anytime"
+        case .mq: return "MQ"
+        case .ottai: return "Ottai"
         case .nightscout: return "Nightscout"
         case .libreLinkUp: return "LibreLinkUp"
         case .libreLinkUpRussia: return "LibreLinkUp Russia"
@@ -185,7 +215,7 @@ enum TroubleshootingLogSource: String, Codable {
             return true
         case .dexcom, .dexcomG5, .dexcomG6, .dexcomOne, .dexcomG7, .dexcomOnePlus,
              .dexcomStelo, .miaoMiao, .bubble, .libre3, .libre2, .libre2EU, .libre2PlusEU,
-             .medtrumNano, .sibionics1, .sibionics2:
+             .medtrumNano, .sibionics1, .sibionics2, .iCan, .aiDex, .anytime, .mq, .ottai:
             return false
         }
     }
@@ -2487,6 +2517,7 @@ struct TroubleshootingLogReportBuilder {
         case .sensorExpectedExpiry: return "Expected sensor expiry"
         case .predictedLow: return "Predicted low"
         case .predictedHigh: return "Predicted high"
+        case .persistentHigh: return "Persistent high"
         }
     }
 

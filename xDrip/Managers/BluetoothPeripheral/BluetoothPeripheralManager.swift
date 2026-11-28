@@ -174,7 +174,7 @@ class BluetoothPeripheralManager: NSObject {
                         _ = m5StackBluetoothTransmitter.writeBgReadingInfo(bgReading: bgReadingToSend[0])
                     }
                     
-                case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3Type, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics1Type, .Sibionics2Type:
+                case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3Type, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics1Type, .Sibionics2Type, .iCanType, .aiDexType, .anytimeType, .mqType, .ottaiType:
                     // cgm's don't receive reading, they send it
                     break
                     
@@ -422,6 +422,46 @@ class BluetoothPeripheralManager: NSObject {
                         newTransmitter = CGMSibionics2Transmitter(address: bluetoothPeripheral.blePeripheral.address, name: bluetoothPeripheral.blePeripheral.name, variant: sibionics.variant, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate)
                     }
 
+                case .iCanType:
+
+                    if let ican = bluetoothPeripheral as? ICan, let cgmTransmitterDelegate = cgmTransmitterDelegate {
+                        newTransmitter = CGMICanTransmitter(address: ican.blePeripheral.address, name: ican.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+                    } else {
+                        trace("in getBluetoothTransmitter, case iCanType but the peripheral is not an ICan or cgmTransmitterDelegate is nil, looks like a coding error ", log: log, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+                    }
+
+                case .aiDexType:
+
+                    if let aiDex = bluetoothPeripheral as? AiDex, let cgmTransmitterDelegate = cgmTransmitterDelegate {
+                        newTransmitter = CGMAiDexTransmitter(address: aiDex.blePeripheral.address, name: aiDex.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+                    } else {
+                        trace("in getBluetoothTransmitter, case aiDexType but the peripheral is not an AiDex or cgmTransmitterDelegate is nil, looks like a coding error ", log: log, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+                    }
+
+                case .anytimeType:
+
+                    if let anytime = bluetoothPeripheral as? Anytime, let cgmTransmitterDelegate = cgmTransmitterDelegate {
+                        newTransmitter = CGMAnytimeTransmitter(address: anytime.blePeripheral.address, name: anytime.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+                    } else {
+                        trace("in getBluetoothTransmitter, case anytimeType but the peripheral is not an Anytime or cgmTransmitterDelegate is nil, looks like a coding error ", log: log, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+                    }
+
+                case .mqType:
+
+                    if let mq = bluetoothPeripheral as? MQ, let cgmTransmitterDelegate = cgmTransmitterDelegate {
+                        newTransmitter = CGMMQTransmitter(address: mq.blePeripheral.address, name: mq.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+                    } else {
+                        trace("in getBluetoothTransmitter, case mqType but the peripheral is not an MQ or cgmTransmitterDelegate is nil, looks like a coding error ", log: log, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+                    }
+
+                case .ottaiType:
+
+                    if let ottai = bluetoothPeripheral as? Ottai, let cgmTransmitterDelegate = cgmTransmitterDelegate {
+                        newTransmitter = CGMOttaiTransmitter(address: ottai.blePeripheral.address, name: ottai.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+                    } else {
+                        trace("in getBluetoothTransmitter, case ottaiType but the peripheral is not an Ottai or cgmTransmitterDelegate is nil, looks like a coding error ", log: log, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+                    }
+
                 }
                 
                 
@@ -509,6 +549,31 @@ class BluetoothPeripheralManager: NSObject {
             case .Sibionics1Type, .Sibionics2Type:
                 if let transmitter = bluetoothTransmitter as? CGMSibionics2Transmitter {
                     return transmitter.variant.peripheralType
+                }
+
+            case .iCanType:
+                if bluetoothTransmitter is CGMICanTransmitter {
+                    return .iCanType
+                }
+
+            case .aiDexType:
+                if bluetoothTransmitter is CGMAiDexTransmitter {
+                    return .aiDexType
+                }
+
+            case .anytimeType:
+                if bluetoothTransmitter is CGMAnytimeTransmitter {
+                    return .anytimeType
+                }
+
+            case .mqType:
+                if bluetoothTransmitter is CGMMQTransmitter {
+                    return .mqType
+                }
+
+            case .ottaiType:
+                if bluetoothTransmitter is CGMOttaiTransmitter {
+                    return .ottaiType
                 }
                 
             }
@@ -612,6 +677,46 @@ class BluetoothPeripheralManager: NSObject {
             }
 
             return CGMSibionics2Transmitter(address: nil, name: nil, variant: type == .Sibionics1Type ? .sibionics1 : .sibionics2, bluetoothTransmitterDelegate: bluetoothTransmitterDelegate ?? self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+
+        case .iCanType:
+
+            guard let cgmTransmitterDelegate = cgmTransmitterDelegate else {
+                fatalError("in createNewTransmitter, iCanType, cgmTransmitterDelegate is nil")
+            }
+
+            return CGMICanTransmitter(address: nil, name: nil, bluetoothTransmitterDelegate: bluetoothTransmitterDelegate ?? self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+
+        case .aiDexType:
+
+            guard let cgmTransmitterDelegate = cgmTransmitterDelegate else {
+                fatalError("in createNewTransmitter, aiDexType, cgmTransmitterDelegate is nil")
+            }
+
+            return CGMAiDexTransmitter(address: nil, name: nil, bluetoothTransmitterDelegate: bluetoothTransmitterDelegate ?? self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+
+        case .anytimeType:
+
+            guard let cgmTransmitterDelegate = cgmTransmitterDelegate else {
+                fatalError("in createNewTransmitter, anytimeType, cgmTransmitterDelegate is nil")
+            }
+
+            return CGMAnytimeTransmitter(address: nil, name: nil, bluetoothTransmitterDelegate: bluetoothTransmitterDelegate ?? self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+
+        case .mqType:
+
+            guard let cgmTransmitterDelegate = cgmTransmitterDelegate else {
+                fatalError("in createNewTransmitter, mqType, cgmTransmitterDelegate is nil")
+            }
+
+            return CGMMQTransmitter(address: nil, name: nil, bluetoothTransmitterDelegate: bluetoothTransmitterDelegate ?? self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+
+        case .ottaiType:
+
+            guard let cgmTransmitterDelegate = cgmTransmitterDelegate else {
+                fatalError("in createNewTransmitter, ottaiType, cgmTransmitterDelegate is nil")
+            }
+
+            return CGMOttaiTransmitter(address: nil, name: nil, bluetoothTransmitterDelegate: bluetoothTransmitterDelegate ?? self, cGMTransmitterDelegate: cgmTransmitterDelegate)
             
         }
         
@@ -1109,6 +1214,126 @@ class BluetoothPeripheralManager: NSObject {
                         break bluetoothPeripheralTypeLoop
                     }
 
+                case .iCanType:
+
+                    if let ican = blePeripheral.iCan {
+
+                        blePeripheralFound = true
+
+                        let index = insertInBluetoothPeripherals(bluetoothPeripheral: ican)
+
+                        if ican.blePeripheral.shouldconnect {
+
+                            bluetoothTransmitters.insert(CGMICanTransmitter(address: ican.blePeripheral.address, name: ican.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate), at: index)
+
+                            if bluetoothPeripheralType.category() == .CGM {
+                                currentCgmTransmitterAddress = blePeripheral.address
+                            }
+
+                        } else {
+
+                            bluetoothTransmitters.insert(nil, at: index)
+
+                        }
+
+                    }
+
+                case .aiDexType:
+
+                    if let aiDex = blePeripheral.aiDex {
+
+                        blePeripheralFound = true
+
+                        let index = insertInBluetoothPeripherals(bluetoothPeripheral: aiDex)
+
+                        if aiDex.blePeripheral.shouldconnect {
+
+                            bluetoothTransmitters.insert(CGMAiDexTransmitter(address: aiDex.blePeripheral.address, name: aiDex.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate), at: index)
+
+                            if bluetoothPeripheralType.category() == .CGM {
+                                currentCgmTransmitterAddress = blePeripheral.address
+                            }
+
+                        } else {
+
+                            bluetoothTransmitters.insert(nil, at: index)
+
+                        }
+
+                    }
+
+                case .anytimeType:
+
+                    if let anytime = blePeripheral.anytime {
+
+                        blePeripheralFound = true
+
+                        let index = insertInBluetoothPeripherals(bluetoothPeripheral: anytime)
+
+                        if anytime.blePeripheral.shouldconnect {
+
+                            bluetoothTransmitters.insert(CGMAnytimeTransmitter(address: anytime.blePeripheral.address, name: anytime.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate), at: index)
+
+                            if bluetoothPeripheralType.category() == .CGM {
+                                currentCgmTransmitterAddress = blePeripheral.address
+                            }
+
+                        } else {
+
+                            bluetoothTransmitters.insert(nil, at: index)
+
+                        }
+
+                    }
+
+                case .mqType:
+
+                    if let mq = blePeripheral.mq {
+
+                        blePeripheralFound = true
+
+                        let index = insertInBluetoothPeripherals(bluetoothPeripheral: mq)
+
+                        if mq.blePeripheral.shouldconnect {
+
+                            bluetoothTransmitters.insert(CGMMQTransmitter(address: mq.blePeripheral.address, name: mq.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate), at: index)
+
+                            if bluetoothPeripheralType.category() == .CGM {
+                                currentCgmTransmitterAddress = blePeripheral.address
+                            }
+
+                        } else {
+
+                            bluetoothTransmitters.insert(nil, at: index)
+
+                        }
+
+                    }
+
+                case .ottaiType:
+
+                    if let ottai = blePeripheral.ottai {
+
+                        blePeripheralFound = true
+
+                        let index = insertInBluetoothPeripherals(bluetoothPeripheral: ottai)
+
+                        if ottai.blePeripheral.shouldconnect {
+
+                            bluetoothTransmitters.insert(CGMOttaiTransmitter(address: ottai.blePeripheral.address, name: ottai.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate), at: index)
+
+                            if bluetoothPeripheralType.category() == .CGM {
+                                currentCgmTransmitterAddress = blePeripheral.address
+                            }
+
+                        } else {
+
+                            bluetoothTransmitters.insert(nil, at: index)
+
+                        }
+
+                    }
+
                 }
 
             }
@@ -1228,7 +1453,7 @@ class BluetoothPeripheralManager: NSObject {
                     bluetoothPeripheral.blePeripheral.parameterUpdateNeededAtNextConnect = true
                 }
              
-            case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3Type, .Libre3HeartBeatType, .DexcomG7HeartBeatType, .OmniPodHeartBeatType, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics1Type, .Sibionics2Type:
+            case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3Type, .Libre3HeartBeatType, .DexcomG7HeartBeatType, .OmniPodHeartBeatType, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics1Type, .Sibionics2Type, .iCanType, .aiDexType, .anytimeType, .mqType, .ottaiType:
 
                 // nothing to check
                 break
@@ -1423,6 +1648,31 @@ extension BluetoothPeripheralManager: BluetoothPeripheralManaging {
             Sibionics2Configuration.setManualSensitivity(nil, for: bluetoothPeripheral.blePeripheral.address)
             Sibionics2DeviceStatus.clear(for: bluetoothPeripheral.blePeripheral.address)
             Sibionics2ConnectionLog.clear(for: bluetoothPeripheral.blePeripheral.address)
+            SibionicsSkinTemperatureStore.clear(for: bluetoothPeripheral.blePeripheral.address)
+        }
+
+        if bluetoothPeripheral.bluetoothPeripheralType() == .iCanType {
+            ICanDeviceStore.clear(address: bluetoothPeripheral.blePeripheral.address)
+        }
+
+        if bluetoothPeripheral.bluetoothPeripheralType() == .aiDexType {
+            AiDexDeviceStore.clear(address: bluetoothPeripheral.blePeripheral.address)
+            AiDexPairKeyStore.clear(address: bluetoothPeripheral.blePeripheral.address)
+        }
+
+        if bluetoothPeripheral.bluetoothPeripheralType() == .anytimeType {
+            AnytimeDeviceStore.clear(address: bluetoothPeripheral.blePeripheral.address)
+            AnytimeCt5SecretStore.clear(address: bluetoothPeripheral.blePeripheral.address)
+        }
+
+        if bluetoothPeripheral.bluetoothPeripheralType() == .mqType {
+            MQDeviceStore.clear(address: bluetoothPeripheral.blePeripheral.address)
+            MQConfigurationStore.clear(address: bluetoothPeripheral.blePeripheral.address)
+        }
+
+        if bluetoothPeripheral.bluetoothPeripheralType() == .ottaiType {
+            OttaiDeviceStore.clear(address: bluetoothPeripheral.blePeripheral.address)
+            OttaiMaterialsStore.clear(address: bluetoothPeripheral.blePeripheral.address)
         }
 
         if let dexcomG7 = bluetoothPeripheral as? DexcomG7 {
