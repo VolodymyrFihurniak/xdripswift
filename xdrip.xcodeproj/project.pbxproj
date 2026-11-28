@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AE7110190000000000000001 /* AnytimeDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110180000000000000001 /* AnytimeDriverTests.swift */; };
 		AE7110040000000000000001 /* CGMAnytimeTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110030000000000000001 /* CGMAnytimeTransmitter.swift */; };
 		AE71100A0000000000000001 /* Anytime+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */; };
 		AE7110080000000000000001 /* Anytime+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110070000000000000001 /* Anytime+CoreDataProperties.swift */; };
@@ -1055,6 +1056,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AE7110180000000000000001 /* AnytimeDriverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeDriverTests.swift; sourceTree = "<group>"; };
 		AE7110030000000000000001 /* CGMAnytimeTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMAnytimeTransmitter.swift; sourceTree = "<group>"; };
 		AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
 		AE7110070000000000000001 /* Anytime+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+CoreDataProperties.swift"; sourceTree = "<group>"; };
@@ -2973,6 +2975,7 @@
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
+				AE7110180000000000000001 /* AnytimeDriverTests.swift */,
 				AE7110160000000000000001 /* AnytimeAlgorithmTests.swift */,
 				AE7110140000000000000001 /* AnytimeSessionTests.swift */,
 				AE71100C0000000000000001 /* AnytimeProtocolTests.swift */,
@@ -5042,6 +5045,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AE7110190000000000000001 /* AnytimeDriverTests.swift in Sources */,
 				AE7110170000000000000001 /* AnytimeAlgorithmTests.swift in Sources */,
 				AE7110150000000000000001 /* AnytimeSessionTests.swift in Sources */,
 				AE71100B0000000000000001 /* AnytimeProtocolTests.swift in Sources */,
