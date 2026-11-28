@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3A5D00080000000000000001 /* CGMMQTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00070000000000000001 /* CGMMQTransmitter.swift */; };
 		3A5D000E0000000000000001 /* MQ+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D000D0000000000000001 /* MQ+CoreDataProperties.swift */; };
 		3A5D000C0000000000000001 /* MQ+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D000B0000000000000001 /* MQ+CoreDataClass.swift */; };
 		3A5D000A0000000000000001 /* MQ+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00090000000000000001 /* MQ+BluetoothPeripheral.swift */; };
@@ -1065,6 +1066,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		3A5D00070000000000000001 /* CGMMQTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMMQTransmitter.swift; sourceTree = "<group>"; };
 		3A5D000F0000000000000001 /* xdrip v42 MQ.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v42 MQ.xcdatamodel"; sourceTree = "<group>"; };
 		3A5D000D0000000000000001 /* MQ+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MQ+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		3A5D000B0000000000000001 /* MQ+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MQ+CoreDataClass.swift"; sourceTree = "<group>"; };
@@ -4478,6 +4480,7 @@
 		3A5D00100000000000000001 /* MQ */ = {
 			isa = PBXGroup;
 			children = (
+				3A5D00070000000000000001 /* CGMMQTransmitter.swift */,
 				3A5D00050000000000000001 /* MQSession.swift */,
 				3A5D00030000000000000001 /* MQAlgorithm.swift */,
 				3A5D00010000000000000001 /* MQProtocol.swift */,
@@ -5150,6 +5153,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A5D00080000000000000001 /* CGMMQTransmitter.swift in Sources */,
 				3A5D000E0000000000000001 /* MQ+CoreDataProperties.swift in Sources */,
 				3A5D000C0000000000000001 /* MQ+CoreDataClass.swift in Sources */,
 				3A5D000A0000000000000001 /* MQ+BluetoothPeripheral.swift in Sources */,

@@ -493,6 +493,9 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .medtrumTouchCareNano:
             return "Medtrum Nano Pump CGM"
+
+        case .mq:
+            return MQConstants.defaultDisplayName
             
         default:
             return self.rawValue

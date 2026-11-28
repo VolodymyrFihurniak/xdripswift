@@ -143,6 +143,66 @@ struct MQAlgorithmParameters: Codable, Equatable {
     var sensitivitySeed: Float = 0
 }
 
+/// How the sensitivity the user typed relates to the one the algorithm needs. The vendor server tells
+/// JugglucoNG with a flag per transmitter (`transmitter10`); the fork has no server, so the user says.
+enum MQSensitivityScale: Int, Codable, CaseIterable {
+    /// Not known: the typed sensitivity is not used (a wrong scale gives a slope ten times off).
+    case unknown = 0
+    /// The vendor flag is 0: the sensitivity is used as typed.
+    case asEntered = 1
+    /// The vendor flag is 1: the sensitivity is multiplied by ten and cut to one decimal.
+    case timesTen = 2
+
+    /// The vendor's `transmitter10` flag, nil while the scale is not known.
+    var transmitter10: Int? {
+        switch self {
+        case .unknown: return nil
+        case .asEntered: return 0
+        case .timesTen: return 1
+        }
+    }
+}
+
+/// What the user can tell the driver about the sensor without the vendor server. `revision` counts
+/// the changes that matter to the algorithm: a changed configuration discards the solved slope and
+/// offset so the next packets start from the new values (JugglucoNG does the same for a refreshed
+/// vendor bootstrap).
+struct MQConfiguration: Codable, Equatable {
+    /// The sensitivity of the sensor code as typed, nil when none was entered.
+    var sensitivity: Float?
+    var scale: MQSensitivityScale = .unknown
+    var algorithmVersion: Int = MQConstants.algoDefaultVersion
+    var packages: Int = MQConstants.algoDefaultPackages
+    var multiplier: Float = Float(MQConstants.algoDefaultMultiplier)
+    var revision: Int = 0
+
+    /// Typing guards only; the vendor documents no limits.
+    static let algorithmVersions = [0, 1]
+    static let packagesRange = 1...2000
+    static let multiplierRange: ClosedRange<Float> = 0.5...3.0
+    static let sensitivityRange: ClosedRange<Float> = 0.1...99.9
+
+    /// The algorithm inputs; the seed is 0 until a sensitivity and its scale are both known.
+    var parameters: MQAlgorithmParameters {
+        let seed = MQBootstrapSeed.normalizeSensitivity(raw: sensitivity, transmitter10: scale.transmitter10) ?? 0
+        return MQAlgorithmParameters(
+            algorithmVersion: algorithmVersion,
+            packages: packages,
+            multiplier: multiplier,
+            sensitivitySeed: seed
+        )
+    }
+
+    /// Whether the sensitivity can seed a slope (a seed below the plausible slope range cannot).
+    var hasUsableSeed: Bool {
+        return MQSessionTracker.hasValidSlopeSeed(MQAlgorithm.decimalParameter(parameters.sensitivitySeed))
+    }
+
+    mutating func noteChanged() {
+        revision += 1
+    }
+}
+
 // MARK: - Burst buffer
 
 /// JugglucoNG's pending burst: records keyed by packet index (a later record of the same packet
@@ -257,6 +317,19 @@ struct MQSessionTracker: Codable, Equatable {
         lastGlucoseMgdlTimes10 = 0
         kValue = 0
         bValue = 0
+    }
+
+    /// The configuration changed: the solved slope, offset and smoothing start over, the session
+    /// itself (start, delivered packets) stays.
+    mutating func resetAlgorithmState() {
+        kValue = 0
+        bValue = 0
+        lastProcessed = 0
+    }
+
+    /// Whether a slope is held (solved from a fingerstick or seeded from the sensitivity).
+    var hasSlope: Bool {
+        return Self.hasValidSlopeSeed(MQAlgorithm.decimalParameter(kValue))
     }
 
     /// The transmitter says it just started work. When a session was running (packets were

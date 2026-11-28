@@ -939,6 +939,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             return makeAiDexSections(bluetoothPeripheral: bluetoothPeripheral)
         case .anytimeType:
             return makeAnytimeSections(bluetoothPeripheral: bluetoothPeripheral)
+        case .mqType:
+            return makeMQSections(bluetoothPeripheral: bluetoothPeripheral)
         case .M5StackType:
             return makeM5StackSections(bluetoothPeripheral: bluetoothPeripheral, includesSpecificM5StackSection: true)
         case .M5StickCType:
@@ -4005,6 +4007,12 @@ private extension BluetoothPeripheralDetailState {
                 rows: rows
             )
         ]
+    }
+
+    /// Status of an MQ / Glutec transmitter. The rows come with the device screen commit.
+    func makeMQSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        guard bluetoothPeripheral is MQ else { return [] }
+        return []
     }
 
     func makeLibreBridgeRows(
