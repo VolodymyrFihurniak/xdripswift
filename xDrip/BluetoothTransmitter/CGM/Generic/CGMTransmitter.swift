@@ -207,6 +207,9 @@ enum CGMTransmitterType:String, CaseIterable {
     /// AiDex X / LinX CGM. Keep this raw value stable because it is persisted in UserDefaults.
     case aiDex = "AiDex"
 
+    /// Anytime / Yuwell CGM. Keep this raw value stable because it is persisted in UserDefaults.
+    case anytime = "Anytime"
+
     /// Direct Medtrum Nano glucose is already consumed by the connected pump and must not be
     /// exported as an independent CGM source to another OS-AID system.
     var osAidSharingPolicy: OSAidSharingPolicy {
@@ -240,6 +243,9 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .aiDex:
             return .aiDex
+
+        case .anytime:
+            return .anytime
 
         }
         
@@ -285,6 +291,10 @@ enum CGMTransmitterType:String, CaseIterable {
             // the session start comes from the sensor (CGM Session Start Time), xDrip starts its sensor record from it
             return true
 
+        case .anytime:
+            // a new sensor is detected from its serial number or, on CT5, from the identity the transmitter reports
+            return true
+
         }
     }
     
@@ -317,6 +327,10 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .aiDex:
             // a sensor that was never started is activated by the driver itself, there is no manual start
+            return false
+
+        case .anytime:
+            // the sensor is started with the vendor app, xDrip only follows its session
             return false
 
         }
@@ -354,6 +368,9 @@ enum CGMTransmitterType:String, CaseIterable {
         case .aiDex:
             return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
 
+        case .anytime:
+            return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
+
         }
     }
     
@@ -388,6 +405,9 @@ enum CGMTransmitterType:String, CaseIterable {
             return ""
 
         case .aiDex:
+            return ""
+
+        case .anytime:
             return ""
 
         }

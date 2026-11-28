@@ -591,7 +591,7 @@ struct SensorManagementView: View {
             }
         case .Medtrum:
             warmupMinutes = nil
-        case .some(.Sibionics2), .some(.iCan), .some(.aiDex):
+        case .some(.Sibionics2), .some(.iCan), .some(.aiDex), .some(.anytime):
             warmupMinutes = transmitter?.sensorWarmupDurationInMinutes() ?? ConstantsMaster.minimumSensorWarmUpRequiredInMinutes
         case .none:
             warmupMinutes = nil

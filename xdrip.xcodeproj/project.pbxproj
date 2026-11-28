@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AE71100A0000000000000001 /* Anytime+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */; };
+		AE7110080000000000000001 /* Anytime+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110070000000000000001 /* Anytime+CoreDataProperties.swift */; };
+		AE7110060000000000000001 /* Anytime+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110050000000000000001 /* Anytime+CoreDataClass.swift */; };
 		AE7110170000000000000001 /* AnytimeAlgorithmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110160000000000000001 /* AnytimeAlgorithmTests.swift */; };
 		AE7110130000000000000001 /* AnytimeAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110120000000000000001 /* AnytimeAlgorithm.swift */; };
 		AE7110150000000000000001 /* AnytimeSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110140000000000000001 /* AnytimeSessionTests.swift */; };
@@ -1051,6 +1054,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
+		AE7110070000000000000001 /* Anytime+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		AE7110050000000000000001 /* Anytime+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+CoreDataClass.swift"; sourceTree = "<group>"; };
+		AE71100F0000000000000001 /* xdrip v41 Anytime.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v41 Anytime.xcdatamodel"; sourceTree = "<group>"; };
 		AE7110160000000000000001 /* AnytimeAlgorithmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeAlgorithmTests.swift; sourceTree = "<group>"; };
 		AE7110120000000000000001 /* AnytimeAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeAlgorithm.swift; sourceTree = "<group>"; };
 		AE7110140000000000000001 /* AnytimeSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeSessionTests.swift; sourceTree = "<group>"; };
@@ -3911,6 +3918,8 @@
 		F8EA6CA421B9A25B0082976B /* classes */ = {
 			isa = PBXGroup;
 			children = (
+				AE7110070000000000000001 /* Anytime+CoreDataProperties.swift */,
+				AE7110050000000000000001 /* Anytime+CoreDataClass.swift */,
 				A1DE10070000000000000001 /* AiDex+CoreDataProperties.swift */,
 				A1DE10050000000000000001 /* AiDex+CoreDataClass.swift */,
 				1CA210070000000000000001 /* ICan+CoreDataProperties.swift */,
@@ -4094,6 +4103,7 @@
 		F8F971AE23A5914C00C3F17D /* CGM */ = {
 			isa = PBXGroup;
 			children = (
+				AE71100E0000000000000001 /* Anytime peripheral group */,
 				A1DE100E0000000000000001 /* AiDex peripheral group */,
 				1CA2100E0000000000000001 /* ICan peripheral group */,
 				D3E300100000000000000001 /* Sibionics2 peripheral group */,
@@ -4407,6 +4417,14 @@
 				1CA210010000000000000001 /* ICanProtocol.swift */,
 			);
 			path = ICan;
+			sourceTree = "<group>";
+		};
+		AE71100E0000000000000001 /* Anytime peripheral group */ = {
+			isa = PBXGroup;
+			children = (
+				AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */,
+			);
+			path = Anytime;
 			sourceTree = "<group>";
 		};
 		A1DE100E0000000000000001 /* AiDex peripheral group */ = {
@@ -5078,6 +5096,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AE71100A0000000000000001 /* Anytime+BluetoothPeripheral.swift in Sources */,
+				AE7110080000000000000001 /* Anytime+CoreDataProperties.swift in Sources */,
+				AE7110060000000000000001 /* Anytime+CoreDataClass.swift in Sources */,
 				AE7110130000000000000001 /* AnytimeAlgorithm.swift in Sources */,
 				AE7110110000000000000001 /* AnytimeSession.swift in Sources */,
 				AE7110020000000000000001 /* AnytimeProtocol.swift in Sources */,
@@ -6878,6 +6899,7 @@
 		F85FF3C2252D0C32004E6FF1 /* xdrip.xcdatamodeld */ = {
 			isa = XCVersionGroup;
 			children = (
+				AE71100F0000000000000001 /* xdrip v41 Anytime.xcdatamodel */,
 				A1DE100F0000000000000001 /* xdrip v40 AiDex.xcdatamodel */,
 				1CA2100F0000000000000001 /* xdrip v39 iCan.xcdatamodel */,
 				D3E5000D0000000000000001 /* xdrip v38.xcdatamodel */,
@@ -6911,7 +6933,7 @@
 				F85FF3C3252D0C32004E6FF1 /* xdrip v12.xcdatamodel */,
 				F7936B31E35D82919DCDE294 /* xdrip v33.xcdatamodel */,
 			);
-			currentVersion = A1DE100F0000000000000001 /* xdrip v40 AiDex.xcdatamodel */;
+			currentVersion = AE71100F0000000000000001 /* xdrip v41 Anytime.xcdatamodel */;
 			path = xdrip.xcdatamodeld;
 			sourceTree = "<group>";
 			versionGroupType = wrapper.xcdatamodel;
