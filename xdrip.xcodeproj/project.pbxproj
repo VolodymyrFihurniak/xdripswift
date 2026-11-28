@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		077010110000000000000001 /* OttaiFormulaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010100000000000000001 /* OttaiFormulaTests.swift */; };
+		0770100F0000000000000001 /* OttaiProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0770100E0000000000000001 /* OttaiProtocolTests.swift */; };
+		077010020000000000000001 /* OttaiProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010010000000000000001 /* OttaiProtocol.swift */; };
 		3A5D00190000000000000001 /* MQDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00180000000000000001 /* MQDriverTests.swift */; };
 		3A5D00080000000000000001 /* CGMMQTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00070000000000000001 /* CGMMQTransmitter.swift */; };
 		3A5D000E0000000000000001 /* MQ+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D000D0000000000000001 /* MQ+CoreDataProperties.swift */; };
@@ -1067,6 +1070,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		077010100000000000000001 /* OttaiFormulaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiFormulaTests.swift; sourceTree = "<group>"; };
+		0770100E0000000000000001 /* OttaiProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiProtocolTests.swift; sourceTree = "<group>"; };
+		077010010000000000000001 /* OttaiProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiProtocol.swift; sourceTree = "<group>"; };
 		3A5D00180000000000000001 /* MQDriverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQDriverTests.swift; sourceTree = "<group>"; };
 		3A5D00070000000000000001 /* CGMMQTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMMQTransmitter.swift; sourceTree = "<group>"; };
 		3A5D000F0000000000000001 /* xdrip v42 MQ.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v42 MQ.xcdatamodel"; sourceTree = "<group>"; };
@@ -2998,6 +3004,8 @@
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
+				077010100000000000000001 /* OttaiFormulaTests.swift */,
+				0770100E0000000000000001 /* OttaiProtocolTests.swift */,
 				3A5D00180000000000000001 /* MQDriverTests.swift */,
 				3A5D00160000000000000001 /* MQSessionTests.swift */,
 				3A5D00140000000000000001 /* MQAlgorithmTests.swift */,
@@ -4198,6 +4206,7 @@
 		F8F971BA23A5915900C3F17D /* CGM */ = {
 			isa = PBXGroup;
 			children = (
+				0770100C0000000000000001 /* Ottai */,
 				3A5D00100000000000000001 /* MQ */,
 				AE71100D0000000000000001 /* Anytime */,
 				A1DE100D0000000000000001 /* AiDex */,
@@ -4497,6 +4506,14 @@
 				3A5D00090000000000000001 /* MQ+BluetoothPeripheral.swift */,
 			);
 			path = MQ;
+			sourceTree = "<group>";
+		};
+		0770100C0000000000000001 /* Ottai */ = {
+			isa = PBXGroup;
+			children = (
+				077010010000000000000001 /* OttaiProtocol.swift */,
+			);
+			path = Ottai;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -5095,6 +5112,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				077010110000000000000001 /* OttaiFormulaTests.swift in Sources */,
+				0770100F0000000000000001 /* OttaiProtocolTests.swift in Sources */,
 				3A5D00190000000000000001 /* MQDriverTests.swift in Sources */,
 				3A5D00170000000000000001 /* MQSessionTests.swift in Sources */,
 				3A5D00150000000000000001 /* MQAlgorithmTests.swift in Sources */,
@@ -5157,6 +5176,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				077010020000000000000001 /* OttaiProtocol.swift in Sources */,
 				3A5D00080000000000000001 /* CGMMQTransmitter.swift in Sources */,
 				3A5D000E0000000000000001 /* MQ+CoreDataProperties.swift in Sources */,
 				3A5D000C0000000000000001 /* MQ+CoreDataClass.swift in Sources */,
