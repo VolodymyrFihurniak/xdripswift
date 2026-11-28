@@ -941,6 +941,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             return makeAnytimeSections(bluetoothPeripheral: bluetoothPeripheral)
         case .mqType:
             return makeMQSections(bluetoothPeripheral: bluetoothPeripheral)
+        case .ottaiType:
+            return makeOttaiSections(bluetoothPeripheral: bluetoothPeripheral)
         case .M5StackType:
             return makeM5StackSections(bluetoothPeripheral: bluetoothPeripheral, includesSpecificM5StackSection: true)
         case .M5StickCType:
@@ -4007,6 +4009,12 @@ private extension BluetoothPeripheralDetailState {
                 rows: rows
             )
         ]
+    }
+
+    /// Status of an Ottai transmitter; filled in by the device screen commit.
+    func makeOttaiSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        guard bluetoothPeripheral is Ottai else { return [] }
+        return []
     }
 
     /// Status of an MQ / Glutec transmitter, read from the per-address state the transmitter keeps, and the

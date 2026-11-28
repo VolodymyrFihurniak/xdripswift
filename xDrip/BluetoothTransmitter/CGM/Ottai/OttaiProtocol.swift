@@ -1150,7 +1150,7 @@ enum OttaiOutputFilter {
 /// the glucose expression and its coefficients, the activation time and the lifetime. This fork never
 /// contacts the vendor cloud: without this material a sensor cannot authenticate and no value can be
 /// computed, so the driver reports the sensor as unsupported.
-struct OttaiMaterials: Equatable {
+struct OttaiMaterials: Equatable, Codable {
     /// Canonical 12 hex digit sensor id: it is the "mac" of the authentication signature.
     var sensorId: String
     var displayName: String

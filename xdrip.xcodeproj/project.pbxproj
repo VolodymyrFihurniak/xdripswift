@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		077010170000000000000001 /* OttaiDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010160000000000000001 /* OttaiDriverTests.swift */; };
+		077010040000000000000001 /* CGMOttaiTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010030000000000000001 /* CGMOttaiTransmitter.swift */; };
 		0770100A0000000000000001 /* Ottai+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010090000000000000001 /* Ottai+CoreDataProperties.swift */; };
 		077010080000000000000001 /* Ottai+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010070000000000000001 /* Ottai+CoreDataClass.swift */; };
 		077010060000000000000001 /* Ottai+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077010050000000000000001 /* Ottai+BluetoothPeripheral.swift */; };
@@ -1075,6 +1077,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		077010160000000000000001 /* OttaiDriverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OttaiDriverTests.swift; sourceTree = "<group>"; };
+		077010030000000000000001 /* CGMOttaiTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMOttaiTransmitter.swift; sourceTree = "<group>"; };
 		0770100B0000000000000001 /* xdrip v43 Ottai.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v43 Ottai.xcdatamodel"; sourceTree = "<group>"; };
 		077010090000000000000001 /* Ottai+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Ottai+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		077010070000000000000001 /* Ottai+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Ottai+CoreDataClass.swift"; sourceTree = "<group>"; };
@@ -3015,6 +3019,7 @@
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
+				077010160000000000000001 /* OttaiDriverTests.swift */,
 				077010140000000000000001 /* OttaiSessionTests.swift */,
 				077010100000000000000001 /* OttaiFormulaTests.swift */,
 				0770100E0000000000000001 /* OttaiProtocolTests.swift */,
@@ -4526,6 +4531,7 @@
 		0770100C0000000000000001 /* Ottai */ = {
 			isa = PBXGroup;
 			children = (
+				077010030000000000000001 /* CGMOttaiTransmitter.swift */,
 				077010120000000000000001 /* OttaiSession.swift */,
 				077010010000000000000001 /* OttaiProtocol.swift */,
 			);
@@ -5136,6 +5142,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				077010170000000000000001 /* OttaiDriverTests.swift in Sources */,
 				077010150000000000000001 /* OttaiSessionTests.swift in Sources */,
 				077010110000000000000001 /* OttaiFormulaTests.swift in Sources */,
 				0770100F0000000000000001 /* OttaiProtocolTests.swift in Sources */,
@@ -5201,6 +5208,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				077010040000000000000001 /* CGMOttaiTransmitter.swift in Sources */,
 				0770100A0000000000000001 /* Ottai+CoreDataProperties.swift in Sources */,
 				077010080000000000000001 /* Ottai+CoreDataClass.swift in Sources */,
 				077010060000000000000001 /* Ottai+BluetoothPeripheral.swift in Sources */,

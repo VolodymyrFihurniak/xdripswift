@@ -881,3 +881,60 @@ struct OttaiHistoryChain: Equatable {
         return Self.historyBackfillPercent(chainStart: chainStart, nextStart: pendingNextStart, endExclusive: pendingEndExclusive)
     }
 }
+
+// MARK: - cgm-info and max-active values
+
+/// The two small characteristic values the connection reads besides glucose: the cgm-info packet that
+/// carries the sensor's own reporting interval, and the activated lifetime (`b8fd9848`).
+enum OttaiCgmInfo {
+
+    static let defaultLivePollIntervalMs: Int64 = 60_000
+    /// JugglucoNG `MAX_LIVE_POLL_INTERVAL_MS`.
+    static let maxLivePollIntervalMs: Int64 = 60_000
+    static let minMaxActiveSeconds: Int64 = 10 * 86_400
+    static let maxMaxActiveSeconds: Int64 = 45 * 86_400
+    /// JugglucoNG `STREAM_ACTIVITY_STALE_MS`.
+    static let streamActivityStaleMs: Int64 = 180_000
+
+    /// JugglucoNG `maybeUpdateLivePollInterval`: a cgm-info packet that starts `07 77` carries the
+    /// interval in seconds as 16 bit little endian at bytes 2 and 3; 5 to 3600 are accepted and the
+    /// poll never waits longer than a minute. Nil for any other packet.
+    static func livePollIntervalMs(_ value: [UInt8]) -> Int64? {
+        if value.count < 4 { return nil }
+        if value[0] != 0x07 || value[1] != 0x77 { return nil }
+        let seconds = Int(value[2]) | Int(value[3]) << 8
+        if seconds < 5 || seconds > 3600 { return nil }
+        return min(Int64(seconds) * 1000, maxLivePollIntervalMs)
+    }
+
+    /// JugglucoNG `readSecondsLE`: 8 bytes little endian when there are 8, else 4; nil unless positive.
+    static func secondsLittleEndian(_ bytes: [UInt8]) -> Int64? {
+        if bytes.count < 4 { return nil }
+        let count = bytes.count >= 8 ? 8 : 4
+        var value: Int64 = 0
+        for index in 0..<count { value |= Int64(bytes[index]) << Int64(index * 8) }
+        return value > 0 ? value : nil
+    }
+
+    /// JugglucoNG `decodeMaxActiveSeconds`: the characteristic holds AES-ECB of the seconds; a plaintext
+    /// read is the fallback for firmware that returns it raw.
+    static func decodeMaxActiveSeconds(_ value: [UInt8], sessionKeyHex: String) -> Int64? {
+        if value.isEmpty { return nil }
+        if let plain = OttaiCrypto.decryptPayload(value, sessionKeyHex: sessionKeyHex),
+           let seconds = secondsLittleEndian(plain) {
+            return seconds
+        }
+        return secondsLittleEndian(value)
+    }
+
+    /// The decoded lifetime in milliseconds when it is a plausible activation window (10 to 45 days).
+    static func plausibleMaxActiveMs(seconds: Int64) -> Int64? {
+        if seconds < minMaxActiveSeconds || seconds > maxMaxActiveSeconds { return nil }
+        return seconds * 1000
+    }
+
+    /// JugglucoNG `streamingStaleThresholdMs`: how long a streaming link may stay silent.
+    static func streamingStaleThresholdMs(livePollIntervalMs: Int64) -> Int64 {
+        return max(streamActivityStaleMs, livePollIntervalMs * 3 + 15_000)
+    }
+}
