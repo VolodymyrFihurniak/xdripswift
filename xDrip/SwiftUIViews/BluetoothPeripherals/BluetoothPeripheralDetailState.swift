@@ -470,6 +470,11 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             sections.append(libreActivationSection)
         }
 
+        // Shown while adding the device too: the sensor's keys have to be imported before it can be found.
+        if bluetoothPeripheral == nil, expectedBluetoothPeripheralType == .ottaiType {
+            sections.append(makeOttaiMaterialAddSection())
+        }
+
         guard bluetoothPeripheral != nil else {
             if let dexcomG6BluetoothSlotSection = makeDexcomG6BluetoothSlotSection() {
                 sections.append(dexcomG6BluetoothSlotSection)
@@ -1960,6 +1965,15 @@ private extension DexcomG7BluetoothSlot {
 
 private extension BluetoothPeripheralDetailState {
     func requestScanForBluetoothPeripheral(type: BluetoothPeripheralType) {
+        // An Ottai sensor is recognised by the signature of the imported material: no material, no scan.
+        if type == .ottaiType, OttaiMaterialsStore.loadPending() == nil {
+            pendingAlert = BluetoothPeripheralDetailAlert(
+                title: Texts_BluetoothPeripheralView.ottaiMaterialSectionTitle,
+                message: Texts_BluetoothPeripheralView.ottaiScanNeedsMaterial
+            )
+            return
+        }
+
         guard let notice = type.scanPreparationNotice else {
             scanForBluetoothPeripheral(type: type)
             return
@@ -4011,10 +4025,207 @@ private extension BluetoothPeripheralDetailState {
         ]
     }
 
-    /// Status of an Ottai transmitter; filled in by the device screen commit.
+    /// Status of an Ottai transmitter, read from the per-address state the transmitter keeps, and the sensor
+    /// material (keys and coefficients) that the manufacturer's online service would issue (this app does
+    /// not use it, the user imports the material).
     func makeOttaiSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
         guard bluetoothPeripheral is Ottai else { return [] }
-        return []
+
+        let address = bluetoothPeripheral.blePeripheral.address
+        let state = OttaiDeviceStore.load(address: address)
+        let materials = OttaiMaterialsStore.load(address: address)
+        let formatter = RelativeDateTimeFormatter()
+        let now = Date()
+
+        // The same start the transmitter works from: the material's, else the one the stream confirmed.
+        var startMs = materials?.activeTimeMs ?? 0
+        if startMs <= 0 { startMs = state.pipeline.confirmedActiveTimeMs }
+        if startMs <= 0 { startMs = state.pipeline.streamStartMs }
+        var sessionStart: Date?
+        var expectedEnd: Date?
+        if startMs > 0 {
+            let lifetimeMs = OttaiConstants.expectedLifetimeMs(
+                cloudActiveExpireMs: materials?.activeExpireTimeMs ?? 0,
+                acceptedMaxActiveMs: state.activatedMaxActiveMs
+            )
+            sessionStart = Date(timeIntervalSince1970: Double(startMs) / 1000)
+            expectedEnd = Date(timeIntervalSince1970: Double(startMs + lifetimeMs) / 1000)
+        }
+
+        var lifetimeDetail: String?
+        if state.activatedMaxActiveMs > 0 {
+            lifetimeDetail = String(format: Texts_BluetoothPeripheralView.ottaiDaysFormat, Double(state.activatedMaxActiveMs) / 86_400_000)
+        }
+
+        var lastReadingDetail = Texts_BluetoothPeripheralView.ottaiWaitingForReading
+        if let date = state.lastReadingDate {
+            lastReadingDetail = formatter.localizedString(for: date, relativeTo: now)
+        }
+
+        var temperatureDetail: String?
+        if let temperature = state.lastTemperatureC {
+            temperatureDetail = String(format: Texts_BluetoothPeripheralView.ottaiTemperatureFormat, temperature)
+        }
+
+        var problemDetail = Texts_BluetoothPeripheralView.ottaiNoLinkProblem
+        if let problem = state.problem {
+            problemDetail = Texts_BluetoothPeripheralView.ottaiProblem(problem)
+            if let problemDate = state.problemDate {
+                problemDetail += " \u{00B7} " + formatter.localizedString(for: problemDate, relativeTo: now)
+            }
+        }
+
+        let statusRows = [
+            row(id: "ottai-name", title: Texts_BluetoothPeripheralView.ottaiBluetoothName, detail: state.advertisedName),
+            row(
+                id: "ottai-sensor-state",
+                title: Texts_BluetoothPeripheralView.ottaiSensorState,
+                detail: Texts_BluetoothPeripheralView.ottaiSensorStateText(commandStatus: state.commandStatus)
+            ),
+            row(id: "ottai-session-start", title: Texts_BluetoothPeripheralView.ottaiSessionStart, detail: sessionStart?.formatted()),
+            row(id: "ottai-expected-end", title: Texts_BluetoothPeripheralView.ottaiExpectedEnd, detail: expectedEnd?.formatted()),
+            row(id: "ottai-lifetime", title: Texts_BluetoothPeripheralView.ottaiLifetimeFromSensor, detail: lifetimeDetail),
+            row(id: "ottai-temperature", title: Texts_BluetoothPeripheralView.ottaiTemperature, detail: temperatureDetail),
+            row(id: "ottai-last-reading", title: Texts_BluetoothPeripheralView.ottaiLastReading, detail: lastReadingDetail),
+            row(
+                id: "ottai-last-link-problem",
+                title: Texts_BluetoothPeripheralView.ottaiLastLinkProblem,
+                detail: problemDetail,
+                detailIndicator: state.problem != nil ? SettingsIndicator(color: Color.orange) : nil,
+                detailLineLimit: 3
+            )
+        ]
+
+        return [
+            BluetoothPeripheralDetailSection(
+                id: "ottai",
+                title: Texts_BluetoothPeripheralView.ottaiSectionTitle,
+                footer: Texts_BluetoothPeripheralView.ottaiSectionFooter,
+                rows: statusRows
+            ),
+            BluetoothPeripheralDetailSection(
+                id: "ottai-material",
+                title: Texts_BluetoothPeripheralView.ottaiMaterialSectionTitle,
+                footer: Texts_BluetoothPeripheralView.ottaiMaterialDeviceFooter,
+                rows: makeOttaiMaterialRows(materials: materials, bluetoothPeripheral: bluetoothPeripheral)
+            )
+        ]
+    }
+
+    /// While adding an Ottai sensor: the material the first connection will be checked against.
+    func makeOttaiMaterialAddSection() -> BluetoothPeripheralDetailSection {
+        return BluetoothPeripheralDetailSection(
+            id: "ottai-material",
+            title: Texts_BluetoothPeripheralView.ottaiMaterialSectionTitle,
+            footer: Texts_BluetoothPeripheralView.ottaiMaterialAddFooter,
+            rows: makeOttaiMaterialRows(materials: OttaiMaterialsStore.loadPending(), bluetoothPeripheral: nil)
+        )
+    }
+
+    /// The import and remove rows, for a stored sensor (`bluetoothPeripheral`) or the pending material of
+    /// the add screen (nil).
+    func makeOttaiMaterialRows(materials: OttaiMaterials?, bluetoothPeripheral: BluetoothPeripheral?) -> [BluetoothPeripheralDetailRow] {
+        var materialDetail = Texts_BluetoothPeripheralView.ottaiMaterialMissing
+        if let materials = materials {
+            materialDetail = String(format: Texts_BluetoothPeripheralView.ottaiMaterialImportedFormat, materials.sensorId)
+        }
+
+        var rows = [
+            row(id: "ottai-material-state", title: Texts_BluetoothPeripheralView.ottaiMaterialRow, detail: materialDetail),
+            row(
+                id: "ottai-material-import",
+                title: Texts_BluetoothPeripheralView.ottaiMaterialImport,
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.importOttaiMaterialsFromClipboard(for: bluetoothPeripheral)
+                }
+            )
+        ]
+        if materials != nil {
+            rows.append(row(
+                id: "ottai-material-remove",
+                title: Texts_BluetoothPeripheralView.ottaiMaterialRemove,
+                showsDisclosure: true,
+                action: { [weak self] in
+                    self?.confirmOttaiMaterialRemoval(for: bluetoothPeripheral)
+                }
+            ))
+        }
+        return rows
+    }
+
+    /// Reads the sensor material JSON (the portable form JugglucoNG exports) from the clipboard and keeps it in
+    /// the Keychain, for the sensor of the device screen or, while adding, as the pending material.
+    func importOttaiMaterialsFromClipboard(for bluetoothPeripheral: BluetoothPeripheral?) {
+        let title = Texts_BluetoothPeripheralView.ottaiImportTitle
+
+        guard let text = UIPasteboard.general.string,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            pendingAlert = BluetoothPeripheralDetailAlert(title: title, message: Texts_BluetoothPeripheralView.ottaiImportClipboardEmpty)
+            return
+        }
+
+        let parsed = OttaiMaterials.parse(json: text)
+        guard let materials = parsed.materials else {
+            let message = parsed.failure.map { Texts_BluetoothPeripheralView.ottaiImportFailure($0) } ?? Texts_BluetoothPeripheralView.ottaiImportNotJson
+            pendingAlert = BluetoothPeripheralDetailAlert(title: title, message: message)
+            return
+        }
+
+        let saved: Bool
+        if let bluetoothPeripheral = bluetoothPeripheral {
+            saved = OttaiMaterialsStore.save(materials, address: bluetoothPeripheral.blePeripheral.address)
+        } else {
+            saved = OttaiMaterialsStore.savePending(materials)
+        }
+        guard saved else {
+            pendingAlert = BluetoothPeripheralDetailAlert(title: title, message: Texts_BluetoothPeripheralView.ottaiImportSaveFailed)
+            return
+        }
+
+        var message = bluetoothPeripheral == nil ? Texts_BluetoothPeripheralView.ottaiImportDoneAdding : Texts_BluetoothPeripheralView.ottaiImportDoneDevice
+        if !materials.canAuthenticateAndCompute {
+            message += Texts_BluetoothPeripheralView.ottaiImportNoExpression
+        }
+        if let bluetoothPeripheral = bluetoothPeripheral {
+            notifyOttaiTransmitterOfMaterialChange(for: bluetoothPeripheral, removed: false)
+        }
+
+        pendingAlert = BluetoothPeripheralDetailAlert(title: title, message: message)
+        refresh()
+    }
+
+    func confirmOttaiMaterialRemoval(for bluetoothPeripheral: BluetoothPeripheral?) {
+        pendingAlert = BluetoothPeripheralDetailAlert(
+            title: Texts_BluetoothPeripheralView.ottaiRemoveConfirmTitle,
+            message: Texts_BluetoothPeripheralView.ottaiRemoveConfirmMessage,
+            primaryButtonTitle: Texts_BluetoothPeripheralView.ottaiMaterialRemove,
+            primaryAction: { [weak self] in
+                guard let self = self else { return }
+                if let bluetoothPeripheral = bluetoothPeripheral {
+                    OttaiMaterialsStore.clear(address: bluetoothPeripheral.blePeripheral.address)
+                    self.notifyOttaiTransmitterOfMaterialChange(for: bluetoothPeripheral, removed: true)
+                } else {
+                    OttaiMaterialsStore.clearPending()
+                }
+                self.refresh()
+            },
+            secondaryButtonTitle: Texts_Common.Cancel
+        )
+    }
+
+    /// The transmitter keeps its own copy of the persisted state, so it applies the change itself.
+    func notifyOttaiTransmitterOfMaterialChange(for bluetoothPeripheral: BluetoothPeripheral, removed: Bool) {
+        let transmitter = bluetoothPeripheralManager?.getBluetoothTransmitter(
+            for: bluetoothPeripheral,
+            createANewOneIfNecesssary: false
+        ) as? CGMOttaiTransmitter
+        if let transmitter = transmitter {
+            transmitter.sensorMaterialsDidChange(removed: removed)
+        } else if !removed {
+            // no transmitter yet: creating one connects to the stored address
+            bluetoothPeripheralManager?.connect(to: bluetoothPeripheral)
+        }
     }
 
     /// Status of an MQ / Glutec transmitter, read from the per-address state the transmitter keeps, and the
@@ -4412,6 +4623,12 @@ private extension BluetoothPeripheralType {
             return BluetoothPeripheralScanPreparationNotice(
                 title: Texts_BluetoothPeripheralView.mqScanNoticeTitle,
                 message: Texts_BluetoothPeripheralView.mqScanNoticeMessage
+            )
+
+        case .ottaiType:
+            return BluetoothPeripheralScanPreparationNotice(
+                title: Texts_BluetoothPeripheralView.ottaiScanNoticeTitle,
+                message: Texts_BluetoothPeripheralView.ottaiScanNoticeMessage
             )
 
         default:

@@ -506,6 +506,41 @@ class CGMOttaiTransmitter: BluetoothTransmitter, CGMTransmitter {
         return available
     }
 
+    /// The user imported or removed the material of this sensor on the device screen. The transmitter owns
+    /// its copy of the persisted state, so the change is settled here on the central queue: a rejection is
+    /// forgiven (the new material may be this sensor's) and a connected link is dropped so the reconnect
+    /// reads the new keys. A connection that is still being made reads the material when it completes.
+    func sensorMaterialsDidChange(removed: Bool) {
+        runOnCentralQueue { [weak self] in
+            guard let self = self, !self.released else { return }
+            self.loadStateIfNeeded()
+            self.pendingMaterialCache = nil
+            self.noMaterialLogged = false
+            if let address = self.deviceAddress {
+                OttaiDeviceStore.forgetRejection(address: address)
+            }
+            self.state.strangerRejected = false
+            self.state.problem = nil
+            self.state.problemDate = nil
+            self.persistState()
+            self.logLine("in sensorMaterialsDidChange, the sensor material was \(removed ? "removed" : "replaced")")
+            if removed {
+                self.noteProblem(.noMaterial)
+            }
+            switch self.getConnectionStatus() {
+            case .some(.connected):
+                self.problemNotedOnThisLink = true
+                self.disconnect()
+            case .some(.connecting):
+                break
+            default:
+                if !removed, self.deviceAddress != nil {
+                    self.connect()
+                }
+            }
+        }
+    }
+
     // MARK: - connection lifecycle
 
     override func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {

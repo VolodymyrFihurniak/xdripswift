@@ -258,4 +258,52 @@ final class OttaiDriverTests: XCTestCase {
         XCTAssertEqual(OttaiCgmInfo.streamingStaleThresholdMs(livePollIntervalMs: 60_000), 195_000)
         XCTAssertEqual(OttaiCgmInfo.streamingStaleThresholdMs(livePollIntervalMs: 5_000), 180_000)
     }
+
+    // MARK: - texts
+
+    func testEveryLinkProblemHasADistinctText() {
+        let problems: [OttaiLinkProblem] = [
+            .linkLost, .notAnOttai, .noMaterial, .sensorNotMatching, .signatureMismatch, .notificationsFailed,
+            .setupTimeout, .readFailed, .authRejected, .sessionKeyFailed, .sensorNotActivated, .sensorEnded,
+            .commandStatusUnreadable, .linkSilent, .noReadings, .frameNotDecryptable, .noExpression
+        ]
+        var texts = Set<String>()
+        for problem in problems {
+            let text = Texts_BluetoothPeripheralView.ottaiProblem(problem)
+            XCTAssertFalse(text.isEmpty)
+            texts.insert(text)
+        }
+        XCTAssertEqual(texts.count, problems.count)
+    }
+
+    func testLinkProblemRawValuesAreStable() {
+        // persisted in UserDefaults: renaming a case would drop a stored problem
+        XCTAssertEqual(OttaiLinkProblem.linkLost.rawValue, "linkLost")
+        XCTAssertEqual(OttaiLinkProblem.sensorNotMatching.rawValue, "sensorNotMatching")
+        XCTAssertEqual(OttaiLinkProblem.frameNotDecryptable.rawValue, "frameNotDecryptable")
+        XCTAssertEqual(OttaiLinkProblem.noExpression.rawValue, "noExpression")
+    }
+
+    func testEveryImportFailureHasADistinctText() {
+        let failures: [OttaiMaterials.ImportFailure] = [.notJson, .missingSensorId, .sensorIdNotTwelveHex, .invalidKeys]
+        let texts = failures.map { Texts_BluetoothPeripheralView.ottaiImportFailure($0) }
+        XCTAssertFalse(texts.contains(""))
+        XCTAssertEqual(Set(texts).count, failures.count)
+    }
+
+    func testTheSensorStateTextFollowsTheCommandStatus() {
+        let unknown = Texts_BluetoothPeripheralView.ottaiSensorStateText(commandStatus: -1)
+        let notActivated = Texts_BluetoothPeripheralView.ottaiSensorStateText(commandStatus: 0)
+        let running = Texts_BluetoothPeripheralView.ottaiSensorStateText(commandStatus: 3)
+        let ended = Texts_BluetoothPeripheralView.ottaiSensorStateText(commandStatus: 4)
+        XCTAssertEqual(Set([unknown, notActivated, running, ended]).count, 4)
+        XCTAssertEqual(Texts_BluetoothPeripheralView.ottaiSensorStateText(commandStatus: 1), notActivated)
+        XCTAssertEqual(Texts_BluetoothPeripheralView.ottaiSensorStateText(commandStatus: 2), notActivated)
+        XCTAssertEqual(Texts_BluetoothPeripheralView.ottaiSensorStateText(commandStatus: 7), ended)
+    }
+
+    func testTheMaterialRowNamesTheSensor() {
+        let text = String(format: Texts_BluetoothPeripheralView.ottaiMaterialImportedFormat, "AABBCCDDEEFF")
+        XCTAssertTrue(text.contains("AABBCCDDEEFF"))
+    }
 }
