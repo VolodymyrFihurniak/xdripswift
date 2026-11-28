@@ -11,6 +11,7 @@
 		A1DE10080000000000000001 /* AiDex+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE10070000000000000001 /* AiDex+CoreDataProperties.swift */; };
 		A1DE10060000000000000001 /* AiDex+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE10050000000000000001 /* AiDex+CoreDataClass.swift */; };
 		A1DE10020000000000000001 /* AiDexProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE10010000000000000001 /* AiDexProtocol.swift */; };
+		A1DE10040000000000000001 /* CGMAiDexTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE10030000000000000001 /* CGMAiDexTransmitter.swift */; };
 		A1DE100B0000000000000001 /* AiDexProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE100C0000000000000001 /* AiDexProtocolTests.swift */; };
 		1CA210040000000000000001 /* CGMICanTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210030000000000000001 /* CGMICanTransmitter.swift */; };
 		1CA2100A0000000000000001 /* ICan+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */; };
@@ -1049,6 +1050,7 @@
 		A1DE10050000000000000001 /* AiDex+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AiDex+CoreDataClass.swift"; sourceTree = "<group>"; };
 		A1DE100F0000000000000001 /* xdrip v40 AiDex.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v40 AiDex.xcdatamodel"; sourceTree = "<group>"; };
 		A1DE10010000000000000001 /* AiDexProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiDexProtocol.swift; sourceTree = "<group>"; };
+		A1DE10030000000000000001 /* CGMAiDexTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMAiDexTransmitter.swift; sourceTree = "<group>"; };
 		A1DE100C0000000000000001 /* AiDexProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AiDexProtocolTests.swift; sourceTree = "<group>"; };
 		1CA210030000000000000001 /* CGMICanTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMICanTransmitter.swift; sourceTree = "<group>"; };
 		1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
@@ -4366,6 +4368,7 @@
 		A1DE100D0000000000000001 /* AiDex */ = {
 			isa = PBXGroup;
 			children = (
+				A1DE10030000000000000001 /* CGMAiDexTransmitter.swift */,
 				A1DE10010000000000000001 /* AiDexProtocol.swift */,
 			);
 			path = AiDex;
@@ -5050,6 +5053,7 @@
 				A1DE10080000000000000001 /* AiDex+CoreDataProperties.swift in Sources */,
 				A1DE10060000000000000001 /* AiDex+CoreDataClass.swift in Sources */,
 				A1DE10020000000000000001 /* AiDexProtocol.swift in Sources */,
+				A1DE10040000000000000001 /* CGMAiDexTransmitter.swift in Sources */,
 				1CA210040000000000000001 /* CGMICanTransmitter.swift in Sources */,
 				1CA2100A0000000000000001 /* ICan+BluetoothPeripheral.swift in Sources */,
 				1CA210080000000000000001 /* ICan+CoreDataProperties.swift in Sources */,

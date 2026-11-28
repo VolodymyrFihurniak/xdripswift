@@ -1117,4 +1117,99 @@ final class AiDexProtocolTests: XCTestCase {
         XCTAssertEqual(AiDexOpcodes.dataFrameLength, 17)
         XCTAssertEqual(AiDexOpcodes.statusFrameLength, 5)
     }
+
+    // MARK: - registration
+
+    func testAiDexIsAvailableInTheDirectCGMAddFlow() {
+        XCTAssertEqual(BluetoothPeripheralType.aiDexType.category(), .CGM)
+        XCTAssertTrue(BluetoothPeripheralType.addFlowPreferredOrder[.CGM]?.contains(.aiDexType) == true)
+        XCTAssertEqual(BluetoothPeripheralType.aiDexType.onlineHelpTopic, .addDirectCGM)
+        XCTAssertFalse(BluetoothPeripheralType.aiDexType.usesIntermittentConnection)
+    }
+
+    func testAiDexTransmitterTypeProperties() {
+        XCTAssertEqual(CGMTransmitterType.aiDex.rawValue, "AiDex")
+        XCTAssertEqual(CGMTransmitterType.aiDex.sensorType(), .aiDex)
+        XCTAssertTrue(CGMTransmitterType.aiDex.canDetectNewSensor())
+        XCTAssertFalse(CGMTransmitterType.aiDex.allowManualSensorStart())
+    }
+
+    func testAiDexTroubleshootingSource() throws {
+        XCTAssertEqual(TroubleshootingLogSource(directTransmitterType: .aiDex), .aiDex)
+        let source = try XCTUnwrap(TroubleshootingLogSource(bluetoothPeripheralType: .aiDexType))
+        XCTAssertEqual(source, .aiDex)
+        XCTAssertEqual(source.name, "AiDex")
+        XCTAssertFalse(source.isFollowerSource)
+    }
+
+    func testAiDexEntityRoundTripsThroughCoreData() throws {
+        let coreDataManager = CoreDataManager(inMemoryModelName: ConstantsCoreData.modelName)
+        let context = coreDataManager.mainManagedObjectContext
+        let aiDex = AiDex(address: "test-aidex", name: "AiDEX X-2222267V4E", alias: nil, nsManagedObjectContext: context)
+        XCTAssertEqual(aiDex.bluetoothPeripheralType(), .aiDexType)
+        XCTAssertTrue(aiDex.blePeripheral.shouldconnect)
+
+        coreDataManager.saveChanges()
+        let objectID = aiDex.blePeripheral.objectID
+        context.reset()
+
+        let restored = try XCTUnwrap(context.existingObject(with: objectID) as? BLEPeripheral)
+        XCTAssertNotNil(restored.aiDex)
+        XCTAssertNil(restored.iCan)
+        XCTAssertNil(restored.sibionics2)
+        XCTAssertEqual(restored.aiDex?.bluetoothPeripheralType(), .aiDexType)
+    }
+
+    func testDeviceStoreRoundTripAndClear() {
+        let address = "aidex-test-address"
+        AiDexDeviceStore.clear(address: address)
+        XCTAssertNil(AiDexDeviceStore.load(address: address).model)
+        XCTAssertEqual(AiDexDeviceStore.load(address: address).historyRawNextIndex, 0)
+
+        AiDexDeviceStore.update(address: address) {
+            $0.model = "AiDEX X"
+            $0.wearDays = 15
+            $0.historyBriefNextIndex = 321
+            $0.problem = .linkLost
+        }
+        let stored = AiDexDeviceStore.load(address: address)
+        XCTAssertEqual(stored.model, "AiDEX X")
+        XCTAssertEqual(stored.wearDays, 15)
+        XCTAssertEqual(stored.historyBriefNextIndex, 321)
+        XCTAssertEqual(stored.problem, .linkLost)
+
+        AiDexDeviceStore.clear(address: address)
+        XCTAssertNil(AiDexDeviceStore.load(address: address).model)
+        XCTAssertEqual(AiDexDeviceStore.load(address: address).historyBriefNextIndex, 0)
+    }
+
+    func testPairKeyFingerprintDoesNotRevealTheKey() {
+        let key = (1...16).map { UInt8($0) }
+        let fingerprint = AiDexPairKeyStore.fingerprint(key)
+        XCTAssertEqual(fingerprint.count, 8)
+        XCTAssertEqual(fingerprint, AiDexParser.compactHex(Array(AiDexCrypto.md5(key).prefix(4))))
+        XCTAssertFalse(fingerprint.uppercased().contains(AiDexParser.compactHex(key).uppercased()))
+        XCTAssertEqual(AiDexPairKeyStore.fingerprint(nil), "none")
+        XCTAssertEqual(AiDexPairKeyStore.fingerprint([]), "none")
+    }
+
+    func testEveryLinkProblemHasAText() {
+        let problems: [AiDexLinkProblem] = [
+            .linkLost, .keyExchangeFailed, .savedKeyRejected, .pairingRefused, .unsupportedFSeries,
+            .serialUnknown, .noReadings, .historyFailed, .sensorNotStarted, .sensorEnded, .notAnAiDex
+        ]
+        var texts = Set<String>()
+        for problem in problems {
+            let text = Texts_BluetoothPeripheralView.aiDexProblem(problem)
+            XCTAssertFalse(text.isEmpty)
+            texts.insert(text)
+        }
+        XCTAssertEqual(texts.count, problems.count)
+    }
+
+    func testFSeriesAdvertisementIsRefusedWithoutAStoredKey() {
+        XCTAssertTrue(AiDexKeyRequirement.requiresProvisionedKeys(advertisedName: "AiDEX F-22222FZXKT"))
+        XCTAssertFalse(AiDexKeyRequirement.requiresProvisionedKeys(advertisedName: "AiDEX X-2222267V4E"))
+        XCTAssertFalse(AiDexKeyRequirement.requiresProvisionedKeys(advertisedName: nil))
+    }
 }

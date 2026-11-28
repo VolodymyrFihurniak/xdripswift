@@ -637,3 +637,54 @@ extension Texts_BluetoothPeripheralView {
         }
     }
 }
+
+// MARK: - AiDex
+
+extension Texts_BluetoothPeripheralView {
+
+    static let aiDexScanNoticeTitle = NSLocalizedString("aidex.scanNoticeTitle", tableName: filename, bundle: .main, value: "AiDex Sensor Connection", comment: "Title of the notice shown before scanning for an AiDex sensor")
+    static let aiDexScanNoticeMessage = NSLocalizedString("aidex.scanNoticeMessage", tableName: filename, bundle: .main, value: "This app connects directly to an AiDex X or LinX sensor and starts one that has not been started yet. Sensors of the F series (named AiDEX F-…) need a key from the manufacturer's cloud, which this app does not use, so they cannot be connected.\n\nBefore scanning, close the manufacturer's app and keep other AiDex sensors out of range: a sensor talks to one phone at a time and the first connection takes the first AiDex sensor it finds. If iOS asks to pair with the sensor, accept.\n\nScanning works only while this app is open. This driver has not been tried on a real sensor.", comment: "Notice shown before scanning for an AiDex sensor")
+    static let aiDexSectionTitle = NSLocalizedString("aidex.sectionTitle", tableName: filename, bundle: .main, value: "AiDex sensor", comment: "Device screen section title")
+    static let aiDexSectionFooter = NSLocalizedString("aidex.sectionFooter", tableName: filename, bundle: .main, value: "Values are the sensor's own factory-calibrated readings. Calibration, the manufacturer's cloud and F-series sensors are not supported. Never tried on a real sensor.", comment: "Footer of the AiDex section on the device screen")
+    static let aiDexModel = NSLocalizedString("aidex.model", tableName: filename, bundle: .main, value: "Model", comment: "AiDex device screen row")
+    static let aiDexWearTime = NSLocalizedString("aidex.wearTime", tableName: filename, bundle: .main, value: "Rated wear time", comment: "AiDex device screen row: wear days the sensor reported")
+    static let aiDexWearDaysFormat = NSLocalizedString("aidex.wearDaysFormat", tableName: filename, bundle: .main, value: "%d days", comment: "AiDex wear time value")
+    static let aiDexPairingKey = NSLocalizedString("aidex.pairingKey", tableName: filename, bundle: .main, value: "Pairing key", comment: "AiDex device screen row: the key the sensor handed out")
+    static let aiDexPairingKeyStored = NSLocalizedString("aidex.pairingKeyStored", tableName: filename, bundle: .main, value: "Stored on this phone", comment: "AiDex pairing key state")
+    static let aiDexPairingKeyNotStored = NSLocalizedString("aidex.pairingKeyNotStored", tableName: filename, bundle: .main, value: "Not stored yet", comment: "AiDex pairing key state")
+    static let aiDexSessionStart = NSLocalizedString("aidex.sessionStart", tableName: filename, bundle: .main, value: "Session start", comment: "AiDex device screen row")
+    static let aiDexExpectedEnd = NSLocalizedString("aidex.expectedEnd", tableName: filename, bundle: .main, value: "Expected end", comment: "AiDex device screen row: session start plus the wear time")
+    static let aiDexBattery = NSLocalizedString("aidex.battery", tableName: filename, bundle: .main, value: "Sensor battery", comment: "AiDex device screen row: battery voltage from the keepalive frames")
+    static let aiDexBatteryFormat = NSLocalizedString("aidex.batteryFormat", tableName: filename, bundle: .main, value: "%.2f V", comment: "AiDex battery voltage in volts")
+    static let aiDexLastReading = NSLocalizedString("aidex.lastReading", tableName: filename, bundle: .main, value: "Last reading", comment: "AiDex device screen row")
+    static let aiDexWaitingForReading = NSLocalizedString("aidex.waitingForReading", tableName: filename, bundle: .main, value: "Waiting for reading", comment: "AiDex device screen row before the first reading")
+    static let aiDexLastLinkProblem = NSLocalizedString("aidex.lastLinkProblem", tableName: filename, bundle: .main, value: "Last link problem", comment: "AiDex device screen row")
+    static let aiDexNoLinkProblem = NSLocalizedString("aidex.noLinkProblem", tableName: filename, bundle: .main, value: "None since the last reading", comment: "AiDex device screen row")
+    static let aiDexProblemLinkLost = NSLocalizedString("aidex.problemLinkLost", tableName: filename, bundle: .main, value: "Link lost", comment: "AiDex link problem")
+    static let aiDexProblemKeyExchange = NSLocalizedString("aidex.problemKeyExchange", tableName: filename, bundle: .main, value: "Key exchange with the sensor failed", comment: "AiDex link problem")
+    static let aiDexProblemSavedKeyRejected = NSLocalizedString("aidex.problemSavedKeyRejected", tableName: filename, bundle: .main, value: "Stored pairing key rejected by the sensor", comment: "AiDex link problem")
+    static let aiDexProblemPairingRefused = NSLocalizedString("aidex.problemPairingRefused", tableName: filename, bundle: .main, value: "Sensor refused to pair: keep other phones and apps away from it", comment: "AiDex link problem")
+    static let aiDexProblemUnsupportedFSeries = NSLocalizedString("aidex.problemUnsupportedFSeries", tableName: filename, bundle: .main, value: "F-series sensor: needs a manufacturer's cloud key, not supported", comment: "AiDex link problem")
+    static let aiDexProblemSerialUnknown = NSLocalizedString("aidex.problemSerialUnknown", tableName: filename, bundle: .main, value: "Sensor serial number not found in its Bluetooth name", comment: "AiDex link problem")
+    static let aiDexProblemNoReadings = NSLocalizedString("aidex.problemNoReadings", tableName: filename, bundle: .main, value: "No readings while connected", comment: "AiDex link problem")
+    static let aiDexProblemHistoryFailed = NSLocalizedString("aidex.problemHistoryFailed", tableName: filename, bundle: .main, value: "History download did not finish", comment: "AiDex link problem")
+    static let aiDexProblemNotStarted = NSLocalizedString("aidex.problemNotStarted", tableName: filename, bundle: .main, value: "Sensor not started", comment: "AiDex link problem")
+    static let aiDexProblemEnded = NSLocalizedString("aidex.problemEnded", tableName: filename, bundle: .main, value: "Sensor session ended", comment: "AiDex link problem")
+    static let aiDexProblemNotAnAiDex = NSLocalizedString("aidex.problemNotAnAiDex", tableName: filename, bundle: .main, value: "Device is not an AiDex sensor", comment: "AiDex link problem")
+
+    static func aiDexProblem(_ problem: AiDexLinkProblem) -> String {
+        switch problem {
+        case .linkLost: return aiDexProblemLinkLost
+        case .keyExchangeFailed: return aiDexProblemKeyExchange
+        case .savedKeyRejected: return aiDexProblemSavedKeyRejected
+        case .pairingRefused: return aiDexProblemPairingRefused
+        case .unsupportedFSeries: return aiDexProblemUnsupportedFSeries
+        case .serialUnknown: return aiDexProblemSerialUnknown
+        case .noReadings: return aiDexProblemNoReadings
+        case .historyFailed: return aiDexProblemHistoryFailed
+        case .sensorNotStarted: return aiDexProblemNotStarted
+        case .sensorEnded: return aiDexProblemEnded
+        case .notAnAiDex: return aiDexProblemNotAnAiDex
+        }
+    }
+}
