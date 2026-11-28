@@ -69,6 +69,9 @@ extension BLEPeripheral {
 
     /// Sibionics 2 CGM peripheral configuration.
     @NSManaged public var sibionics2: Sibionics2?
+
+    /// iCan (Sinocare) CGM peripheral.
+    @NSManaged public var iCan: ICan?
     
     /// sensorSerialNumber of last sensor that was read
     @NSManaged public var sensorSerialNumber: String?

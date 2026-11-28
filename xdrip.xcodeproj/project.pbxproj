@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1CA2100A0000000000000001 /* ICan+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */; };
+		1CA210080000000000000001 /* ICan+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210070000000000000001 /* ICan+CoreDataProperties.swift */; };
+		1CA210060000000000000001 /* ICan+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210050000000000000001 /* ICan+CoreDataClass.swift */; };
 		1CA2100B0000000000000001 /* ICanProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA2100C0000000000000001 /* ICanProtocolTests.swift */; };
 		1CA210020000000000000001 /* ICanProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210010000000000000001 /* ICanProtocol.swift */; };
 		A19A00370000000000000001 /* RepeatingAlarmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19A00370000000000000002 /* RepeatingAlarmTests.swift */; };
@@ -1035,6 +1038,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
+		1CA210070000000000000001 /* ICan+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+CoreDataProperties.swift"; sourceTree = "<group>"; };
+		1CA210050000000000000001 /* ICan+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+CoreDataClass.swift"; sourceTree = "<group>"; };
 		1CA2100C0000000000000001 /* ICanProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICanProtocolTests.swift; sourceTree = "<group>"; };
 		1CA210010000000000000001 /* ICanProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICanProtocol.swift; sourceTree = "<group>"; };
 		A19A00370000000000000002 /* RepeatingAlarmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepeatingAlarmTests.swift; sourceTree = "<group>"; };
@@ -2249,6 +2255,7 @@
 		D3E3000D0000000000000001 /* xdrip v33 Sibionics.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v33 Sibionics.xcdatamodel"; sourceTree = "<group>"; };
 		D3E4000D0000000000000001 /* xdrip v34 Sibionics.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v34 Sibionics.xcdatamodel"; sourceTree = "<group>"; };
 		D3E5000D0000000000000001 /* xdrip v38.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v38.xcdatamodel"; sourceTree = "<group>"; };
+		1CA2100F0000000000000001 /* xdrip v39 iCan.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v39 iCan.xcdatamodel"; sourceTree = "<group>"; };
 		D3E400020000000000000001 /* Sibionics2Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Configuration.swift; sourceTree = "<group>"; };
 		D3E500020000000000000001 /* Sibionics2Calibrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sibionics2Calibrator.swift; sourceTree = "<group>"; };
 		FFE7AB5B458803F795CE6EA9 /* Libre3HistoricalBackfill.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Libre3HistoricalBackfill.swift; path = Libre3HistoricalBackfill.swift; sourceTree = "<group>"; };
@@ -3873,6 +3880,8 @@
 		F8EA6CA421B9A25B0082976B /* classes */ = {
 			isa = PBXGroup;
 			children = (
+				1CA210070000000000000001 /* ICan+CoreDataProperties.swift */,
+				1CA210050000000000000001 /* ICan+CoreDataClass.swift */,
 				D3E300020000000000000001 /* Sibionics2+CoreDataClass.swift */,
 				D3E300040000000000000001 /* Sibionics2+CoreDataProperties.swift */,
 				327E7A39ACA06F8CA491D1F3 /* Libre3+CoreDataClass.swift */,
@@ -4052,6 +4061,7 @@
 		F8F971AE23A5914C00C3F17D /* CGM */ = {
 			isa = PBXGroup;
 			children = (
+				1CA2100E0000000000000001 /* ICan peripheral group */,
 				D3E300100000000000000001 /* Sibionics2 peripheral group */,
 				F8DF765923E350B100063910 /* Dexcom */,
 				F808D2CF240329D40084B5DB /* Libre */,
@@ -4339,6 +4349,14 @@
 			isa = PBXGroup;
 			children = (
 				1CA210010000000000000001 /* ICanProtocol.swift */,
+			);
+			path = ICan;
+			sourceTree = "<group>";
+		};
+		1CA2100E0000000000000001 /* ICan peripheral group */ = {
+			isa = PBXGroup;
+			children = (
+				1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */,
 			);
 			path = ICan;
 			sourceTree = "<group>";
@@ -4992,6 +5010,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1CA2100A0000000000000001 /* ICan+BluetoothPeripheral.swift in Sources */,
+				1CA210080000000000000001 /* ICan+CoreDataProperties.swift in Sources */,
+				1CA210060000000000000001 /* ICan+CoreDataClass.swift in Sources */,
 				1CA210020000000000000001 /* ICanProtocol.swift in Sources */,
 				A1B200043102000100000001 /* Sibionics2FactorySensitivity.swift in Sources */,
 				A1B200023102000100000001 /* Sibionics2GlucoseProcessor.swift in Sources */,
@@ -6780,6 +6801,7 @@
 		F85FF3C2252D0C32004E6FF1 /* xdrip.xcdatamodeld */ = {
 			isa = XCVersionGroup;
 			children = (
+				1CA2100F0000000000000001 /* xdrip v39 iCan.xcdatamodel */,
 				D3E5000D0000000000000001 /* xdrip v38.xcdatamodel */,
 				D3E3000D0000000000000001 /* xdrip v33 Sibionics.xcdatamodel */,
 				D3E4000D0000000000000001 /* xdrip v34 Sibionics.xcdatamodel */,
@@ -6811,7 +6833,7 @@
 				F85FF3C3252D0C32004E6FF1 /* xdrip v12.xcdatamodel */,
 				F7936B31E35D82919DCDE294 /* xdrip v33.xcdatamodel */,
 			);
-			currentVersion = D3E5000D0000000000000001 /* xdrip v38.xcdatamodel */;
+			currentVersion = 1CA2100F0000000000000001 /* xdrip v39 iCan.xcdatamodel */;
 			path = xdrip.xcdatamodeld;
 			sourceTree = "<group>";
 			versionGroupType = wrapper.xcdatamodel;
