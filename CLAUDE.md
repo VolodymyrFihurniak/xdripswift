@@ -262,6 +262,17 @@ Quick treatment logging (`AppShortcuts.swift`): `LogCarbsIntent` / `LogInsulinIn
 Action button; unlocked phone only) save a `TreatmentEntry` like the editor (`QuickTreatmentLog`, app's store
 when running, else `CoreDataManager.create`) and request a Nightscout sync. Strings in `Localizable.strings`.
 
+iCan (Sinocare) i3/i6 CGM (`docs/ican.md`, JugglucoNG `drivers/icanhealth`; **uncompiled, never tried on a real sensor**):
+`xDrip/BluetoothTransmitter/CGM/ICan/ICanProtocol.swift` (pure maths: key families, AES-128-CBC frames, F3/F4/F6 handshake, live
+frames, RACP/SN history, timeline; vectors in `ICanProtocolTests` come from a Python port and JugglucoNG's captured frames) and
+`CGMICanTransmitter.swift` (connection; `ICanDeviceStore` keeps per-address state in UserDefaults, cleared with the peripheral).
+Own Core Data entity `ICan` (model `xdrip v39 iCan` = v38 + entity, only a link to `BLEPeripheral`), `BluetoothPeripheralType.iCanType`,
+`CGMTransmitterType.iCan` (own switch cases everywhere; `NoCalibrator`, readings from the sensor's own algorithm). Foreground scan with
+no service filter, first connect takes the first name that looks like an iCan sensor (no picker). Skipped on purpose: vendor cloud and
+provisioning, native-library rebuild, finger calibration (CE), battery, original-history RACP phase, direct 16-bit encoding, ENDED
+28-day cap, covered-edge persistence, `0x1A`/`F2`/`F7` writes, history beyond 24 h. JugglucoNG's hyphenated `h6-14/15/7` checks never
+match and are ported as they are.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new
