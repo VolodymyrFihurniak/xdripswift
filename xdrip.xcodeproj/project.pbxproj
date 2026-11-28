@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3A5D00190000000000000001 /* MQDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00180000000000000001 /* MQDriverTests.swift */; };
 		3A5D00080000000000000001 /* CGMMQTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00070000000000000001 /* CGMMQTransmitter.swift */; };
 		3A5D000E0000000000000001 /* MQ+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D000D0000000000000001 /* MQ+CoreDataProperties.swift */; };
 		3A5D000C0000000000000001 /* MQ+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D000B0000000000000001 /* MQ+CoreDataClass.swift */; };
@@ -1066,6 +1067,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		3A5D00180000000000000001 /* MQDriverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQDriverTests.swift; sourceTree = "<group>"; };
 		3A5D00070000000000000001 /* CGMMQTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMMQTransmitter.swift; sourceTree = "<group>"; };
 		3A5D000F0000000000000001 /* xdrip v42 MQ.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = "xdrip v42 MQ.xcdatamodel"; sourceTree = "<group>"; };
 		3A5D000D0000000000000001 /* MQ+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MQ+CoreDataProperties.swift"; sourceTree = "<group>"; };
@@ -2996,6 +2998,7 @@
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
+				3A5D00180000000000000001 /* MQDriverTests.swift */,
 				3A5D00160000000000000001 /* MQSessionTests.swift */,
 				3A5D00140000000000000001 /* MQAlgorithmTests.swift */,
 				3A5D00120000000000000001 /* MQProtocolTests.swift */,
@@ -5092,6 +5095,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A5D00190000000000000001 /* MQDriverTests.swift in Sources */,
 				3A5D00170000000000000001 /* MQSessionTests.swift in Sources */,
 				3A5D00150000000000000001 /* MQAlgorithmTests.swift in Sources */,
 				3A5D00130000000000000001 /* MQProtocolTests.swift in Sources */,

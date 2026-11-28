@@ -752,3 +752,76 @@ extension Texts_BluetoothPeripheralView {
         }
     }
 }
+
+// MARK: - MQ / Glutec
+
+extension Texts_BluetoothPeripheralView {
+
+    static let mqScanNoticeTitle = NSLocalizedString("mq.scanNoticeTitle", tableName: filename, bundle: .main, value: "MQ / Glutec Sensor Connection", comment: "Title of the notice shown before scanning for an MQ / Glutec sensor")
+    static let mqScanNoticeMessage = NSLocalizedString("mq.scanNoticeMessage", tableName: filename, bundle: .main, value: "This app connects directly to an MQ / Glutec transmitter over Bluetooth and does not use the manufacturer's online service. That service is what gives the official app the sensor's factory sensitivity, so here a value appears only after you enter that sensitivity or calibrate with a fingerstick.\n\nBefore scanning, close the manufacturer's app: a transmitter talks to one phone at a time, and the first connection takes the first MQ transmitter it finds.\n\nScanning works only while this app is open. This driver has not been tried on a real sensor.", comment: "Notice shown before scanning for an MQ / Glutec sensor")
+    static let mqSectionTitle = NSLocalizedString("mq.sectionTitle", tableName: filename, bundle: .main, value: "Glutec CGM", comment: "Device screen section title")
+    static let mqSectionFooter = NSLocalizedString("mq.sectionFooter", tableName: filename, bundle: .main, value: "Glucose is calculated in this app from the sensor current with the manufacturer's algorithm. A value needs a slope: either the factory sensitivity entered below (used from packet 19) or a fingerstick calibration with xDrip's calibration button (after packet 8). Until one of them exists the transmitter is followed but no value is shown. Accuracy has not been compared with a reference. Never tried on a real sensor.", comment: "Footer of the MQ section on the device screen")
+    static let mqBluetoothName = NSLocalizedString("mq.bluetoothName", tableName: filename, bundle: .main, value: "Bluetooth name", comment: "MQ device screen row")
+    static let mqSessionStart = NSLocalizedString("mq.sessionStart", tableName: filename, bundle: .main, value: "Session start", comment: "MQ device screen row")
+    static let mqExpectedEnd = NSLocalizedString("mq.expectedEnd", tableName: filename, bundle: .main, value: "Expected end", comment: "MQ device screen row")
+    static let mqPacketNumber = NSLocalizedString("mq.packetNumber", tableName: filename, bundle: .main, value: "Latest packet number", comment: "MQ device screen row")
+    static let mqBattery = NSLocalizedString("mq.battery", tableName: filename, bundle: .main, value: "Battery (raw value)", comment: "MQ device screen row: the transmitter's raw battery byte, not a percentage")
+    static let mqLastReading = NSLocalizedString("mq.lastReading", tableName: filename, bundle: .main, value: "Last reading", comment: "MQ device screen row")
+    static let mqWaitingForReading = NSLocalizedString("mq.waitingForReading", tableName: filename, bundle: .main, value: "Waiting for a reading", comment: "MQ device screen row detail")
+    static let mqCalculation = NSLocalizedString("mq.calculation", tableName: filename, bundle: .main, value: "Glucose calculation", comment: "MQ device screen row")
+    static let mqCalculationNeedsInput = NSLocalizedString("mq.calculationNeedsInput", tableName: filename, bundle: .main, value: "Needs a sensitivity or a fingerstick", comment: "MQ device screen row detail")
+    static let mqCalculationFromSensitivity = NSLocalizedString("mq.calculationFromSensitivity", tableName: filename, bundle: .main, value: "Slope comes from the sensitivity at packet 19", comment: "MQ device screen row detail")
+    static let mqSlopeFormat = NSLocalizedString("mq.slopeFormat", tableName: filename, bundle: .main, value: "Slope %.2f", comment: "MQ device screen row detail. %.2f is the solved slope")
+    static let mqLastLinkProblem = NSLocalizedString("mq.lastLinkProblem", tableName: filename, bundle: .main, value: "Last link problem", comment: "MQ device screen row")
+    static let mqNoLinkProblem = NSLocalizedString("mq.noLinkProblem", tableName: filename, bundle: .main, value: "None since the last reading", comment: "MQ device screen row detail")
+    static let mqProblemLinkLost = NSLocalizedString("mq.problemLinkLost", tableName: filename, bundle: .main, value: "Link lost", comment: "MQ link problem")
+    static let mqProblemNotAnMQ = NSLocalizedString("mq.problemNotAnMQ", tableName: filename, bundle: .main, value: "Device is not an MQ transmitter", comment: "MQ link problem")
+    static let mqProblemNotificationsFailed = NSLocalizedString("mq.problemNotificationsFailed", tableName: filename, bundle: .main, value: "Notifications could not be switched on", comment: "MQ link problem")
+    static let mqProblemNoFramesAfterConnect = NSLocalizedString("mq.problemNoFramesAfterConnect", tableName: filename, bundle: .main, value: "Connected, but the transmitter sent nothing", comment: "MQ link problem")
+    static let mqProblemLinkSilent = NSLocalizedString("mq.problemLinkSilent", tableName: filename, bundle: .main, value: "The transmitter went silent", comment: "MQ link problem")
+    static let mqProblemNoGlucose = NSLocalizedString("mq.problemNoGlucose", tableName: filename, bundle: .main, value: "No glucose for a long time while connected", comment: "MQ link problem")
+    static let mqProblemBeginWorkLoop = NSLocalizedString("mq.problemBeginWorkLoop", tableName: filename, bundle: .main, value: "The transmitter kept restarting its session", comment: "MQ link problem")
+    static let mqProblemWriteFailed = NSLocalizedString("mq.problemWriteFailed", tableName: filename, bundle: .main, value: "A command could not be written", comment: "MQ link problem")
+    static let mqInputsTitle = NSLocalizedString("mq.inputsTitle", tableName: filename, bundle: .main, value: "Algorithm inputs", comment: "Title of the section with the values the manufacturer's service would supply")
+    static let mqInputsFooter = NSLocalizedString("mq.inputsFooter", tableName: filename, bundle: .main, value: "Without the manufacturer's service this app does not know these values. Leave them as they are unless you know them. Changing any of them discards the slope solved so far; readings already shown are not changed. The defaults are the built-in values of the app this driver comes from (version 0, 720 packages, multiplier 1.1); the traces in its notes showed version 1, 720 packages and multiplier 1.0.", comment: "Footer of the MQ algorithm inputs section")
+    static let mqSensitivity = NSLocalizedString("mq.sensitivity", tableName: filename, bundle: .main, value: "Sensitivity", comment: "MQ device screen row: the factory sensitivity of the sensor")
+    static let mqSensitivityNotSet = NSLocalizedString("mq.sensitivityNotSet", tableName: filename, bundle: .main, value: "Not set", comment: "MQ device screen row detail")
+    static let mqSensitivityMessage = NSLocalizedString("mq.sensitivityMessage", tableName: filename, bundle: .main, value: "The factory sensitivity of the sensor, for example 2.93: a value from 0.1 to 99.9. Leave empty to use a fingerstick instead. Choose the scale below too: a wrong scale gives values far off.", comment: "Explains the MQ sensitivity entry")
+    static let mqSensitivityScale = NSLocalizedString("mq.sensitivityScale", tableName: filename, bundle: .main, value: "Sensitivity scale", comment: "MQ device screen row")
+    static let mqSensitivityScaleMessage = NSLocalizedString("mq.sensitivityScaleMessage", tableName: filename, bundle: .main, value: "The manufacturer's service tells the official app whether the sensitivity is used as it is or multiplied by ten. Not knowing it means the sensitivity is not used.", comment: "Explains the MQ sensitivity scale choice")
+    static let mqScaleUnknown = NSLocalizedString("mq.scaleUnknown", tableName: filename, bundle: .main, value: "Not known", comment: "MQ sensitivity scale choice")
+    static let mqScaleAsEntered = NSLocalizedString("mq.scaleAsEntered", tableName: filename, bundle: .main, value: "Use as entered", comment: "MQ sensitivity scale choice")
+    static let mqScaleTimesTen = NSLocalizedString("mq.scaleTimesTen", tableName: filename, bundle: .main, value: "Multiply by ten", comment: "MQ sensitivity scale choice")
+    static let mqAlgorithmVersion = NSLocalizedString("mq.algorithmVersion", tableName: filename, bundle: .main, value: "Algorithm version", comment: "MQ device screen row")
+    static let mqAlgorithmVersionFormat = NSLocalizedString("mq.algorithmVersionFormat", tableName: filename, bundle: .main, value: "Version %d", comment: "MQ algorithm version choice. %d is the version number")
+    static let mqPackages = NSLocalizedString("mq.packages", tableName: filename, bundle: .main, value: "Packages per session", comment: "MQ device screen row")
+    static let mqPackagesMessage = NSLocalizedString("mq.packagesMessage", tableName: filename, bundle: .main, value: "A whole number from 1 to 2000, the number of data packages the manufacturer expects in a session.", comment: "Explains the MQ packages entry")
+    static let mqMultiplier = NSLocalizedString("mq.multiplier", tableName: filename, bundle: .main, value: "Multiplier", comment: "MQ device screen row")
+    static let mqMultiplierMessage = NSLocalizedString("mq.multiplierMessage", tableName: filename, bundle: .main, value: "A number from 0.5 to 3, the factor the manufacturer applies to the sensor current at the start of a session.", comment: "Explains the MQ multiplier entry")
+    static let mqReset = NSLocalizedString("mq.reset", tableName: filename, bundle: .main, value: "Reset transmitter", comment: "MQ device screen row")
+    static let mqResetConfirmTitle = NSLocalizedString("mq.resetConfirmTitle", tableName: filename, bundle: .main, value: "Reset the transmitter?", comment: "Confirmation title before resetting an MQ transmitter")
+    static let mqResetConfirmMessage = NSLocalizedString("mq.resetConfirmMessage", tableName: filename, bundle: .main, value: "This sends a reset command to the transmitter and forgets the current session here. Continue only if you intend to start a new session.", comment: "Confirmation message before resetting an MQ transmitter")
+    static let mqResetSent = NSLocalizedString("mq.resetSent", tableName: filename, bundle: .main, value: "The reset command was sent. The transmitter starts a new session.", comment: "Result of the MQ reset")
+    static let mqResetNotSent = NSLocalizedString("mq.resetNotSent", tableName: filename, bundle: .main, value: "The reset command could not be sent. The transmitter must be connected.", comment: "Result of the MQ reset")
+
+    static func mqProblem(_ problem: MQLinkProblem) -> String {
+        switch problem {
+        case .linkLost: return mqProblemLinkLost
+        case .notAnMQ: return mqProblemNotAnMQ
+        case .notificationsFailed: return mqProblemNotificationsFailed
+        case .noFramesAfterConnect: return mqProblemNoFramesAfterConnect
+        case .linkSilent: return mqProblemLinkSilent
+        case .noGlucose: return mqProblemNoGlucose
+        case .beginWorkLoop: return mqProblemBeginWorkLoop
+        case .writeFailed: return mqProblemWriteFailed
+        }
+    }
+
+    static func mqSensitivityScaleTitle(_ scale: MQSensitivityScale) -> String {
+        switch scale {
+        case .unknown: return mqScaleUnknown
+        case .asEntered: return mqScaleAsEntered
+        case .timesTen: return mqScaleTimesTen
+        }
+    }
+}

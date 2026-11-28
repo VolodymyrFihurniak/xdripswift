@@ -543,3 +543,32 @@ enum MQCalibrationInput {
         return mgdl >= minimumMgDl && mgdl <= maximumMgDl
     }
 }
+
+// MARK: - Input text
+
+/// How the device screen reads the numbers the user types and shows the stored ones.
+enum MQInputText {
+
+    /// A decimal number written with digits and one point (a comma counts as the point); no sign,
+    /// exponent, hexadecimal or special value.
+    static func decimal(_ text: String) -> Float? {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
+        guard !cleaned.isEmpty, cleaned.allSatisfy({ $0.isASCII && ($0.isNumber || $0 == ".") }),
+              cleaned.filter({ $0 == "." }).count <= 1,
+              let value = Float(cleaned), value.isFinite else { return nil }
+        return value
+    }
+
+    /// A whole number of at most six digits.
+    static func integer(_ text: String) -> Int? {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty, cleaned.count <= 6, cleaned.allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return Int(cleaned)
+    }
+
+    /// The shortest text of the stored value: 29.3, 2 or 1.1 (never 29.299999).
+    static func format(_ value: Float) -> String {
+        let text = String(value)
+        return text.hasSuffix(".0") ? String(text.dropLast(2)) : text
+    }
+}
