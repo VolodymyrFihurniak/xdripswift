@@ -350,6 +350,11 @@ speech uses `uk.lproj/SpeakReading.strings`; permission prompts `InfoPlist.strin
 
 ## Not ported (yet)
 
+Automatic sensor handover (JugglucoNG `SensorHandoverRuntime`, `ManagedSensorHandoff`, `MultiSensorSelection`): not ported. It
+relies on several sensors running at once and one of them taking over as primary when the other reaches its official end.
+xDrip4iOS keeps exactly one active CGM transmitter and one active `Sensor`, so a switch at expiry would only automate what the
+user does by hand and would not remove the gap the handover exists to close. It needs a multi-sensor architecture first.
+
 NovoPen unattended background read: iOS opens an NFC session only on the user's tap (no background
 ISO 7816 reading), so a pen is always read from the Insulin pens screen.
 
