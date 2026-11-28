@@ -48,6 +48,7 @@ enum TroubleshootingLogSource: String, Codable {
     case aiDex
     case anytime
     case mq
+    case ottai
     case nightscout
     case libreLinkUp
     case libreLinkUpRussia
@@ -113,6 +114,8 @@ enum TroubleshootingLogSource: String, Codable {
             self = .anytime
         case .mq:
             self = .mq
+        case .ottai:
+            self = .ottai
         }
     }
 
@@ -161,6 +164,8 @@ enum TroubleshootingLogSource: String, Codable {
             self = .anytime
         case .mqType:
             self = .mq
+        case .ottaiType:
+            self = .ottai
         case .M5StackType, .M5StickCType, .Libre3HeartBeatType,
              .DexcomG7HeartBeatType, .OmniPodHeartBeatType:
             return nil
@@ -190,6 +195,7 @@ enum TroubleshootingLogSource: String, Codable {
         case .aiDex: return "AiDex"
         case .anytime: return "Anytime"
         case .mq: return "MQ"
+        case .ottai: return "Ottai"
         case .nightscout: return "Nightscout"
         case .libreLinkUp: return "LibreLinkUp"
         case .libreLinkUpRussia: return "LibreLinkUp Russia"
@@ -209,7 +215,7 @@ enum TroubleshootingLogSource: String, Codable {
             return true
         case .dexcom, .dexcomG5, .dexcomG6, .dexcomOne, .dexcomG7, .dexcomOnePlus,
              .dexcomStelo, .miaoMiao, .bubble, .libre3, .libre2, .libre2EU, .libre2PlusEU,
-             .medtrumNano, .sibionics1, .sibionics2, .iCan, .aiDex, .anytime, .mq:
+             .medtrumNano, .sibionics1, .sibionics2, .iCan, .aiDex, .anytime, .mq, .ottai:
             return false
         }
     }

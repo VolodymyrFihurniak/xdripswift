@@ -213,6 +213,9 @@ enum CGMTransmitterType:String, CaseIterable {
     /// MQ / Glutec CGM. Keep this raw value stable because it is persisted in UserDefaults.
     case mq = "MQ"
 
+    /// Ottai / Syai CGM. Keep this raw value stable because it is persisted in UserDefaults.
+    case ottai = "Ottai"
+
     /// Direct Medtrum Nano glucose is already consumed by the connected pump and must not be
     /// exported as an independent CGM source to another OS-AID system.
     var osAidSharingPolicy: OSAidSharingPolicy {
@@ -252,6 +255,9 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .mq:
             return .mq
+
+        case .ottai:
+            return .ottai
 
         }
         
@@ -305,6 +311,10 @@ enum CGMTransmitterType:String, CaseIterable {
             // a new run is detected when the transmitter starts a session (BEGIN_WORK) or its packet counter restarts
             return true
 
+        case .ottai:
+            // a new sensor is detected from the box id and the activation time the sensor reports
+            return true
+
         }
     }
     
@@ -345,6 +355,10 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .mq:
             // the transmitter starts its own session, xDrip only follows it
+            return false
+
+        case .ottai:
+            // the sensor is started with the vendor app, xDrip only follows its session
             return false
 
         }
@@ -388,6 +402,9 @@ enum CGMTransmitterType:String, CaseIterable {
         case .mq:
             return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
 
+        case .ottai:
+            return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
+
         }
     }
     
@@ -428,6 +445,9 @@ enum CGMTransmitterType:String, CaseIterable {
             return ""
 
         case .mq:
+            return ""
+
+        case .ottai:
             return ""
 
         }
@@ -496,6 +516,9 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .mq:
             return MQConstants.defaultDisplayName
+
+        case .ottai:
+            return OttaiConstants.displayName
             
         default:
             return self.rawValue

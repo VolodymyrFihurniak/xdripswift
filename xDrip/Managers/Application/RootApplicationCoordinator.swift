@@ -2129,6 +2129,10 @@ import AppIntents
             // The driver turns the sensor's record into mg/dL itself (transmitter value on CT5, the vendor models on CT2 and CT4); xDrip does not calibrate them.
             calibrator = NoCalibrator()
 
+        case .ottai:
+            // The driver evaluates the sensor's own expression and coefficients (user-supplied sensor material) into mg/dL; xDrip does not calibrate it.
+            calibrator = NoCalibrator()
+
         case .mq:
             // The driver's own port of the transmitter algorithm turns the raw current into mg/dL; a fingerstick moves its reference inside the driver, xDrip's calibrator is not used.
             calibrator = NoCalibrator()
@@ -2902,7 +2906,7 @@ import AppIntents
             }
             startDate = sensorStartDate ?? startDate
             switch transmitter?.cgmTransmitterType().sensorType() {
-            case .Libre, .Sibionics2, .iCan, .aiDex, .anytime, .mq:
+            case .Libre, .Sibionics2, .iCan, .aiDex, .anytime, .mq, .ottai:
                 duration = transmitter?.sensorWarmupDurationInMinutes() ?? ConstantsMaster.minimumSensorWarmUpRequiredInMinutes
             case .Dexcom:
                 if transmitter?.cgmTransmitterType() == .dexcomG7 {

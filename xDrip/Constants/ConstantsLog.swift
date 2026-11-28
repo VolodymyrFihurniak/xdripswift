@@ -118,6 +118,9 @@ enum ConstantsLog {
     /// MQ / Glutec cgm
     static let categoryCGMMQ =                              "CGMMQ                         "
 
+    /// Ottai / Syai cgm
+    static let categoryCGMOttai =                           "CGMOttai                      "
+
     /// alertmanager
     static let categoryAlertManager =                       "AlertManager                  "
     
