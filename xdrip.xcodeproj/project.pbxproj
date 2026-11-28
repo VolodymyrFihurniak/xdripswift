@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1CA2100B0000000000000001 /* ICanProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA2100C0000000000000001 /* ICanProtocolTests.swift */; };
+		1CA210020000000000000001 /* ICanProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210010000000000000001 /* ICanProtocol.swift */; };
 		A19A00370000000000000001 /* RepeatingAlarmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19A00370000000000000002 /* RepeatingAlarmTests.swift */; };
 		7E7760013000000100000001 /* SensorExpiryReminderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7760013000000100000002 /* SensorExpiryReminderManager.swift */; };
 		7E7760013000000100000003 /* SensorExpiryReminderManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7760013000000100000004 /* SensorExpiryReminderManagerTests.swift */; };
@@ -1033,6 +1035,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1CA2100C0000000000000001 /* ICanProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICanProtocolTests.swift; sourceTree = "<group>"; };
+		1CA210010000000000000001 /* ICanProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICanProtocol.swift; sourceTree = "<group>"; };
 		A19A00370000000000000002 /* RepeatingAlarmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepeatingAlarmTests.swift; sourceTree = "<group>"; };
 		7E7760013000000100000002 /* SensorExpiryReminderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorExpiryReminderManager.swift; sourceTree = "<group>"; };
 		7E7760013000000100000004 /* SensorExpiryReminderManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorExpiryReminderManagerTests.swift; sourceTree = "<group>"; };
@@ -2926,6 +2930,7 @@
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
+				1CA2100C0000000000000001 /* ICanProtocolTests.swift */,
 				C2BBCA83D24E98D08C260FC2 /* Libre3 */,
 				BA0709260000000000000002 /* BasalInjectionTests.swift */,
 				4F3100153007000100000001 /* BatteryHistoryTests.swift */,
@@ -4104,6 +4109,7 @@
 		F8F971BA23A5915900C3F17D /* CGM */ = {
 			isa = PBXGroup;
 			children = (
+				1CA2100D0000000000000001 /* ICan */,
 				F8F971BB23A5915900C3F17D /* Dexcom */,
 				F8F971F023A5915900C3F17D /* Generic */,
 				F8F971D623A5915900C3F17D /* Libre */,
@@ -4327,6 +4333,14 @@
 				6153AEEF5A9ABACAA3B9181E /* Pairing */,
 			);
 			path = Protocol;
+			sourceTree = "<group>";
+		};
+		1CA2100D0000000000000001 /* ICan */ = {
+			isa = PBXGroup;
+			children = (
+				1CA210010000000000000001 /* ICanProtocol.swift */,
+			);
+			path = ICan;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -4925,6 +4939,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1CA2100B0000000000000001 /* ICanProtocolTests.swift in Sources */,
 				51B200063102000100000001 /* Sibionics2ProtocolTests.swift in Sources */,
 				51B210023102000100000001 /* Sibionics2GlucoseProcessorTests.swift in Sources */,
 				D3E200013102000100000001 /* Sibionics2RegistrationAndDeliveryTests.swift in Sources */,
@@ -4977,6 +4992,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1CA210020000000000000001 /* ICanProtocol.swift in Sources */,
 				A1B200043102000100000001 /* Sibionics2FactorySensitivity.swift in Sources */,
 				A1B200023102000100000001 /* Sibionics2GlucoseProcessor.swift in Sources */,
 				51B200023102000100000001 /* Sibionics2Protocol.swift in Sources */,
