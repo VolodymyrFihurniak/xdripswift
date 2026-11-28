@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AE7110040000000000000001 /* CGMAnytimeTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110030000000000000001 /* CGMAnytimeTransmitter.swift */; };
 		AE71100A0000000000000001 /* Anytime+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */; };
 		AE7110080000000000000001 /* Anytime+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110070000000000000001 /* Anytime+CoreDataProperties.swift */; };
 		AE7110060000000000000001 /* Anytime+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110050000000000000001 /* Anytime+CoreDataClass.swift */; };
@@ -1054,6 +1055,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AE7110030000000000000001 /* CGMAnytimeTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMAnytimeTransmitter.swift; sourceTree = "<group>"; };
 		AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
 		AE7110070000000000000001 /* Anytime+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		AE7110050000000000000001 /* Anytime+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+CoreDataClass.swift"; sourceTree = "<group>"; };
@@ -4394,6 +4396,7 @@
 		AE71100D0000000000000001 /* Anytime */ = {
 			isa = PBXGroup;
 			children = (
+				AE7110030000000000000001 /* CGMAnytimeTransmitter.swift */,
 				AE7110120000000000000001 /* AnytimeAlgorithm.swift */,
 				AE7110100000000000000001 /* AnytimeSession.swift */,
 				AE7110010000000000000001 /* AnytimeProtocol.swift */,
@@ -5096,6 +5099,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AE7110040000000000000001 /* CGMAnytimeTransmitter.swift in Sources */,
 				AE71100A0000000000000001 /* Anytime+BluetoothPeripheral.swift in Sources */,
 				AE7110080000000000000001 /* Anytime+CoreDataProperties.swift in Sources */,
 				AE7110060000000000000001 /* Anytime+CoreDataClass.swift in Sources */,

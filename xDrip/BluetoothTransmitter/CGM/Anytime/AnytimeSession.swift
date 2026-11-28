@@ -9,7 +9,7 @@
 //  (GPL-3.0, see THIRD_PARTY_NOTICES.md); the expected values in the tests come from running the
 //  unchanged Kotlin on the JVM.
 //
-//  All classes here are single-threaded: the transmitter calls them from the main queue only, so they
+//  All classes here are single-threaded: the transmitter calls them from its Bluetooth queue only, so they
 //  carry none of the Kotlin `@Synchronized` locking.
 //
 //  Left out on purpose: `AnytimeHistoryRoomImportBuffer` (it feeds JugglucoNG's Room database; the Swift
