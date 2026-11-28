@@ -761,6 +761,20 @@ enum OutboundApiRedactor {
         }
         return result
     }
+
+    /// Everything of a destination that must never reach a stored or shown text: the token, the URL
+    /// and the value of every configured header (an error body can echo any of them). A header value
+    /// such as `Bearer abc` is hidden whole and also by its last word, which is the token itself.
+    static func hiddenValues(for secrets: OutboundApiSecrets) -> [String] {
+        var hidden = [secrets.token, OutboundApiValidation.normalizedTelegramToken(secrets.token), secrets.url]
+        for header in OutboundApiRequestBuilder.parseHeaders(secrets.headers) {
+            hidden.append(header.value)
+            if let lastWord = header.value.split(whereSeparator: { $0 == " " || $0 == "\t" }).last {
+                hidden.append(String(lastWord))
+            }
+        }
+        return hidden
+    }
 }
 
 // MARK: - Secrets
@@ -1058,7 +1072,7 @@ final class OutboundApiDispatcher {
 
     private func record(_ result: OutboundApiDeliveryResult, destination: OutboundApiDestination, secrets: OutboundApiSecrets, now: Date) {
         guard !result.suppressed else { return }
-        let hidden = [secrets.token, OutboundApiValidation.normalizedTelegramToken(secrets.token), secrets.url]
+        let hidden = OutboundApiRedactor.hiddenValues(for: secrets)
         store.updateState(id: destination.id) { state in
             state.lastAttemptAt = now
             state.lastResponseCode = result.code

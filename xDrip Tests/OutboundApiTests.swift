@@ -496,6 +496,14 @@ private final class FakeOutboundTransport: OutboundApiTransport {
                        "token *** and ***")
     }
 
+    func testRedactionAlsoHidesConfiguredHeaderValues() {
+        let secrets = OutboundApiSecrets(token: "", url: "https://example.com/hook",
+                                         headers: "Authorization: Bearer s3cr3t-token\nX-Api-Key: key-12345\nbad line")
+        let hidden = OutboundApiRedactor.hiddenValues(for: secrets)
+        XCTAssertEqual(OutboundApiRedactor.redact("denied: Bearer s3cr3t-token / key-12345 / s3cr3t-token", secrets: hidden),
+                       "denied: *** / *** / ***")
+    }
+
     // MARK: Store
 
     func testSecretsStayOutOfUserDefaults() {
