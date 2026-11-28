@@ -584,3 +584,56 @@ class Texts_BluetoothPeripheralView {
         return String(format: NSLocalizedString("readSuccessTimelineAccessibility", tableName: filename, bundle: Bundle.main, value: "%0.1f percent, %d of %d readings", comment: "Bluetooth peripheral Read Success screen. Accessibility label for an hourly timeline bucket"), success, actual, expected)
     }
 }
+
+// MARK: - iCan
+
+extension Texts_BluetoothPeripheralView {
+
+    static let iCanScanNoticeTitle = NSLocalizedString("ican.scanNoticeTitle", tableName: filename, bundle: .main, value: "iCan Sensor Connection", comment: "Title of the notice shown before scanning for an iCan sensor")
+    static let iCanScanNoticeMessage = NSLocalizedString("ican.scanNoticeMessage", tableName: filename, bundle: .main, value: "This app connects directly to an iCan (Sinocare) i3 or i6 sensor, but it cannot start a sensor. Start the sensor with the manufacturer's app first.\n\nBefore scanning, close the manufacturer's app and keep other iCan sensors out of range: a sensor talks to one phone at a time and the first connection takes the first iCan sensor it finds.\n\nScanning works only while this app is open. This driver has not been tried on a real sensor.", comment: "Notice shown before scanning for an iCan sensor")
+    static let iCanSectionTitle = NSLocalizedString("ican.sectionTitle", tableName: filename, bundle: .main, value: "iCan sensor", comment: "Device screen section title")
+    static let iCanSectionFooter = NSLocalizedString("ican.sectionFooter", tableName: filename, bundle: .main, value: "Values are the sensor's own readings. Finger-stick calibration, battery level and the manufacturer's cloud are not supported. Never tried on a real sensor.", comment: "Footer of the iCan section on the device screen")
+    static let iCanModel = NSLocalizedString("ican.model", tableName: filename, bundle: .main, value: "Model", comment: "iCan device screen row")
+    static let iCanFamily = NSLocalizedString("ican.family", tableName: filename, bundle: .main, value: "Sensor family", comment: "iCan device screen row: product family the driver recognised from the model and serial")
+    static let iCanSoftware = NSLocalizedString("ican.software", tableName: filename, bundle: .main, value: "Software", comment: "iCan device screen row")
+    static let iCanAuthentication = NSLocalizedString("ican.authentication", tableName: filename, bundle: .main, value: "Authentication", comment: "iCan device screen row: vendor handshake result")
+    static let iCanAuthAccepted = NSLocalizedString("ican.authAccepted", tableName: filename, bundle: .main, value: "Accepted", comment: "iCan authentication state")
+    static let iCanAuthRejected = NSLocalizedString("ican.authRejected", tableName: filename, bundle: .main, value: "Rejected", comment: "iCan authentication state")
+    static let iCanAuthNotTried = NSLocalizedString("ican.authNotTried", tableName: filename, bundle: .main, value: "Not tried yet", comment: "iCan authentication state")
+    static let iCanCalibration = NSLocalizedString("ican.calibration", tableName: filename, bundle: .main, value: "Factory calibration", comment: "iCan device screen row: calibration marker reported by the sensor")
+    static let iCanCalibrationNotInstalled = NSLocalizedString("ican.calibrationNotInstalled", tableName: filename, bundle: .main, value: "Not installed", comment: "iCan calibration marker 0xFFFF")
+    static let iCanCalibrationMarkerFormat = NSLocalizedString("ican.calibrationMarkerFormat", tableName: filename, bundle: .main, value: "Marker %d", comment: "iCan calibration marker value")
+    static let iCanSensorState = NSLocalizedString("ican.sensorState", tableName: filename, bundle: .main, value: "Sensor state", comment: "iCan device screen row")
+    static let iCanStateIdle = NSLocalizedString("ican.stateIdle", tableName: filename, bundle: .main, value: "Not started", comment: "iCan sensor state")
+    static let iCanStateWarmup = NSLocalizedString("ican.stateWarmup", tableName: filename, bundle: .main, value: "Warming up", comment: "iCan sensor state")
+    static let iCanStateRunning = NSLocalizedString("ican.stateRunning", tableName: filename, bundle: .main, value: "Running", comment: "iCan sensor state")
+    static let iCanStateEnded = NSLocalizedString("ican.stateEnded", tableName: filename, bundle: .main, value: "Ended", comment: "iCan sensor state")
+    static let iCanStateUnknownFormat = NSLocalizedString("ican.stateUnknownFormat", tableName: filename, bundle: .main, value: "Unknown (%d)", comment: "iCan sensor state byte not recognised")
+    static let iCanSensorStart = NSLocalizedString("ican.sensorStart", tableName: filename, bundle: .main, value: "Session start", comment: "iCan device screen row")
+    static let iCanExpectedEnd = NSLocalizedString("ican.expectedEnd", tableName: filename, bundle: .main, value: "Expected end", comment: "iCan device screen row: session start plus the rated life of the model")
+    static let iCanLastReading = NSLocalizedString("ican.lastReading", tableName: filename, bundle: .main, value: "Last reading", comment: "iCan device screen row")
+    static let iCanWaitingForReading = NSLocalizedString("ican.waitingForReading", tableName: filename, bundle: .main, value: "Waiting for reading", comment: "iCan device screen row before the first reading")
+    static let iCanLastLinkProblem = NSLocalizedString("ican.lastLinkProblem", tableName: filename, bundle: .main, value: "Last link problem", comment: "iCan device screen row")
+    static let iCanNoLinkProblem = NSLocalizedString("ican.noLinkProblem", tableName: filename, bundle: .main, value: "None since the last reading", comment: "iCan device screen row")
+    static let iCanProblemLinkLost = NSLocalizedString("ican.problemLinkLost", tableName: filename, bundle: .main, value: "Link lost", comment: "iCan link problem")
+    static let iCanProblemNoAnswer = NSLocalizedString("ican.problemNoAnswer", tableName: filename, bundle: .main, value: "Sensor not responding", comment: "iCan link problem")
+    static let iCanProblemRejected = NSLocalizedString("ican.problemRejected", tableName: filename, bundle: .main, value: "Authentication rejected", comment: "iCan link problem")
+    static let iCanProblemNoReadings = NSLocalizedString("ican.problemNoReadings", tableName: filename, bundle: .main, value: "No readings while connected", comment: "iCan link problem")
+    static let iCanProblemHistoryRefused = NSLocalizedString("ican.problemHistoryRefused", tableName: filename, bundle: .main, value: "History request refused", comment: "iCan link problem")
+    static let iCanProblemNotACGM = NSLocalizedString("ican.problemNotACGM", tableName: filename, bundle: .main, value: "Device is not an iCan sensor", comment: "iCan link problem")
+    static let iCanProblemNotStarted = NSLocalizedString("ican.problemNotStarted", tableName: filename, bundle: .main, value: "Sensor not started: start it with the manufacturer's app", comment: "iCan link problem")
+    static let iCanProblemEnded = NSLocalizedString("ican.problemEnded", tableName: filename, bundle: .main, value: "Sensor session ended", comment: "iCan link problem")
+
+    static func iCanProblem(_ problem: ICanLinkProblem) -> String {
+        switch problem {
+        case .linkLost: return iCanProblemLinkLost
+        case .noAuthenticationAnswer: return iCanProblemNoAnswer
+        case .authenticationRejected: return iCanProblemRejected
+        case .noReadings: return iCanProblemNoReadings
+        case .historyRefused: return iCanProblemHistoryRefused
+        case .notACGM: return iCanProblemNotACGM
+        case .sensorNotStarted: return iCanProblemNotStarted
+        case .sensorEnded: return iCanProblemEnded
+        }
+    }
+}

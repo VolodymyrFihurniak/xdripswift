@@ -174,7 +174,7 @@ class BluetoothPeripheralManager: NSObject {
                         _ = m5StackBluetoothTransmitter.writeBgReadingInfo(bgReading: bgReadingToSend[0])
                     }
                     
-                case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3Type, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics1Type, .Sibionics2Type:
+                case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3Type, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics1Type, .Sibionics2Type, .iCanType:
                     // cgm's don't receive reading, they send it
                     break
                     
@@ -422,6 +422,14 @@ class BluetoothPeripheralManager: NSObject {
                         newTransmitter = CGMSibionics2Transmitter(address: bluetoothPeripheral.blePeripheral.address, name: bluetoothPeripheral.blePeripheral.name, variant: sibionics.variant, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate)
                     }
 
+                case .iCanType:
+
+                    if let ican = bluetoothPeripheral as? ICan, let cgmTransmitterDelegate = cgmTransmitterDelegate {
+                        newTransmitter = CGMICanTransmitter(address: ican.blePeripheral.address, name: ican.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+                    } else {
+                        trace("in getBluetoothTransmitter, case iCanType but the peripheral is not an ICan or cgmTransmitterDelegate is nil, looks like a coding error ", log: log, category: ConstantsLog.categoryBluetoothPeripheralManager, type: .error)
+                    }
+
                 }
                 
                 
@@ -509,6 +517,11 @@ class BluetoothPeripheralManager: NSObject {
             case .Sibionics1Type, .Sibionics2Type:
                 if let transmitter = bluetoothTransmitter as? CGMSibionics2Transmitter {
                     return transmitter.variant.peripheralType
+                }
+
+            case .iCanType:
+                if bluetoothTransmitter is CGMICanTransmitter {
+                    return .iCanType
                 }
                 
             }
@@ -612,6 +625,14 @@ class BluetoothPeripheralManager: NSObject {
             }
 
             return CGMSibionics2Transmitter(address: nil, name: nil, variant: type == .Sibionics1Type ? .sibionics1 : .sibionics2, bluetoothTransmitterDelegate: bluetoothTransmitterDelegate ?? self, cGMTransmitterDelegate: cgmTransmitterDelegate)
+
+        case .iCanType:
+
+            guard let cgmTransmitterDelegate = cgmTransmitterDelegate else {
+                fatalError("in createNewTransmitter, iCanType, cgmTransmitterDelegate is nil")
+            }
+
+            return CGMICanTransmitter(address: nil, name: nil, bluetoothTransmitterDelegate: bluetoothTransmitterDelegate ?? self, cGMTransmitterDelegate: cgmTransmitterDelegate)
             
         }
         
@@ -1109,6 +1130,30 @@ class BluetoothPeripheralManager: NSObject {
                         break bluetoothPeripheralTypeLoop
                     }
 
+                case .iCanType:
+
+                    if let ican = blePeripheral.iCan {
+
+                        blePeripheralFound = true
+
+                        let index = insertInBluetoothPeripherals(bluetoothPeripheral: ican)
+
+                        if ican.blePeripheral.shouldconnect {
+
+                            bluetoothTransmitters.insert(CGMICanTransmitter(address: ican.blePeripheral.address, name: ican.blePeripheral.name, bluetoothTransmitterDelegate: self, cGMTransmitterDelegate: cgmTransmitterDelegate), at: index)
+
+                            if bluetoothPeripheralType.category() == .CGM {
+                                currentCgmTransmitterAddress = blePeripheral.address
+                            }
+
+                        } else {
+
+                            bluetoothTransmitters.insert(nil, at: index)
+
+                        }
+
+                    }
+
                 }
 
             }
@@ -1228,7 +1273,7 @@ class BluetoothPeripheralManager: NSObject {
                     bluetoothPeripheral.blePeripheral.parameterUpdateNeededAtNextConnect = true
                 }
              
-            case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3Type, .Libre3HeartBeatType, .DexcomG7HeartBeatType, .OmniPodHeartBeatType, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics1Type, .Sibionics2Type:
+            case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3Type, .Libre3HeartBeatType, .DexcomG7HeartBeatType, .OmniPodHeartBeatType, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics1Type, .Sibionics2Type, .iCanType:
 
                 // nothing to check
                 break
@@ -1424,6 +1469,10 @@ extension BluetoothPeripheralManager: BluetoothPeripheralManaging {
             Sibionics2DeviceStatus.clear(for: bluetoothPeripheral.blePeripheral.address)
             Sibionics2ConnectionLog.clear(for: bluetoothPeripheral.blePeripheral.address)
             SibionicsSkinTemperatureStore.clear(for: bluetoothPeripheral.blePeripheral.address)
+        }
+
+        if bluetoothPeripheral.bluetoothPeripheralType() == .iCanType {
+            ICanDeviceStore.clear(address: bluetoothPeripheral.blePeripheral.address)
         }
 
         if let dexcomG7 = bluetoothPeripheral as? DexcomG7 {

@@ -201,6 +201,9 @@ enum CGMTransmitterType:String, CaseIterable {
     /// Sibionics 2 V120 CGM with stock V116A correction.
     case sibionics2 = "Sibionics 2"
 
+    /// iCan (Sinocare) i3/i6 CGM. Keep this raw value stable because it is persisted in UserDefaults.
+    case iCan = "iCan"
+
     /// Direct Medtrum Nano glucose is already consumed by the connected pump and must not be
     /// exported as an independent CGM source to another OS-AID system.
     var osAidSharingPolicy: OSAidSharingPolicy {
@@ -228,6 +231,9 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .sibionics2:
             return .Sibionics2
+
+        case .iCan:
+            return .iCan
 
         }
         
@@ -265,6 +271,10 @@ enum CGMTransmitterType:String, CaseIterable {
         case .sibionics2:
             return true
 
+        case .iCan:
+            // the sensor start is derived from the sequence counter (minutes since session start)
+            return true
+
         }
     }
     
@@ -289,6 +299,10 @@ enum CGMTransmitterType:String, CaseIterable {
             return false
 
         case .sibionics2:
+            return false
+
+        case .iCan:
+            // the sensor is started with the vendor app, xDrip only follows its session
             return false
 
         }
@@ -320,6 +334,9 @@ enum CGMTransmitterType:String, CaseIterable {
         case .sibionics2:
             return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
 
+        case .iCan:
+            return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
+
         }
     }
     
@@ -348,6 +365,9 @@ enum CGMTransmitterType:String, CaseIterable {
             return ""
 
         case .sibionics2:
+            return ""
+
+        case .iCan:
             return ""
 
         }

@@ -10,4 +10,6 @@ enum CGMSensorType:String, CaseIterable {
 
     case Sibionics2 = "Sibionics 2"
 
+    case iCan = "iCan"
+
 }
