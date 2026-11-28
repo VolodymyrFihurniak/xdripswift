@@ -937,6 +937,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             return makeICanSections(bluetoothPeripheral: bluetoothPeripheral)
         case .aiDexType:
             return makeAiDexSections(bluetoothPeripheral: bluetoothPeripheral)
+        case .anytimeType:
+            return makeAnytimeSections(bluetoothPeripheral: bluetoothPeripheral)
         case .M5StackType:
             return makeM5StackSections(bluetoothPeripheral: bluetoothPeripheral, includesSpecificM5StackSection: true)
         case .M5StickCType:
@@ -3884,6 +3886,114 @@ private extension BluetoothPeripheralDetailState {
         ]
     }
 
+    /// Identity, battery, electrode currents and link status of an Anytime sensor, read from the per-address
+    /// state the transmitter keeps.
+    func makeAnytimeSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        guard bluetoothPeripheral is Anytime else { return [] }
+
+        let address = bluetoothPeripheral.blePeripheral.address
+        let state = AnytimeDeviceStore.load(address: address)
+        let now = Date()
+
+        let family = state.family.flatMap { AnytimeFamily(rawValue: $0) }
+        let profile = AnytimeProfileResolver.resolve(state.advertisedName)
+
+        var sessionStart: Date?
+        if state.sensorStartMs > 0 {
+            sessionStart = Date(timeIntervalSince1970: Double(state.sensorStartMs) / 1000)
+        }
+        // The rated life is advisory: the transmitter and the sensor decide when the session ends.
+        let expectedEnd = sessionStart.map { $0.addingTimeInterval(Double(profile.ratedLifetimeDays) * 24 * 3600) }
+
+        var batteryDetail: String?
+        if let volts = state.batteryVolts, let percent = state.batteryPercent {
+            batteryDetail = String(format: Texts_BluetoothPeripheralView.anytimeBatteryVoltsPercentFormat, Double(volts), Int32(percent))
+        } else if let volts = state.batteryVolts {
+            batteryDetail = String(format: Texts_BluetoothPeripheralView.anytimeBatteryVoltsFormat, Double(volts))
+        } else if let percent = state.batteryPercent {
+            batteryDetail = String(format: Texts_BluetoothPeripheralView.anytimeBatteryPercentFormat, Int32(percent))
+        }
+
+        var lastReadingDetail = Texts_BluetoothPeripheralView.anytimeWaitingForReading
+        if let date = state.lastReadingDate {
+            lastReadingDetail = RelativeDateTimeFormatter().localizedString(for: date, relativeTo: now)
+            if state.lastWasEstimate {
+                lastReadingDetail = String(format: Texts_BluetoothPeripheralView.anytimeLastReadingEstimatedFormat, lastReadingDetail)
+            }
+        }
+
+        var problemDetail = Texts_BluetoothPeripheralView.anytimeNoLinkProblem
+        if let problem = state.problem {
+            problemDetail = Texts_BluetoothPeripheralView.anytimeProblem(problem)
+            if let problemDate = state.problemDate {
+                problemDetail += " \u{00B7} " + RelativeDateTimeFormatter().localizedString(for: problemDate, relativeTo: now)
+            }
+        }
+
+        func currentDetail(_ value: Float?) -> String? {
+            value.map { String(format: Texts_BluetoothPeripheralView.anytimeCurrentFormat, Double($0)) }
+        }
+
+        var rows = [
+            row(id: "anytime-family", title: Texts_BluetoothPeripheralView.anytimeFamily, detail: family?.displayName),
+            row(id: "anytime-name", title: Texts_BluetoothPeripheralView.anytimeBluetoothName, detail: state.advertisedName),
+            row(id: "anytime-version", title: Texts_BluetoothPeripheralView.anytimeTransmitterVersion, detail: state.transmitterVersion),
+            row(id: "anytime-bound", title: Texts_BluetoothPeripheralView.anytimeBound, detail: state.bound ? Texts_Common.yes : Texts_Common.no)
+        ]
+
+        if let code = state.qrRaw, !code.isEmpty {
+            rows.append(row(id: "anytime-sensor-code", title: Texts_BluetoothPeripheralView.anytimeSensorCode, detail: code))
+        }
+
+        rows.append(contentsOf: [
+            row(id: "anytime-session-start", title: Texts_BluetoothPeripheralView.anytimeSessionStart, detail: sessionStart?.formatted()),
+            row(id: "anytime-expected-end", title: Texts_BluetoothPeripheralView.anytimeExpectedEnd, detail: expectedEnd?.formatted()),
+            row(
+                id: "anytime-record-number",
+                title: Texts_BluetoothPeripheralView.anytimeRecordNumber,
+                detail: state.lastGlucoseId >= 0 ? String(state.lastGlucoseId) : nil
+            ),
+            row(id: "anytime-battery", title: Texts_BluetoothPeripheralView.anytimeBattery, detail: batteryDetail),
+            row(id: "anytime-last-reading", title: Texts_BluetoothPeripheralView.anytimeLastReading, detail: lastReadingDetail),
+            row(id: "anytime-working-current", title: Texts_BluetoothPeripheralView.anytimeWorkingCurrent, detail: currentDetail(state.iwNa)),
+            row(id: "anytime-baseline-current", title: Texts_BluetoothPeripheralView.anytimeBaselineCurrent, detail: currentDetail(state.ibNa)),
+            row(
+                id: "anytime-temperature",
+                title: Texts_BluetoothPeripheralView.anytimeTemperature,
+                detail: state.temperatureC.map { String(format: Texts_BluetoothPeripheralView.anytimeTemperatureFormat, Double($0)) }
+            ),
+            row(
+                id: "anytime-counter-voltage",
+                title: Texts_BluetoothPeripheralView.anytimeCounterVoltage,
+                detail: state.ceVoltageMv.map { String(format: Texts_BluetoothPeripheralView.anytimeCounterVoltageFormat, Int32($0)) }
+            )
+        ])
+
+        if let scale = state.rawScale {
+            rows.append(row(
+                id: "anytime-current-scale",
+                title: Texts_BluetoothPeripheralView.anytimeCurrentScale,
+                detail: String(format: Texts_BluetoothPeripheralView.anytimeCurrentScaleFormat, Double(scale), Int32(state.rawScaleSamples))
+            ))
+        }
+
+        rows.append(row(
+            id: "anytime-last-link-problem",
+            title: Texts_BluetoothPeripheralView.anytimeLastLinkProblem,
+            detail: problemDetail,
+            detailIndicator: state.problem != nil ? SettingsIndicator(color: Color.orange) : nil
+        ))
+
+        return [
+            BluetoothPeripheralDetailSection(
+                id: "anytime",
+                title: Texts_BluetoothPeripheralView.anytimeSectionTitle,
+                footer: Texts_BluetoothPeripheralView.anytimeSectionFooter,
+                rows: rows
+            )
+        ]
+    }
+
     func makeLibreBridgeRows(
         idPrefix: String,
         sensorType: String?,
@@ -3974,6 +4084,12 @@ private extension BluetoothPeripheralType {
             return BluetoothPeripheralScanPreparationNotice(
                 title: Texts_BluetoothPeripheralView.aiDexScanNoticeTitle,
                 message: Texts_BluetoothPeripheralView.aiDexScanNoticeMessage
+            )
+
+        case .anytimeType:
+            return BluetoothPeripheralScanPreparationNotice(
+                title: Texts_BluetoothPeripheralView.anytimeScanNoticeTitle,
+                message: Texts_BluetoothPeripheralView.anytimeScanNoticeMessage
             )
 
         default:
