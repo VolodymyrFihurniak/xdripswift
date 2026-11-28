@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AE7110150000000000000001 /* AnytimeSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110140000000000000001 /* AnytimeSessionTests.swift */; };
+		AE7110110000000000000001 /* AnytimeSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110100000000000000001 /* AnytimeSession.swift */; };
 		AE71100B0000000000000001 /* AnytimeProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE71100C0000000000000001 /* AnytimeProtocolTests.swift */; };
 		AE7110020000000000000001 /* AnytimeProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110010000000000000001 /* AnytimeProtocol.swift */; };
 		A1DE100A0000000000000001 /* AiDex+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1DE10090000000000000001 /* AiDex+BluetoothPeripheral.swift */; };
@@ -1047,6 +1049,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AE7110140000000000000001 /* AnytimeSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeSessionTests.swift; sourceTree = "<group>"; };
+		AE7110100000000000000001 /* AnytimeSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeSession.swift; sourceTree = "<group>"; };
 		AE71100C0000000000000001 /* AnytimeProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeProtocolTests.swift; sourceTree = "<group>"; };
 		AE7110010000000000000001 /* AnytimeProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeProtocol.swift; sourceTree = "<group>"; };
 		A1DE10090000000000000001 /* AiDex+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AiDex+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
@@ -2956,6 +2960,7 @@
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
+				AE7110140000000000000001 /* AnytimeSessionTests.swift */,
 				AE71100C0000000000000001 /* AnytimeProtocolTests.swift */,
 				A1DE100C0000000000000001 /* AiDexProtocolTests.swift */,
 				1CA2100C0000000000000001 /* ICanProtocolTests.swift */,
@@ -4374,6 +4379,7 @@
 		AE71100D0000000000000001 /* Anytime */ = {
 			isa = PBXGroup;
 			children = (
+				AE7110100000000000000001 /* AnytimeSession.swift */,
 				AE7110010000000000000001 /* AnytimeProtocol.swift */,
 			);
 			path = Anytime;
@@ -5009,6 +5015,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AE7110150000000000000001 /* AnytimeSessionTests.swift in Sources */,
 				AE71100B0000000000000001 /* AnytimeProtocolTests.swift in Sources */,
 				A1DE100B0000000000000001 /* AiDexProtocolTests.swift in Sources */,
 				1CA2100B0000000000000001 /* ICanProtocolTests.swift in Sources */,
@@ -5064,6 +5071,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AE7110110000000000000001 /* AnytimeSession.swift in Sources */,
 				AE7110020000000000000001 /* AnytimeProtocol.swift in Sources */,
 				A1DE100A0000000000000001 /* AiDex+BluetoothPeripheral.swift in Sources */,
 				A1DE10080000000000000001 /* AiDex+CoreDataProperties.swift in Sources */,
