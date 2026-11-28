@@ -688,3 +688,67 @@ extension Texts_BluetoothPeripheralView {
         }
     }
 }
+
+// MARK: - Anytime
+
+extension Texts_BluetoothPeripheralView {
+
+    static let anytimeScanNoticeTitle = NSLocalizedString("anytime.scanNoticeTitle", tableName: filename, bundle: .main, value: "Anytime Sensor Connection", comment: "Title of the notice shown before scanning for an Anytime sensor")
+    static let anytimeScanNoticeMessage = NSLocalizedString("anytime.scanNoticeMessage", tableName: filename, bundle: .main, value: "This app connects directly to an Anytime (Yuwell) transmitter of the CT2, CT4 or CT5 family and binds it to this phone. The CT2.5 and CT3 lines compute their glucose in a manufacturer's native library that this app does not have, so they are refused.\n\nBefore scanning, close the manufacturer's app and keep other Anytime transmitters out of range: a transmitter talks to one phone at a time and the first connection takes the first supported one it finds.\n\nScanning works only while this app is open. This driver has not been tried on a real sensor.", comment: "Notice shown before scanning for an Anytime sensor")
+    static let anytimeSectionTitle = NSLocalizedString("anytime.sectionTitle", tableName: filename, bundle: .main, value: "Anytime sensor", comment: "Device screen section title")
+    static let anytimeSectionFooter = NSLocalizedString("anytime.sectionFooter", tableName: filename, bundle: .main, value: "Values come from the transmitter or from this app's port of the manufacturer's model, depending on the family. Finger calibration is not available, and a CT4 without a sensor code uses a default factory slope. After its rated life a CT5 stops computing glucose; with \"Estimate from current after rated life\" on (off by default) readings are derived from the sensor current instead. They are less accurate and look like any other reading outside this screen. Never tried on a real sensor.", comment: "Footer of the Anytime section on the device screen")
+    static let anytimeFamily = NSLocalizedString("anytime.family", tableName: filename, bundle: .main, value: "Sensor family", comment: "Anytime device screen row")
+    static let anytimeBluetoothName = NSLocalizedString("anytime.bluetoothName", tableName: filename, bundle: .main, value: "Bluetooth name", comment: "Anytime device screen row: the name the transmitter advertises")
+    static let anytimeTransmitterVersion = NSLocalizedString("anytime.transmitterVersion", tableName: filename, bundle: .main, value: "Transmitter version", comment: "Anytime device screen row")
+    static let anytimeBound = NSLocalizedString("anytime.bound", tableName: filename, bundle: .main, value: "Bound to this phone", comment: "Anytime device screen row")
+    static let anytimeSensorCode = NSLocalizedString("anytime.sensorCode", tableName: filename, bundle: .main, value: "Sensor code", comment: "Anytime device screen row: the factory calibration code")
+    static let anytimeSessionStart = NSLocalizedString("anytime.sessionStart", tableName: filename, bundle: .main, value: "Session start", comment: "Anytime device screen row")
+    static let anytimeExpectedEnd = NSLocalizedString("anytime.expectedEnd", tableName: filename, bundle: .main, value: "Expected end", comment: "Anytime device screen row: session start plus the rated life")
+    static let anytimeRecordNumber = NSLocalizedString("anytime.recordNumber", tableName: filename, bundle: .main, value: "Latest record number", comment: "Anytime device screen row: the sensor's glucose record counter")
+    static let anytimeBattery = NSLocalizedString("anytime.battery", tableName: filename, bundle: .main, value: "Transmitter battery", comment: "Anytime device screen row")
+    static let anytimeBatteryVoltsFormat = NSLocalizedString("anytime.batteryVoltsFormat", tableName: filename, bundle: .main, value: "%.2f V", comment: "Anytime battery voltage in volts")
+    static let anytimeBatteryVoltsPercentFormat = NSLocalizedString("anytime.batteryVoltsPercentFormat", tableName: filename, bundle: .main, value: "%.2f V · %d %%", comment: "Anytime battery voltage in volts and percent")
+    static let anytimeBatteryPercentFormat = NSLocalizedString("anytime.batteryPercentFormat", tableName: filename, bundle: .main, value: "%d %%", comment: "Anytime battery in percent")
+    static let anytimeLastReading = NSLocalizedString("anytime.lastReading", tableName: filename, bundle: .main, value: "Last reading", comment: "Anytime device screen row")
+    static let anytimeLastReadingEstimatedFormat = NSLocalizedString("anytime.lastReadingEstimatedFormat", tableName: filename, bundle: .main, value: "%@ · estimated from current", comment: "Anytime last reading with the note that the value was estimated from the sensor current")
+    static let anytimeWaitingForReading = NSLocalizedString("anytime.waitingForReading", tableName: filename, bundle: .main, value: "Waiting for reading", comment: "Anytime device screen row before the first reading")
+    static let anytimeWorkingCurrent = NSLocalizedString("anytime.workingCurrent", tableName: filename, bundle: .main, value: "Working electrode current", comment: "Anytime device screen row")
+    static let anytimeBaselineCurrent = NSLocalizedString("anytime.baselineCurrent", tableName: filename, bundle: .main, value: "Baseline current", comment: "Anytime device screen row")
+    static let anytimeCurrentFormat = NSLocalizedString("anytime.currentFormat", tableName: filename, bundle: .main, value: "%.2f nA", comment: "Anytime current in nanoamperes")
+    static let anytimeTemperature = NSLocalizedString("anytime.temperature", tableName: filename, bundle: .main, value: "Temperature", comment: "Anytime device screen row")
+    static let anytimeTemperatureFormat = NSLocalizedString("anytime.temperatureFormat", tableName: filename, bundle: .main, value: "%.1f °C", comment: "Anytime temperature in degrees Celsius")
+    static let anytimeCounterVoltage = NSLocalizedString("anytime.counterVoltage", tableName: filename, bundle: .main, value: "Counter electrode voltage", comment: "Anytime device screen row")
+    static let anytimeCounterVoltageFormat = NSLocalizedString("anytime.counterVoltageFormat", tableName: filename, bundle: .main, value: "%d mV", comment: "Anytime counter electrode voltage in millivolts")
+    static let anytimeCurrentEstimateTitle = NSLocalizedString("anytime.currentEstimateTitle", tableName: filename, bundle: .main, value: "Estimate from current after rated life", comment: "Anytime device screen toggle: estimate glucose from the sensor current once a CT5 stops computing glucose")
+    static let anytimeCurrentScale = NSLocalizedString("anytime.currentScale", tableName: filename, bundle: .main, value: "Current to glucose scale", comment: "Anytime device screen row: learned while the transmitter still computed glucose")
+    static let anytimeCurrentScaleFormat = NSLocalizedString("anytime.currentScaleFormat", tableName: filename, bundle: .main, value: "%.2f (%d samples)", comment: "Anytime current scale with the number of samples it was learned from")
+    static let anytimeLastLinkProblem = NSLocalizedString("anytime.lastLinkProblem", tableName: filename, bundle: .main, value: "Last link problem", comment: "Anytime device screen row")
+    static let anytimeNoLinkProblem = NSLocalizedString("anytime.noLinkProblem", tableName: filename, bundle: .main, value: "None since the last reading", comment: "Anytime device screen row")
+    static let anytimeProblemLinkLost = NSLocalizedString("anytime.problemLinkLost", tableName: filename, bundle: .main, value: "Link lost", comment: "Anytime link problem")
+    static let anytimeProblemNotAnAnytime = NSLocalizedString("anytime.problemNotAnAnytime", tableName: filename, bundle: .main, value: "Device is not a supported Anytime transmitter", comment: "Anytime link problem")
+    static let anytimeProblemUnsupportedFamily = NSLocalizedString("anytime.problemUnsupportedFamily", tableName: filename, bundle: .main, value: "Unsupported family: its glucose needs a native library this app does not have", comment: "Anytime link problem")
+    static let anytimeProblemHandshakeStalled = NSLocalizedString("anytime.problemHandshakeStalled", tableName: filename, bundle: .main, value: "The start-up exchange got no answer", comment: "Anytime link problem")
+    static let anytimeProblemProtocolTimeout = NSLocalizedString("anytime.problemProtocolTimeout", tableName: filename, bundle: .main, value: "The transmitter stopped answering commands", comment: "Anytime link problem")
+    static let anytimeProblemCheckMalformed = NSLocalizedString("anytime.problemCheckMalformed", tableName: filename, bundle: .main, value: "The status reply was not understood", comment: "Anytime link problem")
+    static let anytimeProblemLowBattery = NSLocalizedString("anytime.problemLowBattery", tableName: filename, bundle: .main, value: "Transmitter battery is low", comment: "Anytime link problem")
+    static let anytimeProblemBindNeverStreamed = NSLocalizedString("anytime.problemBindNeverStreamed", tableName: filename, bundle: .main, value: "Reconnected with a stored key but no data followed", comment: "Anytime link problem")
+    static let anytimeProblemNoData = NSLocalizedString("anytime.problemNoData", tableName: filename, bundle: .main, value: "No sensor data while connected", comment: "Anytime link problem")
+    static let anytimeProblemHistoryFailed = NSLocalizedString("anytime.problemHistoryFailed", tableName: filename, bundle: .main, value: "History download did not finish", comment: "Anytime link problem")
+    static let anytimeProblemSensorRestarted = NSLocalizedString("anytime.problemSensorRestarted", tableName: filename, bundle: .main, value: "The sensor's record counter went back: treated as a new session", comment: "Anytime link problem")
+
+    static func anytimeProblem(_ problem: AnytimeLinkProblem) -> String {
+        switch problem {
+        case .linkLost: return anytimeProblemLinkLost
+        case .notAnAnytime: return anytimeProblemNotAnAnytime
+        case .unsupportedFamily: return anytimeProblemUnsupportedFamily
+        case .handshakeStalled: return anytimeProblemHandshakeStalled
+        case .protocolTimeout: return anytimeProblemProtocolTimeout
+        case .checkMalformed: return anytimeProblemCheckMalformed
+        case .lowBattery: return anytimeProblemLowBattery
+        case .bindNeverStreamed: return anytimeProblemBindNeverStreamed
+        case .noData: return anytimeProblemNoData
+        case .historyFailed: return anytimeProblemHistoryFailed
+        case .sensorRestarted: return anytimeProblemSensorRestarted
+        }
+    }
+}

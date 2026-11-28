@@ -112,6 +112,9 @@ enum ConstantsLog {
     /// AiDex X / LinX cgm
     static let categoryCGMAiDex =                           "CGMAiDex                      "
 
+    /// Anytime / Yuwell cgm
+    static let categoryCGMAnytime =                         "CGMAnytime                    "
+
     /// alertmanager
     static let categoryAlertManager =                       "AlertManager                  "
     

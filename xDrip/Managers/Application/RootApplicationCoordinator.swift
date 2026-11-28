@@ -2125,6 +2125,10 @@ import AppIntents
             // Values arrive in mg/dL from the sensor's own factory calibration; xDrip does not calibrate them.
             calibrator = NoCalibrator()
 
+        case .anytime:
+            // The driver turns the sensor's record into mg/dL itself (transmitter value on CT5, the vendor models on CT2 and CT4); xDrip does not calibrate them.
+            calibrator = NoCalibrator()
+
         }
         
         trace("in getCalibrator, calibrator = %{public}@", log: log, category: ConstantsLog.categoryRootView, type: .info, calibrator.description())
@@ -2894,7 +2898,7 @@ import AppIntents
             }
             startDate = sensorStartDate ?? startDate
             switch transmitter?.cgmTransmitterType().sensorType() {
-            case .Libre, .Sibionics2, .iCan, .aiDex:
+            case .Libre, .Sibionics2, .iCan, .aiDex, .anytime:
                 duration = transmitter?.sensorWarmupDurationInMinutes() ?? ConstantsMaster.minimumSensorWarmUpRequiredInMinutes
             case .Dexcom:
                 if transmitter?.cgmTransmitterType() == .dexcomG7 {

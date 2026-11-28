@@ -75,6 +75,9 @@ extension BLEPeripheral {
 
     /// AiDex X / LinX CGM peripheral.
     @NSManaged public var aiDex: AiDex?
+
+    /// Anytime / Yuwell CGM peripheral.
+    @NSManaged public var anytime: Anytime?
     
     /// sensorSerialNumber of last sensor that was read
     @NSManaged public var sensorSerialNumber: String?

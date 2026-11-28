@@ -51,6 +51,9 @@ enum BluetoothPeripheralType: String, CaseIterable {
     /// AiDex X / LinX CGM (MicroTech Medical, also sold under other names). Keep this raw value stable because it is persisted with Bluetooth peripheral records.
     case aiDexType = "AiDex"
 
+    /// Anytime / Yuwell CGM (CT2 to CT5 transmitters). Keep this raw value stable because it is persisted with Bluetooth peripheral records.
+    case anytimeType = "Anytime"
+
     var isSibionics: Bool { self == .Sibionics1Type || self == .Sibionics2Type }
 
     func createNewBluetoothPeripheral(withAddress address: String, withName name: String, nsManagedObjectContext: NSManagedObjectContext) -> BluetoothPeripheral {
@@ -107,6 +110,9 @@ enum BluetoothPeripheralType: String, CaseIterable {
         case .aiDexType:
             return AiDex(address: address, name: name, alias: nil, nsManagedObjectContext: nsManagedObjectContext)
 
+        case .anytimeType:
+            return Anytime(address: address, name: name, alias: nil, nsManagedObjectContext: nsManagedObjectContext)
+
         }
 
     }
@@ -119,7 +125,7 @@ enum BluetoothPeripheralType: String, CaseIterable {
         case .M5StackType, .M5StickCType:
             return .M5Stack
             
-        case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3Type, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics1Type, .Sibionics2Type, .iCanType, .aiDexType:
+        case .DexcomType, .BubbleType, .MiaoMiaoType, .Libre2Type, .Libre3Type, .DexcomG7Type, .MedtrumTouchCareNanoType, .Sibionics1Type, .Sibionics2Type, .iCanType, .aiDexType, .anytimeType:
             return .CGM
 
         case .Libre3HeartBeatType, .DexcomG7HeartBeatType, .OmniPodHeartBeatType:
