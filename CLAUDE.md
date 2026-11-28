@@ -273,6 +273,18 @@ provisioning, native-library rebuild, finger calibration (CE), battery, original
 28-day cap, covered-edge persistence, `0x1A`/`F2`/`F7` writes, history beyond 24 h. JugglucoNG's hyphenated `h6-14/15/7` checks never
 match and are ported as they are.
 
+AiDex X / LinX CGM (`docs/aidex.md`, JugglucoNG `drivers/aidex`; **uncompiled, never tried on a real sensor**):
+`xDrip/BluetoothTransmitter/CGM/AiDex/AiDexProtocol.swift` (pure: serial-derived MD5 secret/IV, AES-128-CFB, CRC-8/MAXIM and CRC-16, F001/F002/F003
+key exchange, command builder, live/history parsers, `AiDexHistoryMerge`, key-exchange / streaming / history policies; vectors in `AiDexProtocolTests`
+come from the unchanged Kotlin run on the JVM, cross-checked in Python) and `CGMAiDexTransmitter.swift` (connection; `AiDexDeviceStore` per-address state
+in UserDefaults, `AiDexPairKeyStore` the PAIR key in the Keychain; both cleared with the peripheral). Own Core Data entity `AiDex` (model `xdrip v40 AiDex` =
+v39 iCan + entity, only a link to `BLEPeripheral`), `BluetoothPeripheralType.aiDexType`, `CGMTransmitterType.aiDex` (`NoCalibrator`, the sensor's own
+factory-calibrated values, 1-minute readings). iOS has no bond-state API: "paired here" = a stored key, pairing happens on the first `F001` access, and the
+`F001` values bypass `super` (the base class traces every received value). F-series sensors (`AiDEX F-…`, cloud-provisioned keys) are refused with a clear
+link problem. Skipped on purpose: `AiDexCnCloudClient` (China cloud key endpoint, spoofed `X-Forwarded-For`; never port it), default-parameter provisioning,
+wear-profile catalogue, broadcast scan / `0x11` parser and BLE continuity sync, blood-glucose calibration / BloodControl, Adaptive V2, temperature sidecar,
+reset/unpair actions, PAIR key backup, history beyond 24 h.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new

@@ -935,6 +935,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             return makeSibionics2Sections(bluetoothPeripheral: bluetoothPeripheral)
         case .iCanType:
             return makeICanSections(bluetoothPeripheral: bluetoothPeripheral)
+        case .aiDexType:
+            return makeAiDexSections(bluetoothPeripheral: bluetoothPeripheral)
         case .M5StackType:
             return makeM5StackSections(bluetoothPeripheral: bluetoothPeripheral, includesSpecificM5StackSection: true)
         case .M5StickCType:
@@ -3813,6 +3815,75 @@ private extension BluetoothPeripheralDetailState {
         ]
     }
 
+    /// Identity, pairing and link status of an AiDex sensor, read from the per-address state the transmitter keeps.
+    func makeAiDexSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        guard bluetoothPeripheral is AiDex else { return [] }
+
+        let address = bluetoothPeripheral.blePeripheral.address
+        let state = AiDexDeviceStore.load(address: address)
+        let hasPairKey = AiDexPairKeyStore.hasKey(address: address)
+        let now = Date()
+
+        var wearDetail: String?
+        if let days = state.wearDays {
+            wearDetail = String(format: Texts_BluetoothPeripheralView.aiDexWearDaysFormat, days)
+        }
+
+        // The wear time is the sensor's own; until it has reported one the X and LinX run 15 days.
+        let wearDays = state.wearDays ?? 15
+        let expectedEnd = state.sensorStartDate.map { $0.addingTimeInterval(Double(wearDays) * 24 * 3600) }
+
+        var batteryDetail: String?
+        if let millivolts = state.batteryMillivolts {
+            batteryDetail = String(format: Texts_BluetoothPeripheralView.aiDexBatteryFormat, Double(millivolts) / 1000)
+        }
+
+        var problemDetail = Texts_BluetoothPeripheralView.aiDexNoLinkProblem
+        if let problem = state.problem {
+            problemDetail = Texts_BluetoothPeripheralView.aiDexProblem(problem)
+            if let problemDate = state.problemDate {
+                problemDetail += " \u{00B7} " + RelativeDateTimeFormatter().localizedString(for: problemDate, relativeTo: now)
+            }
+        }
+
+        let rows = [
+            row(id: "aidex-model", title: Texts_BluetoothPeripheralView.aiDexModel, detail: state.model),
+            row(id: "aidex-serial", title: Texts_BluetoothPeripheralView.sensorSerialNumber, detail: state.serial),
+            row(id: "aidex-firmware", title: Texts_Common.firmware, detail: state.firmware),
+            row(id: "aidex-hardware", title: Texts_Common.hardware, detail: state.hardware),
+            row(id: "aidex-wear-time", title: Texts_BluetoothPeripheralView.aiDexWearTime, detail: wearDetail),
+            row(
+                id: "aidex-pairing-key",
+                title: Texts_BluetoothPeripheralView.aiDexPairingKey,
+                detail: hasPairKey ? Texts_BluetoothPeripheralView.aiDexPairingKeyStored : Texts_BluetoothPeripheralView.aiDexPairingKeyNotStored
+            ),
+            row(id: "aidex-session-start", title: Texts_BluetoothPeripheralView.aiDexSessionStart, detail: state.sensorStartDate?.formatted()),
+            row(id: "aidex-expected-end", title: Texts_BluetoothPeripheralView.aiDexExpectedEnd, detail: expectedEnd?.formatted()),
+            row(id: "aidex-battery", title: Texts_BluetoothPeripheralView.aiDexBattery, detail: batteryDetail),
+            row(
+                id: "aidex-last-reading",
+                title: Texts_BluetoothPeripheralView.aiDexLastReading,
+                detail: state.lastReadingDate.map { RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: now) }
+                    ?? Texts_BluetoothPeripheralView.aiDexWaitingForReading
+            ),
+            row(
+                id: "aidex-last-link-problem",
+                title: Texts_BluetoothPeripheralView.aiDexLastLinkProblem,
+                detail: problemDetail,
+                detailIndicator: state.problem != nil ? SettingsIndicator(color: Color.orange) : nil
+            )
+        ]
+
+        return [
+            BluetoothPeripheralDetailSection(
+                id: "aidex",
+                title: Texts_BluetoothPeripheralView.aiDexSectionTitle,
+                footer: Texts_BluetoothPeripheralView.aiDexSectionFooter,
+                rows: rows
+            )
+        ]
+    }
+
     func makeLibreBridgeRows(
         idPrefix: String,
         sensorType: String?,
@@ -3897,6 +3968,12 @@ private extension BluetoothPeripheralType {
             return BluetoothPeripheralScanPreparationNotice(
                 title: Texts_BluetoothPeripheralView.iCanScanNoticeTitle,
                 message: Texts_BluetoothPeripheralView.iCanScanNoticeMessage
+            )
+
+        case .aiDexType:
+            return BluetoothPeripheralScanPreparationNotice(
+                title: Texts_BluetoothPeripheralView.aiDexScanNoticeTitle,
+                message: Texts_BluetoothPeripheralView.aiDexScanNoticeMessage
             )
 
         default:

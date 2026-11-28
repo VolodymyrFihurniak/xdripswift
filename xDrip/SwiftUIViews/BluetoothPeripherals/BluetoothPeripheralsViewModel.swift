@@ -608,7 +608,8 @@ extension BluetoothPeripheralType {
             .MedtrumTouchCareNanoType,
             .Sibionics1Type,
             .Sibionics2Type,
-            .iCanType
+            .iCanType,
+            .aiDexType
         ]
     ]
 }
