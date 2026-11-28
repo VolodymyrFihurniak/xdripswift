@@ -204,6 +204,9 @@ enum CGMTransmitterType:String, CaseIterable {
     /// iCan (Sinocare) i3/i6 CGM. Keep this raw value stable because it is persisted in UserDefaults.
     case iCan = "iCan"
 
+    /// AiDex X / LinX CGM. Keep this raw value stable because it is persisted in UserDefaults.
+    case aiDex = "AiDex"
+
     /// Direct Medtrum Nano glucose is already consumed by the connected pump and must not be
     /// exported as an independent CGM source to another OS-AID system.
     var osAidSharingPolicy: OSAidSharingPolicy {
@@ -234,6 +237,9 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .iCan:
             return .iCan
+
+        case .aiDex:
+            return .aiDex
 
         }
         
@@ -275,6 +281,10 @@ enum CGMTransmitterType:String, CaseIterable {
             // the sensor start is derived from the sequence counter (minutes since session start)
             return true
 
+        case .aiDex:
+            // the session start comes from the sensor (CGM Session Start Time), xDrip starts its sensor record from it
+            return true
+
         }
     }
     
@@ -303,6 +313,10 @@ enum CGMTransmitterType:String, CaseIterable {
 
         case .iCan:
             // the sensor is started with the vendor app, xDrip only follows its session
+            return false
+
+        case .aiDex:
+            // a sensor that was never started is activated by the driver itself, there is no manual start
             return false
 
         }
@@ -337,6 +351,9 @@ enum CGMTransmitterType:String, CaseIterable {
         case .iCan:
             return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
 
+        case .aiDex:
+            return ConstantsDefaultAlertLevels.defaultBatteryAlertLevelLibre2
+
         }
     }
     
@@ -368,6 +385,9 @@ enum CGMTransmitterType:String, CaseIterable {
             return ""
 
         case .iCan:
+            return ""
+
+        case .aiDex:
             return ""
 
         }

@@ -109,6 +109,9 @@ enum ConstantsLog {
     /// iCan (Sinocare) cgm
     static let categoryCGMICan =                            "CGMICan                       "
 
+    /// AiDex X / LinX cgm
+    static let categoryCGMAiDex =                           "CGMAiDex                      "
+
     /// alertmanager
     static let categoryAlertManager =                       "AlertManager                  "
     

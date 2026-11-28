@@ -72,6 +72,9 @@ extension BLEPeripheral {
 
     /// iCan (Sinocare) CGM peripheral.
     @NSManaged public var iCan: ICan?
+
+    /// AiDex X / LinX CGM peripheral.
+    @NSManaged public var aiDex: AiDex?
     
     /// sensorSerialNumber of last sensor that was read
     @NSManaged public var sensorSerialNumber: String?
