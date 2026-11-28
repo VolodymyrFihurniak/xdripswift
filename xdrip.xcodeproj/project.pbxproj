@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3A5D00170000000000000001 /* MQSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00160000000000000001 /* MQSessionTests.swift */; };
+		3A5D00150000000000000001 /* MQAlgorithmTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00140000000000000001 /* MQAlgorithmTests.swift */; };
+		3A5D00130000000000000001 /* MQProtocolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00120000000000000001 /* MQProtocolTests.swift */; };
+		3A5D00060000000000000001 /* MQSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00050000000000000001 /* MQSession.swift */; };
+		3A5D00040000000000000001 /* MQAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00030000000000000001 /* MQAlgorithm.swift */; };
+		3A5D00020000000000000001 /* MQProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A5D00010000000000000001 /* MQProtocol.swift */; };
 		AE7110190000000000000001 /* AnytimeDriverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110180000000000000001 /* AnytimeDriverTests.swift */; };
 		AE7110040000000000000001 /* CGMAnytimeTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110030000000000000001 /* CGMAnytimeTransmitter.swift */; };
 		AE71100A0000000000000001 /* Anytime+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */; };
@@ -1056,6 +1062,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		3A5D00160000000000000001 /* MQSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQSessionTests.swift; sourceTree = "<group>"; };
+		3A5D00140000000000000001 /* MQAlgorithmTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQAlgorithmTests.swift; sourceTree = "<group>"; };
+		3A5D00120000000000000001 /* MQProtocolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQProtocolTests.swift; sourceTree = "<group>"; };
+		3A5D00050000000000000001 /* MQSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQSession.swift; sourceTree = "<group>"; };
+		3A5D00030000000000000001 /* MQAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQAlgorithm.swift; sourceTree = "<group>"; };
+		3A5D00010000000000000001 /* MQProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MQProtocol.swift; sourceTree = "<group>"; };
 		AE7110180000000000000001 /* AnytimeDriverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnytimeDriverTests.swift; sourceTree = "<group>"; };
 		AE7110030000000000000001 /* CGMAnytimeTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMAnytimeTransmitter.swift; sourceTree = "<group>"; };
 		AE7110090000000000000001 /* Anytime+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Anytime+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
@@ -2975,6 +2987,9 @@
 		4F2600213002000200000001 /* xDrip Tests */ = {
 			isa = PBXGroup;
 			children = (
+				3A5D00160000000000000001 /* MQSessionTests.swift */,
+				3A5D00140000000000000001 /* MQAlgorithmTests.swift */,
+				3A5D00120000000000000001 /* MQProtocolTests.swift */,
 				AE7110180000000000000001 /* AnytimeDriverTests.swift */,
 				AE7110160000000000000001 /* AnytimeAlgorithmTests.swift */,
 				AE7110140000000000000001 /* AnytimeSessionTests.swift */,
@@ -4168,6 +4183,7 @@
 		F8F971BA23A5915900C3F17D /* CGM */ = {
 			isa = PBXGroup;
 			children = (
+				3A5D00100000000000000001 /* MQ */,
 				AE71100D0000000000000001 /* Anytime */,
 				A1DE100D0000000000000001 /* AiDex */,
 				1CA2100D0000000000000001 /* ICan */,
@@ -4447,6 +4463,16 @@
 				1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */,
 			);
 			path = ICan;
+			sourceTree = "<group>";
+		};
+		3A5D00100000000000000001 /* MQ */ = {
+			isa = PBXGroup;
+			children = (
+				3A5D00050000000000000001 /* MQSession.swift */,
+				3A5D00030000000000000001 /* MQAlgorithm.swift */,
+				3A5D00010000000000000001 /* MQProtocol.swift */,
+			);
+			path = MQ;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -5045,6 +5071,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A5D00170000000000000001 /* MQSessionTests.swift in Sources */,
+				3A5D00150000000000000001 /* MQAlgorithmTests.swift in Sources */,
+				3A5D00130000000000000001 /* MQProtocolTests.swift in Sources */,
 				AE7110190000000000000001 /* AnytimeDriverTests.swift in Sources */,
 				AE7110170000000000000001 /* AnytimeAlgorithmTests.swift in Sources */,
 				AE7110150000000000000001 /* AnytimeSessionTests.swift in Sources */,
@@ -5103,6 +5132,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3A5D00060000000000000001 /* MQSession.swift in Sources */,
+				3A5D00040000000000000001 /* MQAlgorithm.swift in Sources */,
+				3A5D00020000000000000001 /* MQProtocol.swift in Sources */,
 				AE7110040000000000000001 /* CGMAnytimeTransmitter.swift in Sources */,
 				AE71100A0000000000000001 /* Anytime+BluetoothPeripheral.swift in Sources */,
 				AE7110080000000000000001 /* Anytime+CoreDataProperties.swift in Sources */,
