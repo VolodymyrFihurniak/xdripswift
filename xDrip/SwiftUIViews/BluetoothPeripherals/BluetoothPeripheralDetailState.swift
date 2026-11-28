@@ -933,6 +933,8 @@ final class BluetoothPeripheralDetailState: NSObject, ObservableObject {
             return makeMedtrumTouchCareNanoSections(bluetoothPeripheral: bluetoothPeripheral)
         case .Sibionics1Type, .Sibionics2Type:
             return makeSibionics2Sections(bluetoothPeripheral: bluetoothPeripheral)
+        case .iCanType:
+            return makeICanSections(bluetoothPeripheral: bluetoothPeripheral)
         case .M5StackType:
             return makeM5StackSections(bluetoothPeripheral: bluetoothPeripheral, includesSpecificM5StackSection: true)
         case .M5StickCType:
@@ -3722,6 +3724,95 @@ private extension BluetoothPeripheralDetailState {
         ]
     }
 
+    /// Identity and link status of an iCan sensor, read from the per-address state the transmitter keeps.
+    func makeICanSections(bluetoothPeripheral: BluetoothPeripheral) -> [BluetoothPeripheralDetailSection] {
+        guard bluetoothPeripheral is ICan else { return [] }
+
+        let state = ICanDeviceStore.load(address: bluetoothPeripheral.blePeripheral.address)
+        let now = Date()
+
+        let authenticationDetail: String
+        switch state.authAccepted {
+        case .some(true): authenticationDetail = Texts_BluetoothPeripheralView.iCanAuthAccepted
+        case .some(false): authenticationDetail = Texts_BluetoothPeripheralView.iCanAuthRejected
+        case .none: authenticationDetail = Texts_BluetoothPeripheralView.iCanAuthNotTried
+        }
+
+        var sensorStateDetail: String?
+        if let launcherState = state.launcherState {
+            switch launcherState {
+            case ICanConstants.launcherStateIdle: sensorStateDetail = Texts_BluetoothPeripheralView.iCanStateIdle
+            case ICanConstants.launcherStateWarmup: sensorStateDetail = Texts_BluetoothPeripheralView.iCanStateWarmup
+            case ICanConstants.launcherStateRunning: sensorStateDetail = Texts_BluetoothPeripheralView.iCanStateRunning
+            case ICanConstants.launcherStateEnded: sensorStateDetail = Texts_BluetoothPeripheralView.iCanStateEnded
+            default: sensorStateDetail = String(format: Texts_BluetoothPeripheralView.iCanStateUnknownFormat, launcherState)
+            }
+        }
+
+        // The rated life is advisory: the sensor itself decides when the session ends.
+        let ratedDays = state.ratedLifetimeDays ?? ICanProfile.defaultProfile.ratedLifetimeDays
+        let expectedEnd = state.sensorStartDate.map { $0.addingTimeInterval(Double(ratedDays) * 24 * 3600) }
+
+        var problemDetail = Texts_BluetoothPeripheralView.iCanNoLinkProblem
+        if let problem = state.problem {
+            problemDetail = Texts_BluetoothPeripheralView.iCanProblem(problem)
+            if let problemDate = state.problemDate {
+                problemDetail += " · " + RelativeDateTimeFormatter().localizedString(for: problemDate, relativeTo: now)
+            }
+        }
+
+        var rows = [
+            row(id: "ican-model", title: Texts_BluetoothPeripheralView.iCanModel, detail: state.model),
+            row(id: "ican-family", title: Texts_BluetoothPeripheralView.iCanFamily, detail: state.profileFamily),
+            row(id: "ican-serial", title: Texts_BluetoothPeripheralView.sensorSerialNumber, detail: state.rawSerial),
+            row(id: "ican-firmware", title: Texts_Common.firmware, detail: state.firmware),
+            row(id: "ican-software", title: Texts_BluetoothPeripheralView.iCanSoftware, detail: state.software),
+            row(
+                id: "ican-authentication",
+                title: Texts_BluetoothPeripheralView.iCanAuthentication,
+                detail: authenticationDetail,
+                detailIndicator: state.authAccepted == false ? SettingsIndicator(color: Color.orange) : nil
+            )
+        ]
+
+        if let marker = state.calibrationMarker {
+            rows.append(row(
+                id: "ican-calibration",
+                title: Texts_BluetoothPeripheralView.iCanCalibration,
+                detail: marker == 0xFFFF
+                    ? Texts_BluetoothPeripheralView.iCanCalibrationNotInstalled
+                    : String(format: Texts_BluetoothPeripheralView.iCanCalibrationMarkerFormat, marker)
+            ))
+        }
+
+        rows.append(contentsOf: [
+            row(id: "ican-sensor-state", title: Texts_BluetoothPeripheralView.iCanSensorState, detail: sensorStateDetail),
+            row(id: "ican-session-start", title: Texts_BluetoothPeripheralView.iCanSensorStart, detail: state.sensorStartDate?.formatted()),
+            row(id: "ican-expected-end", title: Texts_BluetoothPeripheralView.iCanExpectedEnd, detail: expectedEnd?.formatted()),
+            row(
+                id: "ican-last-reading",
+                title: Texts_BluetoothPeripheralView.iCanLastReading,
+                detail: state.lastReadingDate.map { RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: now) }
+                    ?? Texts_BluetoothPeripheralView.iCanWaitingForReading
+            ),
+            row(
+                id: "ican-last-link-problem",
+                title: Texts_BluetoothPeripheralView.iCanLastLinkProblem,
+                detail: problemDetail,
+                detailIndicator: state.problem != nil ? SettingsIndicator(color: Color.orange) : nil
+            )
+        ])
+
+        return [
+            BluetoothPeripheralDetailSection(
+                id: "ican",
+                title: Texts_BluetoothPeripheralView.iCanSectionTitle,
+                footer: Texts_BluetoothPeripheralView.iCanSectionFooter,
+                rows: rows
+            )
+        ]
+    }
+
     func makeLibreBridgeRows(
         idPrefix: String,
         sensorType: String?,
@@ -3800,6 +3891,12 @@ private extension BluetoothPeripheralType {
             return BluetoothPeripheralScanPreparationNotice(
                 title: Texts_BluetoothPeripheralView.medtrumNanoPumpScanNoticeTitle,
                 message: Texts_BluetoothPeripheralView.medtrumNanoPumpScanNoticeMessage
+            )
+
+        case .iCanType:
+            return BluetoothPeripheralScanPreparationNotice(
+                title: Texts_BluetoothPeripheralView.iCanScanNoticeTitle,
+                message: Texts_BluetoothPeripheralView.iCanScanNoticeMessage
             )
 
         default:

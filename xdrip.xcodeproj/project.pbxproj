@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1CA210040000000000000001 /* CGMICanTransmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210030000000000000001 /* CGMICanTransmitter.swift */; };
 		1CA2100A0000000000000001 /* ICan+BluetoothPeripheral.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */; };
 		1CA210080000000000000001 /* ICan+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210070000000000000001 /* ICan+CoreDataProperties.swift */; };
 		1CA210060000000000000001 /* ICan+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA210050000000000000001 /* ICan+CoreDataClass.swift */; };
@@ -1038,6 +1039,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1CA210030000000000000001 /* CGMICanTransmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CGMICanTransmitter.swift; sourceTree = "<group>"; };
 		1CA210090000000000000001 /* ICan+BluetoothPeripheral.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+BluetoothPeripheral.swift"; sourceTree = "<group>"; };
 		1CA210070000000000000001 /* ICan+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		1CA210050000000000000001 /* ICan+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ICan+CoreDataClass.swift"; sourceTree = "<group>"; };
@@ -4348,6 +4350,7 @@
 		1CA2100D0000000000000001 /* ICan */ = {
 			isa = PBXGroup;
 			children = (
+				1CA210030000000000000001 /* CGMICanTransmitter.swift */,
 				1CA210010000000000000001 /* ICanProtocol.swift */,
 			);
 			path = ICan;
@@ -5010,6 +5013,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1CA210040000000000000001 /* CGMICanTransmitter.swift in Sources */,
 				1CA2100A0000000000000001 /* ICan+BluetoothPeripheral.swift in Sources */,
 				1CA210080000000000000001 /* ICan+CoreDataProperties.swift in Sources */,
 				1CA210060000000000000001 /* ICan+CoreDataClass.swift in Sources */,
