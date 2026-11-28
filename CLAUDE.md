@@ -285,6 +285,22 @@ link problem. Skipped on purpose: `AiDexCnCloudClient` (China cloud key endpoint
 wear-profile catalogue, broadcast scan / `0x11` parser and BLE continuity sync, blood-glucose calibration / BloodControl, Adaptive V2, temperature sidecar,
 reset/unpair actions, PAIR key backup, history beyond 24 h.
 
+Anytime / Yuwell CGM (`docs/anytime.md`, JugglucoNG `drivers/anytime`; **uncompiled, never tried on a real sensor**):
+`xDrip/BluetoothTransmitter/CGM/Anytime/AnytimeProtocol.swift` (pure: frame builders/parsers, CT5 cipher, sensor code `AnytimeQr`, family table and
+profiles), `AnytimeSession.swift` (connect/session retry, history gap arithmetic, caught-up cooldown, CT5 live clock and learned current scale,
+calibration policy, trend estimator), `AnytimeAlgorithm.swift` (CT2 CT-14 model, CT4 MK4 `AnytimeCalibrator`, CT5 computed by the transmitter; float
+arithmetic kept in `Float`, tests compare bit patterns; vectors in `AnytimeProtocolTests`/`AnytimeSessionTests`/`AnytimeAlgorithmTests` come from the unchanged
+Kotlin run on the JVM) and `CGMAnytimeTransmitter.swift` (connection, one write slot with priorities, CT2/CT4/CT5 handshakes, history engine, CT5 gap repair
+persisted; `AnytimeDeviceStore` per-address state in UserDefaults, `AnytimeCt5SecretStore` the CT5 cipher key in the Keychain, `AnytimeConfiguration`; all cleared
+with the peripheral). Own Core Data entity `Anytime` (model `xdrip v41 Anytime` = v40 AiDex + entity, only a link to `BLEPeripheral`), `BluetoothPeripheralType.anytimeType`,
+`CGMTransmitterType.anytime` (`NoCalibrator`, 3-minute readings, warm-up held back by the driver itself, `sensorWarmupDurationInMinutes()` 0). Families by BLE name: CT2
+(`SN04…`, legacy `FFF0`), CT4 (`SN72…SN90`), CT5 (`Anytime…`, encrypted); **CT2.5, every CT3 family and unknown names are refused** with a link problem (their glucose is
+JugglucoNG's `AnytimeNativeAlgorithm`, a decompiled vendor kernel, not ported). The CT5 "estimate from current after the rated life" (JugglucoNG `AnytimeCt5RawScale`) is
+an opt-in toggle, off by default, because the estimates look like ordinary readings (`AnytimeConfiguration.ct5EstimatesFromCurrent`). iOS has no bond-state API: "bound" is
+the transmitter's own answer. CT5 identity frames (`0x30/0x31/0x38/0x3F`) bypass `super.didUpdateValueFor`. Skipped on purpose: fingerstick calibration, typing or
+scanning a sensor code (a CT4 uses `K0` 1.13), reset/unbind/end-cycle commands, CT5 credential export, `tryCt4HandshakeFallback`, the Room import buffer, the older-history
+background pass, the persisted interrupted-backfill record of CT2/CT4, periodic telemetry for CT2/CT5, a device picker.
+
 ## Localisation
 
 Ukrainian and English are complete; other languages are left as upstream has them. Every new
